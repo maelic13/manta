@@ -7,8 +7,8 @@ criteria; [`GUIDE.md`](GUIDE.md) is the short operational view.
 [`CHANGELOG.md`](CHANGELOG.md) remains user-facing.
 
 Manta currently has no implementation and therefore no native experiment
-results. The imported Basilisk/Rarog rows below are priors that shape test
-design. They never accept a Manta change or establish Manta Elo.
+results. The imported development rows below are priors that shape test design.
+They never accept a Manta change or establish Manta Elo.
 
 ## Contents
 
@@ -22,7 +22,7 @@ design. They never accept a Manta change or establish Manta Elo.
 - [5. Search and selectivity](#5-search-and-selectivity)
 - [6. Evaluation, NNUE and data](#6-evaluation-nnue-and-data)
 - [7. Throughput, build and platforms](#7-throughput-build-and-platforms)
-- [8. Imported Basilisk/Rarog priors](#8-imported-basiliskrarog-priors)
+- [8. Imported development priors](#8-imported-development-priors)
 - [9. Open retry and adoption map](#9-open-retry-and-adoption-map)
 - [10. New experiment template](#10-new-experiment-template)
 
@@ -46,7 +46,7 @@ Use cautious language: “under these conditions this suggests …”, never
 | **Rejected** | Failed its registered gate or had clear adverse evidence and was reverted/disabled. |
 | **Neutral/inconclusive** | The registered evidence did not distinguish a useful effect at its resolution. |
 | **Observation** | Diagnostic or benchmark evidence; not an acceptance verdict. |
-| **Imported prior** | Evidence from Basilisk/Rarog or elsewhere. It may shape Manta experiment order/design but never bypasses Manta gates. |
+| **Imported prior** | Evidence from prior engines, official top-engine development material or shared tooling. It may shape Manta experiment order/design but never bypasses Manta gates. |
 | **Parked** | Not accepted; preserved inert or on a branch until an objective retry trigger occurs. |
 
 ### Recording contract
@@ -59,10 +59,12 @@ that accepts, reverts or closes it. Record:
 3. hypothesis and interacting producers/consumers expected to change;
 4. prospectively registered gate, hypotheses, budget and stop rule;
 5. exact Zig/LLVM, target/features, build options and PGO manifest;
-6. binary, book, configuration, dependency and network/data hashes;
+6. binary, book, configuration, dependency and network/data hashes, plus exact
+   shared-tool source/version identifiers;
 7. TC, threads, Hash, concurrency, physical-core affinity/topology and
    adjudication profile;
-8. games, W-D-L, estimate/CI and LLR where applicable;
+8. pilot pair rate, expected/worst wall time, storage, checkpoints, games,
+   W-D-L, estimate/CI and LLR where applicable;
 9. diagnostics separately from the verdict: fingerprint, nodes, depth, EBF,
    NPS, recall, contradictions, counters, static loss and suites;
 10. disposition, conditional lesson, objective retry trigger and artifact paths.
@@ -84,10 +86,14 @@ binary requires the registered SPRT.
 - A dirty binary may diagnose but cannot become an accepted/release baseline.
 - Never time builds/benchmarks/games while another load is active. Record any
   contamination and discard timing evidence rather than rationalize it.
-- Harness/runner changes use identical-binary calibration before engine
-  candidates resume.
-- When Colosseum becomes the default runner, preserve bridge manifests and the
-  last calibrated legacy adapter so old evidence remains interpretable.
+- Runner, clock, OS/hardware or placement changes use a prospectively sized
+  identical-binary calibration before engine candidates resume.
+- Colosseum is the shared runner. Preserve its exact source/version and resolved
+  run directory so old evidence remains interpretable; do not duplicate or fork
+  its engine-agnostic logic in Manta.
+- `net_trainer` is the shared NNUE data/training/export contract. Preserve its
+  exact source/version and format/conformance identifiers; keep networks and
+  data outside Git and keep Manta integration original Zig code.
 
 ## 2. Measurement, harness and tuning
 
@@ -170,12 +176,17 @@ Future IDs use `MAN-Pnn`.
 |---|---|---|---|---|
 | — | — | — | — | — |
 
-## 8. Imported Basilisk/Rarog priors
+## 8. Imported development priors
 
 These rows are explicitly **not Manta results**. They capture lessons worth
 designing around and the Manta phase that must verify them locally. In the
 coverage column a `§` prefix cites a numbered `PLAN.md` section and a bare
 number cites a `PLAN.md` phase step.
+
+The Stockfish cross-check was refreshed 2026-08-07 against the clean official
+source snapshot `77a8f6ccf31846d63452f79e143fbc6dc62ae3a8` (2026-05-25), its
+official testing guide and repository CI/test scripts. Future phase checkpoints
+record their own exact snapshot; these rows are not a synchronization promise.
 
 | ID | Imported evidence | Manta implication | PLAN coverage |
 |---|---|---|---|
@@ -194,6 +205,10 @@ number cites a `PLAN.md` phase step.
 | MAN-X13 | Fast-TC accepted gains compressed materially at longer time controls and external opponents. | Choose the development gate prospectively for the claim, then use one cumulative longer, threaded or external cohort matched to the phase/release claim rather than replaying every candidate at all conditions. | §3.3, 6.2, 10.3 |
 | MAN-X14 | NNUE static loss, teacher transfer and training trajectories did not consistently predict playing strength. | Require untouched sets, multiple seeds, integer conformance, NPS and SPRT; do not promote on loss alone. | 7–9 |
 | MAN-X15 | PEXT availability did not imply equal performance across x86 microarchitectures; ISA labels, build flags and runtime checks could drift. | Model AVX2/BMI2 as sibling capabilities, include measured microarchitecture suitability and make artifact/runtime contracts executable. | 10.0 |
+| MAN-X16 | Stockfish's official testing discipline favors small focused changes, one test per idea, reproducible production binaries and review of complexity as well as a statistical pass. | Prefer independently meaningful candidates, use cheap deterministic/diagnostic rejection first and treat H1 as necessary evidence rather than automatic design approval. Allow only the resource-aware bundle exception in §3.3. | §3.3, 5.1 |
+| MAN-X17 | Stockfish's official test surface includes a deterministic signature, repeated short searches across new-game resets and varied node limits, short debug self-play and safety/sanitizer jobs. | Add reproducibility and debug-game CI in Phase 4 so rare state/reset/legality failures are detected before scarce 5950X game budgets are spent. | §3.5, 4.3 |
+| MAN-X18 | Contemporary Stockfish development continues to co-evolve evaluator inputs, correction histories, pruning and search consumers rather than treating evaluation replacement as a final constant-fit exercise. | After retaining NNUE, reopen search/evaluator structure and ablations before any consolidated fit; do not freeze the HCE-era architecture permanently. | §3.5, 9.2–9.3 |
+| MAN-X19 | Contemporary top-engine NNUE work depends on reproducible, automated and resumable training recipes at a data scale larger than one engine repository should own. | Keep the reusable pipeline and conformance contract in `net_trainer`, pin exact revisions, start with bounded pilots and scale only when learning curves and downstream games justify the single-host cost. | §3.5, 7–9 |
 
 ## 9. Open retry and adoption map
 
@@ -203,11 +218,13 @@ yet Manta experiments.
 | Item | Current state | Objective trigger | Destination |
 |---|---|---|---|
 | Third-party Zig linter | ZLint 0.9.1 declares Zig 0.16.0 compatibility; it is not yet a Manta gate. | Pin 0.9.1, reproduce it under exact Zig 0.16.0 and review a zero-warning baseline. If unsuitable, record the defect and retain project checks. | Phase 1 quality pipeline |
-| Colosseum runner | Desired future default; required CLI surface is not yet complete. | CLI supports Manta's SPRT/SPSA/gauntlet/manifests/affinity/adjudication needs; identical-binary calibration and legacy bridge pass. | Phase 4.5 |
+| Colosseum runner | The CLI candidate already owns ordinary-UCI matches, bounded SPRT/SPSA, calibration, topology-aware placement and resumable run records; it is not yet a pinned Manta dependency. | Pin and qualify a release/source revision through self-test, capabilities, Manta dry runs and identical-binary calibration on the real 5950X. Contribute generic gaps upstream. | Phase 4.4–4.5 |
+| Ryzen 9 5950X host profile | This is the sole designated long game-testing/tuning host; no game concurrency or calendar budget is frozen yet. | Colosseum capability discovery plus pilot at the exact TC establishes physical-core placement, reserved capacity, pair rate, bounded wall time and recalibration triggers. | Phase 4.5 |
+| Shared `net_trainer` | The engine-agnostic trainer/data/export/conformance repository is in development; Manta has not pinned a contract. | Qualify an exact revision and its format/vectors. Improve reusable capabilities upstream while Manta implements only the original Zig consumer. | Phase 7.1 |
 | Contempt | Baseline draw score is neutral; no public option exists. | Stable single-thread baseline permits a registered static/dynamic, analysis/play, root-perspective and draw-rule investigation with opponent-diverse native games. | Phase 5.3 |
 | Linux libc/musl packaging | WSL2 is the primary local Linux x86-64 test environment; no libc form is preselected as fastest. | C integration or release packaging exists, allowing libc-free/GNU/static-musl deterministic parity, dependency inspection, WSL/native smoke tests and controlled performance A/B. | Phase 5 or 10 |
 | HCE tuning | Closed during the normal NNUE path. | Serious NNUE retries fail and the user explicitly enters Phase 11 after written review. | Phase 11 |
-| Consolidated search SPSA | Deferred; phase entry alone never authorizes it and the normal plan has no pre-NNUE run. | Frozen consumers plus a written necessity review show that interacting continuous coordinates are sensitive/uncertain, smaller experiments are inadequate and tuning now is more valuable than deferral. | Normally Phase 9; earlier only by explicit PLAN amendment and approval |
+| Consolidated search SPSA | Deferred; phase entry alone never authorizes it and the normal plan has no pre-NNUE run. | Frozen consumers plus a necessity review and small sensitivity pilot show that normally 4–8 interacting continuous coordinates are sensitive/uncertain, smaller experiments are inadequate and the bounded 5950X calendar cost is worthwhile. More than 12 needs explicit evidence and approval. | Normally Phase 9; earlier only by explicit PLAN amendment and approval |
 | Additional SPSA | Not authorized. | Evidence demonstrates that an authorized consolidated fit could not identify the necessary parameter class. | Explicit PLAN amendment |
 
 An imported prior or parked item becomes a new Manta experiment with a new
@@ -221,9 +238,11 @@ native ID. It never overwrites historical evidence.
 - Date / owner:
 - Baseline SHA / candidate SHA / dirty-diff hash:
 - Hypothesis and interacting producers/consumers:
+- Candidate scope: independent idea / cohesive bundle; component switches:
 - Registered gate, hypotheses, budget and stop rule:
 - Build: Zig/LLVM, optimize mode, target/features, PGO manifest:
-- Artifacts: binary/book/config/network/data/dependency hashes:
+- Artifacts: binary/book/config/network/data/dependency hashes; tool SHAs/versions:
+- Host budget: pilot pair rate, expected/worst wall time, storage, checkpoints:
 - Games: TC, threads, Hash, concurrency, physical cores/affinity, adjudication:
 - Result: games, W-D-L, Elo/nElo and CI, LLR:
 - Deterministic evidence: tests, perft, fingerprint, conformance:

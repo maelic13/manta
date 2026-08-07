@@ -19,7 +19,8 @@ Conditional experiment evidence lives in [`EXPERIMENTS.md`](EXPERIMENTS.md).
 | UCI | Basilisk-level parity is specified in Phase 1 and completed before tournament release. |
 | Evaluation | Original Zig-native Manta HCE first, informed once by Basilisk's proven features/values; no copied engine code or synchronization. NNUE is strategic; HCE stays tested as a fallback. |
 | Performance shape | Portable scalar oracle plus sibling runtime-selected x86-64/ARM64 backends; native local builds prioritize speed. WSL2 is the normal local Linux x86-64 test environment. |
-| Long jobs | None. Do not start SPRT, SPSA, gauntlet, datagen, PGO or timed performance work. |
+| Long jobs | None in Phase 1. Later game/tuning jobs run serially on the single Ryzen 9 5950X through a calibrated Colosseum host profile and a bounded wall-time budget; other long workloads follow their owning phase. |
+| Shared tools | Colosseum owns engine-agnostic game/tuning infrastructure; `net_trainer` owns engine-agnostic NNUE data/training/export contracts. Manta pins them and keeps only original Zig integration plus checked configurations. |
 
 ## Non-negotiable rules
 
@@ -32,8 +33,10 @@ Conditional experiment evidence lives in [`EXPERIMENTS.md`](EXPERIMENTS.md).
 | Quality | Canonical format, AST checks, lint, strict typing, all required test modes and architecture-fitness checks gate every change. |
 | Domain-meaningful tests | Tests and coding agents must reason from chess rules, search evidence and engine goals, use independent oracles/properties, and never preserve incidental current numbers as truth. |
 | Evidence | Perft/bench/WAC/telemetry explain; registered games decide strength. Phase 4 supplies a conservative 1T clock before games begin, then each candidate gets one representative time-based SPRT. Fixed-node games are diagnostic only. |
+| Candidate scope | Prefer one independently meaningful idea. Bundle only inseparable, invalid-in-isolation or below-affordable-resolution components behind switches; one passing gate accepts the bundle, not every part. |
 | Thread goals | 1T is the deterministic baseline. 4T correctness, time safety, strength and scaling are independent gates; higher-thread behavior is measured, not assumed. |
-| Machine isolation | Never compile or run another timed workload during any game test, tuner, PGO pass or performance benchmark. |
+| Machine isolation | Never compile or run another timed workload during any game test, tuner, PGO pass or performance benchmark. Colosseum measures physical-core placement/concurrency on the real 5950X; do not infer capacity from logical-thread count. |
+| Reference checkpoints | At Phases 4–5, 6, 7–9 and 10, refresh exact pinned Basilisk and Stockfish source/material audits for hypotheses and failure modes. Implement original Zig designs; copy no engine code, constants or formulas. |
 | HCE scope | Implement and preserve the initial evaluator, but do not spend the primary development budget tuning it before NNUE. |
 | Original engine | Engine code, Zig tests, build files and architecture checks are original Manta work. Only established tooling may be adapted; vendored Fathom is the anticipated source exception. |
 | Public documentation | README, changelog and release notes remain simple and Manta-focused. Named engine comparisons and priors belong only in PLAN, GUIDE and EXPERIMENTS. |
@@ -169,17 +172,18 @@ threshold SEE, startpos perft(4), and two-ply game simulation.
 - [ ] Implement the shared 40-position
       `bench [depth] [repeats] [threads]` contract. Default 1T fingerprint is
       deterministic; multi-thread nodes are speed data only.
-- [ ] Add tactical/WAC, mate/endgame canaries and experiment tooling.
-- [ ] Port/adapt the current Basilisk/Rarog SPRT/SPSA/NPS/gauntlet tooling behind
-      a harness-neutral manifest.
+- [ ] Add tactical/WAC, mate/endgame canaries, repeated short-search
+      reproducibility CI and short Debug/ReleaseSafe self-play smoke games.
 - [ ] Implement and fake-clock/process-test conservative 1T handling for
       `movetime`, clocks/increments/moves-to-go, overhead and hard deadlines;
       pass a zero-forfeit smoke match before strength testing opens.
-- [ ] Calibrate the harness at the same representative time control used by the
-      first Phase-5 gate. Fixed-node games may be retained as diagnostics but
-      never promote a candidate.
-- [ ] Add Colosseum as an adapter when its CLI is ready; switch only after
-      identical-binary calibration and bridge tests.
+- [ ] Qualify a pinned Colosseum CLI revision through self-test, capability
+      discovery and dry runs; keep only Manta configs/option mapping, not a
+      runner adapter or duplicated match/statistics code.
+- [ ] On the real 5950X, calibrate physical-core placement, reserved capacity,
+      concurrency and identical-binary null bias at the representative
+      Phase-5 TC. Size calibration from required precision and measured wall
+      time, and record the host profile. Fix generic gaps upstream.
 
 ### Phase 5 — Evidence-coherent single-thread search
 
@@ -187,6 +191,9 @@ threshold SEE, startpos perft(4), and two-ply game simulation.
       conservative Phase-4 clock and harness gates pass.
 - [ ] Add coherent aspiration/root, NMP, selectivity/LMR, IIR/ProbCut/singular,
       history/correction and result-provenance families with ablations.
+- [ ] Prefer one mechanism per candidate. Use a reversible cohesive bundle only
+      where the single-host rule permits it; do not claim each part of a passing
+      bundle helped or run low-value exhaustive ablations.
 - [ ] Integrate Syzygy under strict I/O, WDL/DTZ and rule-50 contracts.
 - [ ] Freeze architecture and normally defer SPSA until the retained NNUE/search
       system is stable. An exceptional pre-NNUE run needs a written necessity
@@ -213,8 +220,12 @@ threshold SEE, startpos perft(4), and two-ply game simulation.
 - [ ] Audit dirty state and accumulator refresh/push/pop completeness.
 - [ ] Freeze scalar features, perspectives, buckets, quantization and versioned
       endian-defined network format.
+- [ ] Qualify and pin `net_trainer` as the shared owner of data tooling,
+      training recipes, export/file contracts and conformance vectors. Put
+      reusable fixes upstream; do not vendor it.
 - [ ] Define dataset generation, deduplication, splits, labels, seeds,
-      manifests, resume and trainer/export conformance.
+      manifests and resume through that contract. Manta owns the original Zig
+      loader, inference, accumulator and optimized backends.
 - [ ] Land no-op scaffolding only when NNUE-off is bench-identical.
 
 ### Phase 8 — Baseline NNUE
@@ -235,10 +246,13 @@ threshold SEE, startpos perft(4), and two-ply game simulation.
 - [ ] Test feature/threat/king/material/bucket/width axes one at a time with
       multiple seeds, integer parity and throughput as the funnel; give only
       surviving promotion candidates their one representative game gate.
-- [ ] Freeze network architecture/scale and perform the SPSA necessity review.
-      If justified, run at most one consolidated post-NNUE fit followed by a
-      clean bake, ablations and one representative time-based SPRT; otherwise
-      record the skip.
+- [ ] Reopen Phase-5 search assumptions under the retained NNUE: rerun
+      decision-useful ablations and permit structural changes to histories,
+      pruning/static-eval consumers, threat evidence and result provenance.
+- [ ] Freeze the co-adapted system and perform the SPSA necessity review plus a
+      small sensitivity pilot. If justified, run at most one checkpointed fit,
+      normally over 4–8 coordinates; more than 12 needs explicit evidence and
+      approval. Bake once and run one representative SPRT; otherwise skip.
 
 ### Phase 10 — ISA dispatch, platforms, scaling and release maturity
 
@@ -274,13 +288,15 @@ Enter only after serious NNUE retries fail and the user explicitly chooses it.
 | Behaviour-neutral change | Exact 1T bench plus format/AST/lint/tests and performance evidence when hot. |
 | Correctness change affects legal play | Regression and correctness suites, then registered games unless unreachable. |
 | Coherent strength candidate | Final production binaries; one prospectively chosen representative time-based SPRT, default `[3,10]` nElo at 1T `3+0.03`, 12k cap; only H1 promotes. |
-| Small knob | Keep inert, bundle coherently or defer to the consolidated fit. Do not spend a full gate casually. |
-| SPSA | Never automatic. Normally defer until NNUE/search/score-scale freeze; require a written necessity review, explicit authorization, frozen consumers and a registered budget. |
+| Small idea or knob | Test independently when its likely signal justifies the host cost; otherwise keep it inert, include it in one reversible mechanism-level bundle or defer it. |
+| Cohesive bundle | Only inseparable, invalid-in-isolation or below-resolution parts; preserve switches, exclude unrelated work and use one gate. A pass accepts only the bundle. |
+| SPSA | Never automatic. Normally defer until NNUE/search/score-scale freeze; require a necessity review, sensitivity pilot, explicit authorization, normally 4–8 coordinates, checkpoints and a measured 5950X wall-time budget. |
 | Bench node change | Explain, regression-test and record old/new fingerprint in `EXPERIMENTS.md`. |
 | Speed claim | Bench identity plus identical-binary calibration and pooled/interleaved A/B. |
 | UCI difference from Basilisk | Decide explicitly in an ADR and transcript; never drift accidentally. |
 | NNUE baseline loses | Diagnose data, labels, integration and architecture; keep HCE fallback, but do not abandon NNUE casually. |
-| Colosseum CLI ready | Add adapter, calibrate and bridge; switch only after equivalent semantics are demonstrated. |
+| Colosseum capability gap | Contribute the generic fix upstream. Use a narrow temporary legacy bridge only for a demonstrated blocker and remove it after qualification. |
+| Shared NNUE tooling gap | Improve `net_trainer` upstream; keep only Manta-specific original Zig integration in this repository. |
 
 ## What happens next
 
@@ -313,7 +329,9 @@ zig build test -Doptimize=ReleaseSafe
 zig build test -Doptimize=ReleaseFast
 zig build board-bench -Doptimize=ReleaseFast
 zig build run -Doptimize=ReleaseFast -- bench 13 1 1
-.\tools\sprt.ps1 -EngineA <candidate> -EngineB <baseline> `
-  -NameA Candidate -NameB Baseline -Elo0 3 -Elo1 10 -MaxGames 12000
-.\tools\nps_ab.ps1 -EngineA <candidate> -EngineB <baseline> -Rounds 12
+colosseum-cli capabilities
+colosseum-cli self-test
+colosseum-cli --run-file .\testing\strength.toml --dry-run --json
+colosseum-cli --run-file .\testing\strength.toml
+colosseum-cli status <run-directory> --json
 ```

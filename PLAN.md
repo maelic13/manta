@@ -172,6 +172,11 @@ Model  -> apply the registered verdict, update PLAN + GUIDE + EXPERIMENTS, commi
 - Never compile or run another timed workload while an SPRT, SPSA, gauntlet,
   NPS A/B, PGO training or board benchmark is running. Deterministic outputs
   may survive contention; timing evidence does not.
+- The only designated long game-testing/tuning host is the user's Ryzen 9 5950X. Its
+  usable concurrency is a measured Colosseum host-profile result, not `32`
+  logical threads assumed as game slots. Colosseum jobs are serialized and retain
+  physical-core placement, reserved capacity, pilot pair rate, bounded
+  expected/worst wall time, storage, checkpoint/resume and stop-rule evidence.
 
 ### 3.2 Branch, CI and release workflow
 
@@ -225,11 +230,11 @@ Manta is tournament-capable, the following default evidence policy applies:
 | Behaviour-neutral refactor/test/tooling | Format/AST/lint, relevant tests in required modes, sanitizing/safety tools when available, exact 1T bench fingerprint. |
 | Correctness repair changing legal play | Deterministic regression, perft/invariants, tactical/mate/endgame/UCI suites, then strength gate unless unreachable in legal play. |
 | Coherent strength candidate | Final production-build candidate versus the accepted final production baseline; one prospectively chosen representative time-based SPRT, default `[3,10]` nElo at 1T `3+0.03`, maximum 12,000 games; only H1 promotes. |
-| Broad/risky architecture bundle | Prospectively register `[0,10]` or `[3,12]`; preserve ablation switches and use one final-binary gate. |
+| Coherent resource-aware bundle | Allowed only when components are inseparable, invalid/misleading in isolation or individually below affordable resolution. Register one mechanism-level hypothesis, no unrelated changes, component switches and `[0,10]` or `[3,12]`; use one final-binary gate. A pass accepts the bundle, not every component. |
 | Non-inferiority/simplification | `[-3,0]`; H1 supports non-regression. |
 | Speed-only | Exact bench identity plus identical-binary calibration and pooled/interleaved independent production-build NPS A/B. |
 | UCI/time/root/SMP | Process and fake-clock regressions plus one strength gate chosen for the claimed scope: normally 1T `3+0.03`, 1T `10+0.1` for a specifically long-time allocation claim, or 4T `10+0.1` for an SMP claim; require zero forfeits and record topology, Hash and clock policy. |
-| Harness change | Fixed game-count identical-binary calibration: 30k games at 1T and 10k at 4T where applicable; complete 95% nElo CI inside ±5. |
+| Harness/clock/placement change | Identical-binary calibration at the exact production TC, threads, Hash, book, adjudication and placement. Size fixed-N prospectively for the requested null-bias precision and available 5950X wall time; recalibrate only after a relevant runner, clock, OS/hardware or topology/placement change. |
 | ISA/backend change | Exact scalar/backend conformance, cross-backend fingerprint, disassembly, unsupported-hardware behavior and target-native same-tier performance evidence. |
 | Phase/release boundary | Clean reproducible artifacts, complete correctness/UCI/platform matrix and one cumulative match or external cohort chosen for the phase/release claim; this validates the integrated baseline and does not retroactively duplicate every accepted candidate gate. |
 
@@ -243,6 +248,14 @@ than creating a second promotion path. Do not repeat the same candidate at STC,
 LTC and several thread counts by default; additional game evidence is justified
 only by a distinct claimed scope or a cumulative phase/release decision.
 
+Prefer one independently meaningful idea per candidate. Cheap correctness,
+fingerprint, NPS, telemetry and tactical diagnostics reject weak work before
+games but do not promote it. Small compatible changes may accumulate behind
+switches as one staging bundle only under the bundle rule above. If that bundle
+passes, retain no claim about the isolated value of each part. If it fails or
+is inconclusive, run only the ablations whose expected decision value justifies
+their 5950X time; do not spend an exhaustive test matrix by default.
+
 | Phase | Playing-evidence activation |
 |---|---|
 | 0–3 | None. Contracts, board correctness/performance and HCE semantics are not playing-strength claims. |
@@ -254,12 +267,16 @@ only by a distinct claimed scope or a cumulative phase/release decision.
 | 10 | Platform/ISA work uses exact conformance and native speed evidence. A release candidate receives one cumulative match/external cohort for the release claim, not a replay of every development gate. |
 | 11 | If explicitly entered, diagnostics funnel one HCE candidate to one representative time-based SPRT; release evidence is added only if that candidate will ship. |
 
-Use the paired UHO book and `strength-v1` adjudication inherited from the
-calibrated Basilisk/Rarog harness until Colosseum replaces them through the
-bridge procedure in Phase 4. Record source SHA, dirty diff, Zig/LLVM version,
-target/features, build options, binary/book/network hashes, PGO manifest, TC,
-threads, Hash, concurrency, affinity, adjudication and CPU topology. Record any
-fixed-node diagnostic separately from the authoritative gate.
+Colosseum is the strategic owner of engine-agnostic matches, SPRT, SPSA,
+calibration, placement, watching and run records. Phase 4 qualifies a pinned
+release or source revision; because it launches ordinary UCI executables,
+Manta needs checked configurations and option mapping, not a runner adapter.
+Any temporary legacy bridge is allowed only if qualification finds a real
+blocker and is removed after the upstream fix. Record runner source/version,
+source SHA, dirty diff, Zig/LLVM version, target/features, build options,
+binary/book/network hashes, PGO manifest, TC, threads, Hash, concurrency,
+affinity, adjudication and CPU topology. Record any fixed-node diagnostic
+separately from the authoritative gate.
 
 SPRT decides strength. Perft, deterministic node counts, WAC, static loss,
 depth, EBF, NPS and telemetry explain results but do not replace games.
@@ -271,25 +288,48 @@ depth, EBF, NPS and telemetry explain results but do not replace games.
 2. Seed the original Manta HCE with the proven reference feature/value baseline;
    do not spend a normal HCE tuning campaign on a strategically temporary
    evaluator.
-3. Before proposing SPSA, write a short necessity review showing that several
-   interacting continuous coordinates are both sensitive and uncertain, that
-   diagnostics or smaller experiments cannot answer the question efficiently,
-   and that running now has higher expected value than deferring it.
+3. Before proposing SPSA, write a short necessity review and run a small fixed
+   sensitivity pilot. Show that several interacting continuous coordinates are
+   sensitive and uncertain, that diagnostics or smaller experiments cannot
+   answer the question efficiently, and that running now has higher expected
+   value than deferring it.
 4. The normal plan has no pre-NNUE SPSA. Phase 5 may request one consolidated
    exception only if a frozen search parameter set materially blocks playing
    strength, data quality or progress before NNUE; it requires an explicit PLAN
    amendment and user approval.
 5. After Phase 9 freezes the retained NNUE architecture and score scale, one
    consolidated search/history/time SPSA may be authorized if the necessity
-   review passes. Select no more than about 24 non-redundant coordinates.
+   review and pilot pass. Normally select 4–8 non-redundant interacting
+   coordinates; more than 12 requires explicit evidence and user approval.
    Skipping the run is a valid outcome, not an incomplete phase.
 6. A further run requires explicit evidence that the previous fit could not
    identify the needed parameter class. HCE coordinates are allowed only if
    Phase 11 is explicitly entered.
-7. Discrete mechanisms use A/B switches or small registered grids. SPSA
+7. Before launch, use Colosseum's deterministic schedule and resume contract to
+   estimate calendar time from a measured 5950X pilot rate. Register bounded
+   checkpoints and stop early when movement is noise-dominated, insensitive or
+   no longer worth the remaining machine time. Do not schedule automatic reruns.
+8. Discrete mechanisms use A/B switches or small registered grids. SPSA
    proposes; the clean final production build passes one time-based registered
    SPRT. Estimator, schedule, bounds, horizon and stop rule are registered
    before launch—no post-hoc tail selection.
+
+### 3.5 Contemporary reference checkpoints
+
+Basilisk remains Manta's primary design reference and Stockfish the secondary
+gold-standard cross-check, but neither is a source of copied engine code. At
+the start of each high-leverage phase below, inspect exact pinned source
+revisions and official development/testing material, extract hypotheses and
+failure modes, and record only the implications relevant to original Zig code.
+Do not import formulas, constants or architecture by prestige, and do not keep
+Manta synchronized afterward.
+
+| Phase | Required checkpoint |
+|---|---|
+| 4–5 | Search testing discipline, deterministic signatures/reproducibility, short debug self-play, result provenance, pruning/history interactions and complexity cost. |
+| 6 | Time allocation, stop/publication safety, shared-memory ownership and scaling methodology. |
+| 7–9 | Reproducible data/training recipes, evaluator/search co-adaptation, accumulator/inference contracts and realistic data scale. |
+| 10 | ISA dispatch, topology/NUMA behavior, thread placement and target-native validation. |
 
 ## 4. Benchmark and reproducibility contracts
 
@@ -699,32 +739,35 @@ ponder behavior and SMP timing rather than the first usable clock.
 
 - Implement the versioned 40-position `bench` contract from §4.2 and establish
   Manta's first accepted fingerprint only after correctness freezes.
+- Add a repeated short-search reproducibility job across fresh-game resets and
+  varied node limits, plus short Debug/ReleaseSafe self-play smoke games. Treat
+  crashes, illegal moves, signature drift and sanitizer/safety failures as CI
+  defects rather than Elo questions.
 - Add tactical/WAC diagnostics, mate-distance and KBNK/KQK/endgame canaries.
   These detect semantics and explain changes; they do not decide strength.
 
 #### 4.4 — Experiment tooling foundation
 
-- Port/adapt the synchronized Basilisk/Rarog PowerShell workflow for tool
-  setup, final production builds, SPRT, SPSA, gauntlets, NPS A/B, scaling,
-  watching and artifact capture.
-- Use one harness-neutral, versioned experiment manifest/config schema so the
-  engine and evidence ledger are not coupled to a single runner.
-- Calibrate identical binaries, physical-core selection, reserved cores,
-  affinity, concurrency, book and adjudication before any Manta strength claim.
-  Calibration uses the same representative time-based conditions as the first
-  Phase-5 gate. The runner may support fixed-node diagnostics, but that mode is
-  not required for promotion and cannot replace time-based calibration.
+- Qualify an exact pinned Colosseum CLI release or source candidate with its
+  self-test, capability report and dry runs. Verify Manta UCI options, paired
+  openings, adjudication, final production binaries, bounded SPRT/SPSA,
+  checkpoints, artifacts and resume behavior.
+- Keep only versioned Manta configurations and expected option mappings here.
+  Colosseum launches ordinary UCI executables, so do not create a Manta runner
+  or duplicate its match/statistics/placement code.
 
-#### 4.5 — Colosseum migration seam
+#### 4.5 — 5950X host qualification and shared-tool boundary
 
-- Treat current scripts as adapters. When Colosseum CLI implements the needed
-  features, add a Colosseum adapter without changing the registered experiment
-  schema.
-- Require identical-binary 1T/4T calibration, command/option/adjudication audit,
-  paired-opening verification and bridge tests against the prior harness.
-- Switch the default only when equivalent semantics and acceptable null bias
-  are demonstrated. Archive the old adapter until the first Colosseum-gated
-  release is reproducible.
+- On the actual Ryzen 9 5950X, let Colosseum discover physical/SMT topology and
+  reserve capacity. Pilot the representative Phase-5 time control, choose the
+  physical-core placement/concurrency profile from measured throughput and
+  stability, then run a prospectively sized identical-binary calibration.
+- Store exact tool SHA/version, host profile, pair rate, precision target and
+  expected/worst wall time. Repeat only after a relevant runner, clock,
+  hardware/OS or placement change.
+- Contribute any reusable defect or missing capability upstream to Colosseum.
+  Use a narrow temporary legacy bridge only for a demonstrated blocker; do not
+  fork Colosseum, and remove the bridge after the upstream path qualifies.
 
 ### Phase 5 — Evidence-coherent single-thread search
 
@@ -749,7 +792,9 @@ Add and diagnose coherent families rather than isolated copied formulas:
 
 Reference contemporary engines for hypotheses, never constants or verdicts.
 Each mechanism remains ablatable. A smaller tree or higher depth is not proof
-of stronger move selection.
+of stronger move selection. Prefer one mechanism per candidate. Stage a
+coherent reversible bundle only when §3.3 permits it, and spend targeted
+ablations only when their expected information exceeds their host cost.
 
 #### 5.2 — Syzygy and endgame integration
 
@@ -818,9 +863,16 @@ intentional differences require an ADR and regression.
 
 #### 7.1 — Trainer and dataset preflight
 
+- Qualify and pin the shared `net_trainer` revision. It owns engine-agnostic
+  game/data tooling, training recipes, quantization/file contract, export,
+  checkpoints and reference conformance vectors; reusable improvements land
+  upstream there rather than in Manta.
 - Define self-play/teacher data schema, sampling, deduplication, train/valid/
-  untouched-test splits, label blend, manifests, seeds, resume and integrity.
-- Pin the trainer source/toolchain and require export/inference conformance.
+  untouched-test splits, label blend, manifests, seeds, resume and integrity
+  through that shared contract.
+- Manta owns an original Zig loader, scalar inference, dirty-state/accumulator
+  integration and optimized backends. Do not copy its C++/Rust examples or
+  make the trainer a vendored/runtime dependency.
 - Preserve HCE and search-disagreement corpora as diagnostics, not automatic
   training truth.
 
@@ -874,14 +926,27 @@ untouched loss, integer conformance and throughput to reject weak candidates
 before games; each surviving promotion candidate receives only its one
 representative time-based gate.
 
-#### 9.2 — Consolidated post-NNUE fit
+#### 9.2 — Search/evaluator co-adaptation
+
+- Reopen the Phase-5 search architecture under the retained NNUE. Re-run
+  mechanism ablations and inspect histories/correction, pruning margins,
+  static-eval consumers, threat inputs and result provenance because a sound
+  HCE-era structure or constant need not remain sound with the new evaluator.
+- Permit evidence-led structural changes; do not limit this step to retuning
+  old numbers. Keep changes original, reversible and independently gated under
+  §3.3, with cohesive bundles only where the single-host rule justifies them.
+- Freeze the retained search/evaluator consumers only after this pass.
+
+#### 9.3 — Consolidated post-NNUE fit
 
 After network architecture, score scale and parameter consumers freeze, perform
-the §3.4 SPSA necessity review. If it passes, authorize at most one
-consolidated run over no more than about 24 non-redundant search/history/time
-coordinates, then bake, ablate and submit the clean production result to one
-representative time-based SPRT. If it does not pass, record the skip and close
-the phase without spending the tuning budget.
+the §3.4 SPSA necessity review and sensitivity pilot. If both pass, authorize
+at most one checkpointed consolidated run, normally over 4–8 non-redundant
+search/history/time coordinates; more than 12 requires explicit evidence and
+approval. Bake the result and submit the clean production candidate to one
+representative time-based SPRT. Run only decision-useful ablations. If the
+review or pilot does not pass, record the skip and close the phase without
+spending the tuning budget.
 
 ### Phase 10 — ISA dispatch, platforms, scaling and release maturity
 
@@ -969,6 +1034,13 @@ unless removal is separately justified.
 11. HCE is a bootstrap and fallback, not the strategic optimization sink.
 12. The newest stable Zig is a requirement, while exact pinning and manifests
     preserve reproducibility inside that requirement.
+13. Prefer small, independently reviewable playing ideas. When single-host
+    resolution makes a cohesive bundle rational, a passing gate licenses only
+    the bundle and targeted ablations must justify their machine cost.
+14. Search and evaluation co-adapt. Re-open HCE-era search assumptions after
+    NNUE instead of treating the final stage as parameter tuning alone.
+15. Shared infrastructure belongs upstream in Colosseum or `net_trainer`;
+    Manta retains original Zig integration and reproducible pinned contracts.
 
 ## 7. Release checklist
 
@@ -1004,9 +1076,10 @@ zig build test -Doptimize=ReleaseFast
 zig build board-bench -Doptimize=ReleaseFast
 zig build run -Doptimize=ReleaseFast -- bench 13 1 1
 .\tools\build_test.ps1 -Suffix <name>
-.\tools\sprt.ps1 -EngineA <candidate> -EngineB <baseline> `
-  -NameA Candidate -NameB Baseline -Elo0 3 -Elo1 10 -MaxGames 12000
-.\tools\nps_ab.ps1 -EngineA <candidate> -EngineB <baseline> -Rounds 12
-.\tools\spsa.ps1 -ConfigGroup search_final -EngineSuffix <base>
-.\tools\gauntlet.ps1 -Engine <candidate> -Opponents <list> -TC "10+0.1"
+colosseum-cli capabilities
+colosseum-cli self-test
+colosseum-cli --run-file .\testing\strength.toml --dry-run --json
+colosseum-cli --run-file .\testing\strength.toml
+colosseum-cli status <run-directory> --json
+colosseum-cli nps <engine> --nodes <registered-node-count>
 ```

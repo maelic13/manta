@@ -39,6 +39,28 @@ Reaching a numbered phase does not automatically authorize SPSA. Propose it
 only after the affected consumers freeze and evidence shows that a joint fit of
 interacting continuous parameters is necessary and worth its game budget.
 
+Prefer one independently meaningful idea per playing candidate. A cohesive
+bundle is permitted only when its parts are semantically inseparable,
+intermediate states are invalid or misleading, or the expected effects are
+individually below the resolution affordable on the designated host. State one
+mechanism-level hypothesis, exclude unrelated changes, preserve component
+switches and run one final production SPRT. A passing bundle licenses the bundle,
+not a claim that every component helped; use targeted, value-of-information
+ablations rather than an exhaustive matrix.
+
+The designated game-testing and tuning host is one Ryzen 9 5950X. Do not start
+long jobs as a coding agent. Prepare a bounded Colosseum job with an exact host
+profile, prospective pair/game cap, pilot-measured pair rate, expected and
+worst-case wall time, storage estimate, checkpoint/resume path and stop rule
+for the user to run. Do not overlap it with data generation or other timed work
+on that machine.
+
+Colosseum owns engine-agnostic match, SPRT, SPSA, calibration, placement and run
+records. `net_trainer` owns engine-agnostic NNUE data, training, export, format
+and conformance tooling. Fix reusable gaps in their upstream repositories;
+Manta owns only checked configurations and original Zig engine integration.
+Do not fork, vendor or independently reimplement shared tooling in Manta.
+
 ## Chess-domain reasoning is mandatory
 
 Before implementing or reviewing a chess/search change, state:
