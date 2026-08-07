@@ -71,7 +71,7 @@ zig build test -Doptimize=ReleaseFast
 
 | Stage | Contract |
 |---|---|
-| Development | Commit numbered steps to `dev` after the applicable local gates. CI can be manually dispatched on `dev` using the complete gate. |
+| Development | Commit numbered steps to `dev` after local gates. Once the workflow exists on default `master`, it can be manually dispatched on `dev`; bootstrap it first with an unmerged draft PR. |
 | Release merge | Open `dev` → `master`; required CI runs on the pull request. The sole publisher enforces squash-only acceptance without repository branch protection. |
 | Master backstop | The same CI runs on every `master` push. Verify it, the finalized release and a clean worktree before resetting `dev` to `master`. |
 | CI jobs | Exact Zig guard; docs/link/policy checks; format/AST/lint; Debug, ReleaseSafe and ReleaseFast tests; supported native target builds; later perft/UCI/bench agreement. |
@@ -251,9 +251,11 @@ Enter only after serious NNUE retries fail and the user explicitly chooses it.
 
 ## What happens next
 
-Step 1.0.3 is implemented locally. Push `dev` and manually dispatch the
-workflow; Phase 1.1 remains closed until the six-platform matrix and stable
-`CI / gate` pass remotely.
+Step 1.0.3 is implemented locally. Push `dev`, open an unmerged draft pull
+request to `master`, and let its pull-request trigger validate the new
+workflow. Phase 1.1 remains closed until the six-platform matrix and stable
+`CI / gate` pass remotely. Manual dispatch becomes available only after the
+workflow exists on default `master`.
 
 Do not implement board representation, move generation, evaluation, search or
 later features. Do not run any long or timed jobs.

@@ -194,8 +194,11 @@ Model  -> apply the registered verdict, update PLAN + GUIDE + EXPERIMENTS, commi
    first release. After that commit `master` receives releases only.
 3. Phase 1 creates one authoritative CI workflow with identical jobs for pull
    requests targeting `master`, pushes to `master` as a backstop, and manual
-   dispatch on any branch. A manual run from `dev` is the exact preview of the
-   release-merge gate, not a reduced substitute.
+   dispatch on any branch. Once the workflow exists on default `master`, a
+   manual run from `dev` is the exact preview of the release-merge gate, not a
+   reduced substitute. Its initial remote validation uses an unmerged draft
+   `dev` to `master` pull request because manual dispatch is unavailable until
+   the workflow reaches the default branch.
 4. The CI gate pins the exact stable Zig, checks documentation and internal
    links, formatting/AST/lint, Debug/ReleaseSafe/ReleaseFast tests, supported
    target builds and, once available, deterministic cross-platform bench
@@ -621,7 +624,9 @@ tests plus a ReleaseFast smoke build on six native hosted targets, cross-builds
 all six target triples, and reduces every result to stable `CI / gate`. The
 policy checker locks the workflow's essential trigger, security, toolchain and
 matrix contracts. No artifact publication or release automation was activated.
-The step closes only after the committed workflow passes its first remote run.
+The step closes only after the committed workflow passes on an unmerged draft
+`dev` to `master` pull request. Manual dispatch becomes available after the
+workflow later reaches default `master`.
 
 - Implement the §3.2 branch gate: identical manual and `master`-PR CI,
   post-merge `master` backstop, stable aggregate maintainer gate, exact

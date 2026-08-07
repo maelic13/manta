@@ -36,6 +36,10 @@ pushes to `master` and manual dispatches. It checks all six native host targets,
 cross-builds all six explicit target triples and reduces the result to
 `CI / gate`. It does not publish artifacts.
 
+GitHub enables manual dispatch only after the workflow exists on default
+`master`. Before its first release merge, validate it by pushing `dev` and
+opening an unmerged draft pull request to `master`.
+
 WSL2 is the normal local Linux x86-64 environment; native target execution
 remains required before a release artifact can be published. The sole
 publisher verifies the release pull-request gate and post-merge `master` gate,
