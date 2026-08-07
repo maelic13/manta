@@ -25,6 +25,7 @@ const required_paths = [_][]const u8{
     "tools/policy_check.zig",
     "tools/ci/install-zig.ps1",
     "tools/ci/install-zig.sh",
+    "tools/ci/verify-windows-arm64.ps1",
     "tools/zlint/build.zig",
     "tools/zlint/build.zig.zon",
     "zlint.json",
@@ -140,7 +141,7 @@ const Checker = struct {
             "workflow_dispatch:",
             "contents: read",
             "persist-credentials: false",
-            "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "actions/checkout@v7",
             "uses: ./.github/actions/setup-zig",
             "timeout-minutes: 6",
             "cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}",
@@ -148,6 +149,9 @@ const Checker = struct {
             "zig build test -Doptimize=Debug",
             "zig build test -Doptimize=ReleaseSafe",
             "zig build test -Doptimize=ReleaseFast",
+            "name: Verify Windows ARM64 directly",
+            "if: matrix.label == 'windows-arm64'",
+            "tools/ci/verify-windows-arm64.ps1",
             "ubuntu-24.04-arm",
             "windows-11-arm",
             "macos-26-intel",
@@ -191,11 +195,12 @@ const Checker = struct {
         const setup_action = try self.read(".github/actions/setup-zig/action.yml");
         defer self.allocator.free(setup_action);
         const setup_contracts = [_][]const u8{
-            "actions/cache@caa296126883cff596d87d8935842f9db880ef25",
+            "actions/cache@v5",
             "using: composite",
             "zig-0.16.0-${{ runner.os }}-${{ runner.arch }}",
             "tools/ci/install-zig.ps1",
             "tools/ci/install-zig.sh",
+            "bash \"${{ github.workspace }}/tools/ci/install-zig.sh\"",
         };
         for (setup_contracts) |contract| {
             if (std.mem.indexOf(u8, setup_action, contract) == null) {

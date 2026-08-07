@@ -618,7 +618,7 @@ no UCI or chess behaviour was introduced.
 
 **Implemented locally 2026-08-07; clean remote rerun pending.** One read-only
 workflow now gives `master` pull requests, `master` pushes and manual dispatches
-the identical job graph. It pins Zig 0.16.0 and immutable action revisions,
+the identical job graph. It pins Zig 0.16.0 and current major action versions,
 runs the complete local quality and three-mode test gate, executes ReleaseSafe
 tests plus a ReleaseFast smoke build on six native hosted targets, cross-builds
 all six target triples, and reduces every result to stable `CI / gate`. The
@@ -627,13 +627,19 @@ matrix contracts. No artifact publication or release automation was activated.
 The first draft-PR probe showed that the prior Zig setup action could stall on
 a randomly selected mirror and still used a deprecated Node runtime. CI now
 downloads official platform archives directly, verifies their published SHA-256
-checksums, caches only the verified exact compiler through a current Node-24
-action, and bounds setup to six minutes. It also keeps source-pinned ZLint in a
-separate host-tool package, so normal native and cross-target builds neither
-resolve nor fetch lint dependencies; full build summaries and `zig env` preserve
-diagnostics if Windows ARM64 fails again. The step closes only after this repair
-passes on the unmerged draft `dev` to `master` pull request. Manual dispatch
-becomes available after the workflow later reaches default `master`.
+checksums, caches only the verified exact compiler through the current Node-24
+major action, and bounds setup to six minutes. It also keeps source-pinned ZLint
+in a separate host-tool package, so normal native and cross-target builds neither
+resolve nor fetch lint dependencies. The second probe exposed a missing Unix
+execute bit and confirmed that the official native Windows ARM64 compiler exits
+silently from `zig build` on the hosted ARM runner. The composite action now
+invokes the Unix installer through Bash. Windows ARM64 retains the official
+native compiler but directly compiles and executes every required test, policy
+and smoke root, bypassing only the failing build runner; the normal build system
+remains covered on five native hosts and by all six cross-target builds. Recheck
+this narrow workaround at every stable Zig upgrade. The step closes only after
+the repair passes on the unmerged draft `dev` to `master` pull request. Manual
+dispatch becomes available after the workflow later reaches default `master`.
 
 - Implement the §3.2 branch gate: identical manual and `master`-PR CI,
   post-merge `master` backstop, stable aggregate maintainer gate, exact

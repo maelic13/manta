@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -71,7 +71,7 @@ jobs:
             label: macos-arm64
     steps:
       - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -87,16 +87,25 @@ jobs:
           zig env
 
       - name: Compile all roots
+        if: matrix.label != 'windows-arm64'
         run: zig build check -Doptimize=ReleaseSafe --summary all
 
       - name: Test ReleaseSafe
+        if: matrix.label != 'windows-arm64'
         run: zig build test -Doptimize=ReleaseSafe --summary all
 
       - name: Build ReleaseFast
+        if: matrix.label != 'windows-arm64'
         run: zig build -Doptimize=ReleaseFast
 
       - name: Smoke-test executable
+        if: matrix.label != 'windows-arm64'
         run: zig build run -Doptimize=ReleaseFast
+
+      - name: Verify Windows ARM64 directly
+        if: matrix.label == 'windows-arm64'
+        shell: pwsh
+        run: ./tools/ci/verify-windows-arm64.ps1
 
   cross-build:
     name: cross-build all targets
@@ -104,7 +113,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
