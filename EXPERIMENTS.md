@@ -2,8 +2,9 @@
 
 This is the indexed maintainer record of Manta measurements and the conditional
 lessons they support. It is not a roadmap: [`PLAN.md`](PLAN.md) owns sequencing
-and gates; [`GUIDE.md`](GUIDE.md) is the short operational view. Future
-`CHANGELOG.md` remains user-facing.
+and gates; [`REQUIREMENTS.md`](REQUIREMENTS.md) owns normative acceptance
+criteria; [`GUIDE.md`](GUIDE.md) is the short operational view.
+[`CHANGELOG.md`](CHANGELOG.md) remains user-facing.
 
 Manta currently has no implementation and therefore no native experiment
 results. The imported Basilisk/Rarog rows below are priors that shape test
@@ -66,10 +67,14 @@ that accepts, reverts or closes it. Record:
    NPS, recall, contradictions, counters, static loss and suites;
 10. disposition, conditional lesson, objective retry trigger and artifact paths.
 
-Do not add accepted-arm Elo values together as a rating forecast. Fast-TC
-results may compress or reverse at longer time controls. A successful SPSA
-trajectory is a proposal, not proof; its baked production binary requires the
-registered SPRT.
+Do not add accepted-arm Elo values together as a rating forecast. Each playing
+candidate has one prospectively registered, scope-representative time-based
+promotion gate. Fixed-node games and other time controls are observations unless
+they answer a distinct claim or a cumulative phase/release question; they are
+not automatic duplicate SPRTs. Fast-TC results may compress or reverse at
+longer time controls, so choose the authoritative condition before launch. A
+successful SPSA trajectory is a proposal, not proof; its baked production
+binary requires the registered SPRT.
 
 ### Artifact contract
 
@@ -168,14 +173,16 @@ Future IDs use `MAN-Pnn`.
 ## 8. Imported Basilisk/Rarog priors
 
 These rows are explicitly **not Manta results**. They capture lessons worth
-designing around and the Manta phase that must verify them locally.
+designing around and the Manta phase that must verify them locally. In the
+coverage column a `§` prefix cites a numbered `PLAN.md` section and a bare
+number cites a `PLAN.md` phase step.
 
 | ID | Imported evidence | Manta implication | PLAN coverage |
 |---|---|---|---|
 | MAN-X01 | Basilisk/Rarog found scheduler placement and concurrent compilation/timing capable of moving small game and NPS readings materially. | Discover physical cores, pin explicitly, reserve capacity, forbid concurrent timed work, and calibrate identical binaries before candidate tests. | §3.1–3.2, 4.4 |
-| MAN-X02 | Both engines encountered tuners fitted around defects or incomplete mechanisms; a correct standalone repair could look strongly negative until consumers were jointly refit. | Freeze architecture before SPSA, keep related mechanisms ablatable, diagnose interactions and use post-fit ablations. | §3.3, 5.1–5.3 |
-| MAN-X03 | Exact bench node identity survived behaviour-neutral speed work, but single-build/single-run NPS comparisons produced misleading conclusions. | Treat fingerprint as behaviour evidence only; use identical-binary calibration plus pooled/interleaved independent production builds for speed. | §3.2, 4.2, 10.2 |
-| MAN-X04 | KBNK/KQK, mate-distance, WAC, perft and rule-50 tests caught semantic failures but did not predict Elo reliably. | Keep canaries mandatory while reserving strength verdicts for registered games. | §3.2, 4.3 |
+| MAN-X02 | Both engines encountered tuners fitted around defects or incomplete mechanisms; a correct standalone repair could look strongly negative until consumers were jointly refit. | Freeze architecture before SPSA, keep related mechanisms ablatable, diagnose interactions and use post-fit ablations. | §3.4, 5.1–5.3 |
+| MAN-X03 | Exact bench node identity survived behaviour-neutral speed work, but single-build/single-run NPS comparisons produced misleading conclusions. | Treat fingerprint as behaviour evidence only; use identical-binary calibration plus pooled/interleaved independent production builds for speed. | §3.3, §4.2, 10.2 |
+| MAN-X04 | KBNK/KQK, mate-distance, WAC, perft and rule-50 tests caught semantic failures but did not predict Elo reliably. | Keep canaries mandatory while reserving strength verdicts for registered games. | §3.3, 4.3 |
 | MAN-X05 | Multi-thread fixes and strength gains differed radically from 1T behavior; private helper clocks, node budgets and result ownership caused real failures. | Design SMP ownership before implementation and gate clock safety/strength independently at 1T and 4T. | 0.2, 6.0–6.2 |
 | MAN-X06 | Repeated HCE work in Basilisk stopped transferring reliably, while both engines identified NNUE as the main evaluation path. | Use Basilisk HCE as bootstrap/oracle/fallback, keep it maintained, but direct normal evaluation investment to NNUE. | 3, 7–9, 11 |
 | MAN-X07 | Cross-compiled ARM/x86 assets could handshake and agree on nodes while still lacking proven ISA behavior or native speed. | Inspect emitted instructions and dependencies; require target-native correctness and performance before release. | 10.0–10.1 |
@@ -183,8 +190,8 @@ designing around and the Manta phase that must verify them locally.
 | MAN-X09 | Current Basilisk and Rarog board benchmarks use similar names but differ in one FEN, one hot operation and sample/estimator choices. | Maintain historical profiles and publish an identical versioned cross-engine manifest before direct comparison. | §4.1, 2.3 |
 | MAN-X10 | Search bounds from static eval, stand pat, qsearch, ProbCut, null, reduced and full searches were not interchangeable; provenance leaks caused unsafe consumers. | Introduce typed result evidence with the initial search rather than retrofit it after tuning. | 4.0–4.1, 5.1 |
 | MAN-X11 | Root aspiration, timing, legal fallback and helper-result selection became inconsistent when driven by separate confidence signals. | Define one completed-root evidence model and use it across root consumers. | 5.1, 6.0–6.2 |
-| MAN-X12 | SPSA schedule/unit/default drift and tune-only option mismatches invalidated assumptions even when runs appeared to converge. | Generate defaults/options/clamps from one source, assert every emitted perturbation and register schedule/horizon before launch. | §3.3, 4.4 |
-| MAN-X13 | Fast-TC accepted gains compressed materially at longer time controls and external opponents. | Use STC for iteration but require LTC, 4T and external cohorts at phase/release boundaries. | §3.2, 6.2, 10.3 |
+| MAN-X12 | SPSA schedule/unit/default drift and tune-only option mismatches invalidated assumptions even when runs appeared to converge. | Generate defaults/options/clamps from one source, assert every emitted perturbation and register schedule/horizon before launch. | §3.4, 4.4 |
+| MAN-X13 | Fast-TC accepted gains compressed materially at longer time controls and external opponents. | Choose the development gate prospectively for the claim, then use one cumulative longer, threaded or external cohort matched to the phase/release claim rather than replaying every candidate at all conditions. | §3.3, 6.2, 10.3 |
 | MAN-X14 | NNUE static loss, teacher transfer and training trajectories did not consistently predict playing strength. | Require untouched sets, multiple seeds, integer conformance, NPS and SPRT; do not promote on loss alone. | 7–9 |
 | MAN-X15 | PEXT availability did not imply equal performance across x86 microarchitectures; ISA labels, build flags and runtime checks could drift. | Model AVX2/BMI2 as sibling capabilities, include measured microarchitecture suitability and make artifact/runtime contracts executable. | 10.0 |
 
@@ -195,10 +202,13 @@ yet Manta experiments.
 
 | Item | Current state | Objective trigger | Destination |
 |---|---|---|---|
-| Third-party Zig linter | ZLint 0.8.1 targets Zig 0.15.2 and is incompatible with Manta's latest-stable 0.16.0 policy. | A pinned linter release explicitly supports the then-current stable Zig, passes its own tests, and produces a reviewed zero-warning Manta baseline. | Phase 1 quality pipeline |
+| Third-party Zig linter | ZLint 0.9.1 declares Zig 0.16.0 compatibility; it is not yet a Manta gate. | Pin 0.9.1, reproduce it under exact Zig 0.16.0 and review a zero-warning baseline. If unsuitable, record the defect and retain project checks. | Phase 1 quality pipeline |
 | Colosseum runner | Desired future default; required CLI surface is not yet complete. | CLI supports Manta's SPRT/SPSA/gauntlet/manifests/affinity/adjudication needs; identical-binary calibration and legacy bridge pass. | Phase 4.5 |
+| Contempt | Baseline draw score is neutral; no public option exists. | Stable single-thread baseline permits a registered static/dynamic, analysis/play, root-perspective and draw-rule investigation with opponent-diverse native games. | Phase 5.3 |
+| Linux libc/musl packaging | WSL2 is the primary local Linux x86-64 test environment; no libc form is preselected as fastest. | C integration or release packaging exists, allowing libc-free/GNU/static-musl deterministic parity, dependency inspection, WSL/native smoke tests and controlled performance A/B. | Phase 5 or 10 |
 | HCE tuning | Closed during the normal NNUE path. | Serious NNUE retries fail and the user explicitly enters Phase 11 after written review. | Phase 11 |
-| Additional pre/post-NNUE SPSA | Not authorized. | Evidence demonstrates that the registered consolidated fit could not identify the necessary parameter class. | Explicit PLAN amendment |
+| Consolidated search SPSA | Deferred; phase entry alone never authorizes it and the normal plan has no pre-NNUE run. | Frozen consumers plus a written necessity review show that interacting continuous coordinates are sensitive/uncertain, smaller experiments are inadequate and tuning now is more valuable than deferral. | Normally Phase 9; earlier only by explicit PLAN amendment and approval |
+| Additional SPSA | Not authorized. | Evidence demonstrates that an authorized consolidated fit could not identify the necessary parameter class. | Explicit PLAN amendment |
 
 An imported prior or parked item becomes a new Manta experiment with a new
 native ID. It never overwrites historical evidence.

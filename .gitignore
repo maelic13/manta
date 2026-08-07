@@ -7,6 +7,11 @@ zig-out/
 tools/bin/*
 tools/results/*
 tools/test_engines/*
+/artifacts/
+/books/
+/datasets/
+/networks/
+/tablebases/
 *.pgo
 *.profdata
 *.profraw
