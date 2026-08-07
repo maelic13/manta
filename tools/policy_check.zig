@@ -151,14 +151,14 @@ const Checker = struct {
             "ubuntu-24.04-arm",
             "macos-26-intel",
             "macos-26",
-            "x86_64-windows",
-            "x86_64-linux",
-            "aarch64-linux",
-            "x86_64-macos",
-            "aarch64-macos",
+            "label: linux-x86-64",
+            "label: linux-arm64",
+            "label: windows-x86-64",
+            "label: macos-x86-64",
+            "label: macos-arm64",
             "name: gate",
             "if: ${{ always() }}",
-            "needs: [quality, native, cross-build]",
+            "needs: [quality, native]",
         };
         for (required_fragments) |fragment| {
             if (std.mem.indexOf(u8, workflow, fragment) == null) {
@@ -169,7 +169,7 @@ const Checker = struct {
         if (std.mem.count(u8, workflow, "branches: [master]") != 2) {
             self.fail("CI workflow must gate both pull requests and pushes to master", .{});
         }
-        if (std.mem.count(u8, workflow, "timeout-minutes: 6") != 3) {
+        if (std.mem.count(u8, workflow, "timeout-minutes: 6") != 2) {
             self.fail("every Zig setup step must have the six-minute bound", .{});
         }
 
@@ -178,6 +178,8 @@ const Checker = struct {
             "continue-on-error:",
             "actions/upload-artifact",
             "mlugg/setup-zig",
+            "\n  cross-build:",
+            "-Dtarget=",
             "\n  release:",
         };
         for (forbidden_fragments) |fragment| {

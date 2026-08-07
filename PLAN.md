@@ -622,10 +622,10 @@ no UCI or chess behaviour was introduced.
 workflow now gives `master` pull requests, `master` pushes and manual dispatches
 the identical job graph. It pins Zig 0.16.0 and current major action versions,
 runs the complete local quality and three-mode test gate, executes ReleaseSafe
-tests plus a ReleaseFast smoke build on five native hosted targets, cross-builds
-all five target triples, and reduces every result to stable `CI / gate`. The
-policy checker locks the workflow's essential trigger, security, toolchain and
-matrix contracts. No artifact publication or release automation was activated.
+tests plus a ReleaseFast smoke build on five native hosted targets, and reduces
+the quality and native results to stable `CI / gate`. The policy checker locks
+the workflow's essential trigger, security, toolchain and matrix contracts. No
+artifact publication or release automation was activated.
 The first draft-PR probe showed that the prior Zig setup action could stall on
 a randomly selected mirror and still used a deprecated Node runtime. CI now
 downloads official platform archives directly, verifies their published SHA-256
@@ -638,10 +638,12 @@ silently from `zig build` on the hosted ARM runner. The composite action now
 invokes the Unix installer through Bash. A third probe bypassed the build runner
 and proved the compiler itself could pass one test before crashing with a Windows
 access violation on the next independent test. Windows ARM64 is therefore
-removed from current native and cross-build support, along with its special-case
-gate; reconsider it at a stable Zig upgrade and restore it only through the
-ordinary path. The step closes only after the simplified five-target repair
-passes on the unmerged draft `dev` to `master` pull request. Manual
+removed from current support, along with its special-case gate. The redundant
+cross-build job was then removed so every supported platform gate now compiles
+and executes natively. Reconsider Windows ARM64 at a stable Zig upgrade and
+restore it only through the ordinary path. The step closes only after the
+simplified five-target repair passes on the unmerged draft `dev` to `master`
+pull request. Manual
 dispatch becomes available after the workflow later reaches default `master`.
 
 - Implement the §3.2 branch gate: identical manual and `master`-PR CI,
@@ -1026,8 +1028,8 @@ PEXT presence does not prove it is fast on that microarchitecture.
   executable ISA contract.
 - Refuse unsupported forced backends safely and always provide a portable
   fallback.
-- Inspect emitted instructions and dynamic dependencies. Cross-compilation and
-  a UCI handshake are necessary but not sufficient.
+- Inspect emitted instructions and dynamic dependencies on target hardware. A
+  successful build and UCI handshake are necessary but not sufficient.
 
 #### 10.1 — Native platform validation
 
@@ -1094,8 +1096,8 @@ unless removal is separately justified.
    conditions.
 9. Machine time is a budget. Do not spend full gates resolving immaterial
    isolated knobs when a coherent architecture fit is planned.
-10. Cross-compilation is not platform validation; production assets run on
-    their target hardware.
+10. Platform validation is native: production assets compile and run on their
+    target hardware.
 11. HCE is a bootstrap and fallback, not the strategic optimization sink.
 12. The newest stable Zig is a requirement, while exact pinning and manifests
     preserve reproducibility inside that requirement.

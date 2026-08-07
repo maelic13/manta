@@ -96,38 +96,10 @@ jobs:
       - name: Smoke-test executable
         run: zig build run -Doptimize=ReleaseFast
 
-  cross-build:
-    name: cross-build all targets
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - name: Check out
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Set up Zig
-        uses: ./.github/actions/setup-zig
-        timeout-minutes: 6
-
-      - name: Compile supported targets
-        shell: bash
-        run: |
-          set -euxo pipefail
-          for target in \
-            x86_64-windows \
-            x86_64-linux \
-            aarch64-linux \
-            x86_64-macos \
-            aarch64-macos
-          do
-            zig build check -Dtarget="$target" -Doptimize=ReleaseFast
-          done
-
   gate:
     name: gate
     if: ${{ always() }}
-    needs: [quality, native, cross-build]
+    needs: [quality, native]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -136,10 +108,7 @@ jobs:
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
           NATIVE_RESULT: ${{ needs.native.result }}
-          CROSS_BUILD_RESULT: ${{ needs.cross-build.result }}
         run: |
-          printf 'quality=%s\nnative=%s\ncross-build=%s\n' \
-            "$QUALITY_RESULT" "$NATIVE_RESULT" "$CROSS_BUILD_RESULT"
+          printf 'quality=%s\nnative=%s\n' "$QUALITY_RESULT" "$NATIVE_RESULT"
           test "$QUALITY_RESULT" = success
           test "$NATIVE_RESULT" = success
-          test "$CROSS_BUILD_RESULT" = success

@@ -183,7 +183,7 @@ replacement exists.
 | `PORT-003` | The default local build shall target the host CPU. Release builds shall declare an explicit portable CPU baseline and every optional ISA requirement in their name and manifest. | 1, 10 | Build metadata tests |
 | `PORT-004` | Linux packaging shall first prefer a self-contained Zig binary without a libc dependency where viable. GNU-linked and statically linked musl candidates shall be compared when C integration or deployment requires libc. | 1, 5, 10 | Dependency inspection and A/B |
 | `PORT-005` | musl is a compatibility/deployment choice, not a presumed performance winner. A musl asset may accompany the primary Linux artifact only after deterministic parity, WSL/native execution, dependency inspection and controlled performance comparison. | 5, 10 | Linux packaging gate |
-| `PORT-006` | The source/build contract shall cover Windows x86-64 plus Linux and macOS on x86-64 and ARM64, and each target shall cross-build once the build spine exists. Cross-compilation and a UCI handshake are necessary but insufficient for a downloadable artifact: the exact artifact requires native correctness, deterministic agreement and backend suitability. Windows ARM64 remains excluded until a stable Zig toolchain passes the ordinary native gates without special handling. | 1, 10 | Build and native target matrix |
+| `PORT-006` | The source/build contract shall compile and execute natively on Windows x86-64 plus Linux and macOS on x86-64 and ARM64. A downloadable artifact requires target-native correctness, deterministic agreement and backend suitability. Windows ARM64 remains excluded until a stable Zig toolchain passes the ordinary native gates without special handling. | 1, 10 | Native target matrix |
 | `PORT-007` | The portable runtime path shall reject an unsupported forced backend safely and shall always retain a baseline implementation. | 8, 10 | Feature-mask tests |
 
 ## 8. Quality and verification matrix
@@ -246,7 +246,7 @@ linter.
 | `REL-004` | CI shall include docs/policy/traceability, exact-toolchain, format/AST/lint, Debug, ReleaseSafe, ReleaseFast and target-build jobs. UCI/perft/bench/backend jobs become mandatory when implemented. | 1 onward | Workflow inspection |
 | `REL-005` | A release workflow shall operate only on the exact tagged `master` commit, create a draft release, natively smoke-test every upload, compare fingerprints, generate hashes/manifests and publish only after all eligible assets pass. | 10 | Dry-run release |
 | `REL-006` | User-facing release notes shall be extracted from the matching `CHANGELOG.md` version section. Automatically generated pull-request summaries are supplemental only. | 10 | Release-note check |
-| `REL-007` | A failed or unavailable native target gate shall withhold that target's asset rather than publish an unverified cross-compiled binary or block already supported targets indefinitely. The omission is stated in the release manifest. | 10 | Release failure-path test |
+| `REL-007` | A failed or unavailable native target gate shall withhold that target's asset rather than publish an unverified binary or block already supported targets indefinitely. The omission is stated in the release manifest. | 10 | Release failure-path test |
 
 ## 10. Phase traceability
 
