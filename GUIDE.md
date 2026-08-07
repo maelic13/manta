@@ -10,8 +10,8 @@ Conditional experiment evidence lives in [`EXPERIMENTS.md`](EXPERIMENTS.md).
 
 | Item | State |
 |---|---|
-| Repository | Phase 0 and step 1.0.1 are complete. The minimal exact-version-guarded Zig build/test spine exists without UCI or chess behaviour. |
-| Current phase | **Step 1.0.2 — Quality and development tooling**, authorized but not started. |
+| Repository | Phase 0 and steps 1.0.1–1.0.2 are complete. The exact-version-guarded build/test and local quality spine exists without UCI or chess behaviour. |
+| Current phase | **Step 1.0.3 — CI and branch gate**, authorized but not started. |
 | Implementation permission | **Open for Phase 1 only.** Board, evaluation and search work remain closed until their owning phases. |
 | License | **GPL-3.0-or-later**, copyright (C) 2026 Miloslav Macůrek. |
 | Branches | Develop on `dev`. One Phase-0 foundation squash commit establishes `master`; after that `master` takes one required-CI squash merge per release. |
@@ -48,7 +48,7 @@ is:
 
 ```powershell
 zig version
-zig fmt --check --ast-check .
+zig build fmt
 zig build lint
 zig build test -Doptimize=Debug
 zig build test -Doptimize=ReleaseSafe
@@ -58,9 +58,9 @@ zig build test -Doptimize=ReleaseFast
 - Zig's formatter defines code style; no competing formatter is permitted.
 - The compiler, `ast-check`, project lint rules and tests are authoritative.
 - ZLS is recommended and must match the required stable Zig release.
-- ZLint 0.9.1 declares Zig 0.16.0 compatibility. Phase 1 pins and evaluates it;
-  it becomes part of `zig build lint` only after a reviewed zero-warning
-  baseline and reproducible CI pass.
+- ZLint 0.9.1 is source-pinned as host-only tooling and is part of
+  `zig build lint` after a reviewed zero-warning baseline. Step 1.0.3 supplies
+  its reproducible CI pass.
 - Treat warnings, forbidden dependencies and unannotated unsafe operations as
   failures. Prefer domain-specific enums and integer types over loosely typed
   primitives and flags.
@@ -113,7 +113,7 @@ separate implementation units.
       and create the minimal build, test, lint and CI foundation.
   - [x] **1.0.1 — Toolchain and build spine:** Add the exact Zig guard, package,
         executable, library facade and three-mode test foundation.
-  - [ ] **1.0.2 — Quality and development tooling:** Add formatting, AST,
+  - [x] **1.0.2 — Quality and development tooling:** Add formatting, AST,
         project-policy, ZLint and ZLS guidance gates.
   - [ ] **1.0.3 — CI and branch gate:** Add the identical manual/PR/master
         workflow, native/cross-target matrix and stable aggregate check.
@@ -251,10 +251,8 @@ Enter only after serious NNUE retries fail and the user explicitly chooses it.
 
 ## What happens next
 
-Step 1.0.1 is complete. Continue with 1.0.2: add formatting/AST integration,
-project policy checks, pinned ZLint evaluation and concise ZLS/development
-guidance. Step 1.0.3 then adds the CI/branch gate before UCI specification work
-begins in 1.1.
+Step 1.0.2 is complete. Continue with 1.0.3: add the CI/branch gate and
+supported-platform build matrix before UCI specification work begins in 1.1.
 
 Do not implement board representation, move generation, evaluation, search or
 later features. Do not run any long or timed jobs.
@@ -273,7 +271,7 @@ These become available in their owning phases:
 
 ```powershell
 zig version
-zig fmt --check --ast-check .
+zig build fmt
 zig build lint
 zig build test -Doptimize=Debug
 zig build test -Doptimize=ReleaseSafe

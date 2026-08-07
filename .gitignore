@@ -2,6 +2,7 @@
 .zig-cache/
 zig-cache/
 zig-out/
+zig-pkg/
 
 # Local experiment and profiling artifacts
 tools/bin/*
@@ -39,8 +40,3 @@ Thumbs.db
 .env
 .env.*
 *.log
-
-# Preserve tracked placeholders in future artifact directories
-!tools/bin/.gitkeep
-!tools/results/.gitkeep
-!tools/test_engines/.gitkeep

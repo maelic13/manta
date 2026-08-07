@@ -57,12 +57,78 @@ pub fn build(b: *std.Build) void {
     });
     const run_version_tests = b.addRunArtifact(version_tests);
 
+    const policy_checker = b.addExecutable(.{
+        .name = "manta-policy-check",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/policy_check.zig"),
+            .target = b.graph.host,
+            .optimize = .ReleaseSafe,
+        }),
+    });
+    const run_policy_checker = b.addRunArtifact(policy_checker);
+    run_policy_checker.setCwd(b.path("."));
+
+    const policy_tests = b.addTest(.{
+        .name = "policy-check-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/policy_check.zig"),
+            .target = b.graph.host,
+            .optimize = optimize,
+        }),
+    });
+    const run_policy_tests = b.addRunArtifact(policy_tests);
+
     const test_step = b.step("test", "Run all tests");
     test_step.dependOn(&run_repository_tests.step);
     test_step.dependOn(&run_version_tests.step);
+    test_step.dependOn(&run_policy_tests.step);
 
     const check_step = b.step("check", "Compile Manta and all test roots");
     check_step.dependOn(&executable.step);
     check_step.dependOn(&repository_tests.step);
     check_step.dependOn(&version_tests.step);
+    check_step.dependOn(&policy_checker.step);
+    check_step.dependOn(&policy_tests.step);
+
+    const fmt_command = b.addSystemCommand(&.{
+        b.graph.zig_exe,
+        "fmt",
+        "--check",
+        "--ast-check",
+        "--exclude",
+        "zig-pkg",
+        ".",
+    });
+    fmt_command.setCwd(b.path("."));
+    const fmt_step = b.step("fmt", "Check formatting and parse all Zig sources");
+    fmt_step.dependOn(&fmt_command.step);
+
+    const policy_step = b.step("policy", "Check repository documentation and policies");
+    policy_step.dependOn(&run_policy_checker.step);
+
+    const lint_step = b.step("lint", "Run formatting, policy and Zig lint checks");
+    lint_step.dependOn(fmt_step);
+    lint_step.dependOn(policy_step);
+    if (b.lazyDependency("zlint", .{
+        .target = b.graph.host,
+        .optimize = .ReleaseSafe,
+    })) |zlint| {
+        const run_zlint = b.addRunArtifact(dependencyExecutable(zlint, "zlint"));
+        run_zlint.setCwd(b.path("."));
+        lint_step.dependOn(&run_zlint.step);
+    }
+}
+
+fn dependencyExecutable(
+    dependency: *std.Build.Dependency,
+    name: []const u8,
+) *std.Build.Step.Compile {
+    for (dependency.builder.install_tls.step.dependencies.items) |step| {
+        const install = step.cast(std.Build.Step.InstallArtifact) orelse continue;
+        const artifact = install.artifact;
+        if (artifact.kind == .exe and std.mem.eql(u8, artifact.name, name)) {
+            return artifact;
+        }
+    }
+    std.debug.panic("dependency does not expose executable '{s}'", .{name});
 }

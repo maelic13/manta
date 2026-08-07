@@ -24,8 +24,12 @@ compatible chess GUI or other UCI host.
 Verified binaries for supported platforms will be attached to published GitHub
 releases. User-visible changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
-Build and usage instructions will be added when the corresponding development
-milestones are complete.
+## Development
+
+Development requires Zig 0.16.0. Build with `zig build`; contributors should
+follow the complete [development and editor guidance](docs/DEVELOPMENT.md).
+
+Usage instructions will be added when the engine becomes playable.
 
 ## License
 

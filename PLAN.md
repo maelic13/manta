@@ -19,8 +19,8 @@ than a line-by-line port, and must exploit Zig's own strengths.
 
 | Item | State |
 |---|---|
-| Repository | Phase 0 and step 1.0.1 are complete. The exact-version-guarded Zig package/build/test spine exists without UCI or chess behaviour. |
-| Current phase | **Step 1.0.2 — quality and development tooling**, authorized but not started. Later Phase-1 steps and all later phases remain closed. |
+| Repository | Phase 0 and steps 1.0.1–1.0.2 are complete. The exact-version-guarded Zig build/test and local quality spine exists without UCI or chess behaviour. |
+| Current phase | **Step 1.0.3 — CI and branch gate**, authorized but not started. Later Phase-1 steps and all later phases remain closed. |
 | Implementation permission | Open only for the work explicitly owned by Phase 1. No board, evaluation or search implementation may be pulled forward. |
 | License | **GPL-3.0-or-later**, copyright (C) 2026 Miloslav Macůrek. |
 | Branch workflow | Development occurs on `dev`. One Phase-0 foundation squash commit establishes `master`; every later `master` commit is a release squash-merged through a required-CI pull request. |
@@ -114,13 +114,13 @@ The Zig compiler and formatter are the primary quality tools:
 
 | Check | Policy |
 |---|---|
-| `zig fmt --check --ast-check .` | Mandatory locally and in CI; canonical Zig formatting is not configurable. |
+| `zig build fmt` | Mandatory locally and in CI; runs canonical format and AST checks over repository Zig sources while excluding ignored package sources. |
 | `zig build test -Doptimize=Debug` | Mandatory correctness and leak/invariant development gate. |
 | `zig build test -Doptimize=ReleaseSafe` | Mandatory optimized-with-safety gate. |
 | `zig build test -Doptimize=ReleaseFast` | Mandatory production-semantics gate at phase/release boundaries. |
 | `zig build lint` | Mandatory build step once Phase 1 creates it; initially composes formatting, AST checks and project-specific architecture/style checks. |
 | ZLS | Recommended editor diagnostics; its release must match the exact stable Zig version. It is not a substitute for CI. |
-| Third-party linter | ZLint 0.9.1 declares Zig 0.16.0 compatibility. Phase 1 pins and evaluates it; it joins `zig build lint` only after a reviewed zero-warning baseline and reproducible CI pass. |
+| Third-party linter | Source-pinned host-only ZLint 0.9.1 has a reviewed zero-warning baseline and is part of `zig build lint`; step 1.0.3 adds its reproducible CI pass. |
 
 Project-specific lint/fitness checks must cover forbidden dependency edges,
 accidental hot-path allocation, stale tune-option defaults, unversioned binary
@@ -591,6 +591,16 @@ behaviour was introduced.
   `ReleaseFast` plus `cpu=native`; portable targets remain explicit.
 
 ##### 1.0.2 — Quality and development tooling
+
+**Completed 2026-08-07.** The build now exposes independent format/AST and
+repository-policy gates plus a single `zig build lint` umbrella. The original
+Zig policy checker validates required layout, local Markdown links and anchors,
+PLAN/GUIDE numbering, the 90 unique requirement contracts and public-reference
+policy, with its parsing rules covered by unit tests. Source-pinned ZLint 0.9.1
+runs as host-only development tooling against a reviewed zero-warning baseline
+covering all six repository Zig files. Concise exact-version, ZLS and local
+command guidance lives in `docs/DEVELOPMENT.md`. All three test modes passed;
+no UCI or chess behaviour was introduced.
 
 - Add `fmt`, `ast-check`, `lint`, documentation/policy checks and concise
   development/ZLS guidance.
@@ -1089,7 +1099,7 @@ These commands become valid only as their owning phases implement them:
 
 ```powershell
 zig version
-zig fmt --check --ast-check .
+zig build fmt
 zig build lint
 zig build test -Doptimize=Debug
 zig build test -Doptimize=ReleaseSafe
