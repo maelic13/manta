@@ -91,193 +91,138 @@ than assuming musl is fastest.
 
 ## Phase roadmap
 
+Each `N.x` item is one discuss → implement → verify → document → commit step.
+A phase closes only after all of its steps pass. If a step is later divided,
+its indented children use `N.x.y`; unnumbered explanatory bullets are not
+separate implementation units.
+
 ### Phase 0 — Clean Architecture and project contracts
 
-- [x] **0.0 Scope/origin/license:** GPL-3.0-or-later; original Manta engine,
-      tests and build code; tooling-only reuse plus licensed Fathom; standard
-      chess portable-scalar 1T first-playable scope; advanced features deferred.
-- [x] **0.1 Requirements/quality:** `REQUIREMENTS.md` freezes traceable
-      functional, performance, safety and portability contracts, score/units,
-      resource/failure policy, exact toolchain guard and test/CI/platform
-      matrices.
-- [x] **0.2 Architecture:** `ARCHITECTURE.md` plus twelve ADRs freeze Zig-native
-      Clean Architecture boundaries, explicit lifetimes, caller-owned position
-      state, static evaluator/search composition, responsive control, TT/time/
-      ISA/format contracts, future-feature seams and zero-cost fitness checks.
-- [x] **0.3 Gate:** all 90 requirements and twelve ADRs passed ownership,
-      verification-seam, concurrency, shutdown, dependency and hot-path-cost
-      review. A re-audit on the same date re-verified the toolchain facts,
-      corrected the UCI/perft and dependency contracts, moved SEE to its
-      Phase-2 board owner, required a conservative Phase-4 clock before games,
-      selected one representative SPRT per candidate and made SPSA conditional.
-      Phase 1 is explicitly authorized; later phases remain closed.
-
-No production engine code is written in Phase 0.
+- [x] **0.0 — Product scope, origin and licensing:** Define Manta's identity,
+      standard-chess scope, originality policy and GPL license.
+- [x] **0.1 — Requirements and quality model:** Freeze normative behavior,
+      measurements, platforms, CI and release expectations.
+- [x] **0.2 — Architecture design:** Define Zig-native Clean Architecture,
+      ownership, concurrency, hot-path and future-feature boundaries.
+- [x] **0.3 — Architecture proof and exit gate:** Audit all contracts and
+      authorize Phase 1 without writing production engine code.
 
 ### Phase 1 — Repository foundation and UCI behavioural specification
 
-- [ ] Recheck/migrate to the newest official stable Zig.
-- [ ] Add version-guarded build/test/lint/CI infrastructure.
-- [ ] Implement identical manual and `master`-PR CI plus the post-merge
-      `master` backstop, branch-protection check names and the native platform
-      matrix. Keep release upload dormant until release gates exist.
-- [ ] Freeze primary-reference UCI command/state/output transcripts, with
-      Stockfish as the secondary cross-check, before board or search
-      implementation.
-- [ ] Cover command ordering, stop/quit/EOF, isready/options, position errors,
-      all search-form `go` limits, ponder semantics, clock start, serialized
-      output, legal PV/fallback and exactly one bestmove; freeze diagnostic
-      `go perft` separately with no search bestmove.
-- [ ] Build the asynchronous process-test harness and architecture-fitness
-      checks. Later capabilities activate already-specified transcripts rather
-      than redefining them.
+- [ ] **1.0 — Latest-stable toolchain and build spine:** Pin current stable Zig
+      and create the minimal build, test, lint and CI foundation.
+- [ ] **1.1 — UCI behavioural specification:** Freeze command, state, timing,
+      output and diagnostic transcript behavior before chess implementation.
+- [ ] **1.2 — Test harness and repository policy:** Build the asynchronous
+      process harness, architecture checks and repository quality gates.
 
 ### Phase 2 — Board, state, move generation and direct board benchmark
 
-- [ ] Select the board/state/move representation through an ADR and measured
-      criteria; assert layout and invariants at compile time.
-- [ ] Implement FEN, attacks, legality, special moves, make/unmake/null,
-      repetition/rule-50, Zobrist and NNUE-ready dirty-piece state.
-- [ ] Implement pin-aware threshold SEE as a board-level query; the benchmark
-      needs it here, and Phase 4.1 adds only its search integration.
-- [ ] Run canonical/differential perft, randomized round trips, recomputation
-      checks and fuzz/property tests.
-- [ ] Freeze `cross-engine-board-v1`: identical FENs, operations, work counts,
-      warmups, 11 samples, median/MAD, DCE barrier and manifests.
-- [ ] Retain historical Basilisk/Rarog compatibility profiles because their
-      current board benchmarks differ in one FEN, one workload and statistics.
-
-Required common workloads: legal moves, legal captures, make/unmake, pin-aware
-threshold SEE, startpos perft(4), and two-ply game simulation.
+- [ ] **2.0 — Domain types and representation decision:** Select and document
+      move, board, state and layout contracts from measured criteria.
+- [ ] **2.1 — State transitions and legality:** Implement legal chess state,
+      moves, hashing, history and NNUE-ready dirty records.
+- [ ] **2.2 — Correctness campaign:** Prove rules and reversible state through
+      perft, independent recomputation, properties and fuzzing.
+- [ ] **2.3 — Board benchmark:** Freeze and measure the comparable board/SEE
+      workload contract before optimizing it.
 
 ### Phase 3 — Initial Manta HCE and evaluator-ready state
 
-- [ ] Define evaluator/score/trace composition with static hot-path dispatch.
-- [ ] Implement original Zig-native evaluator composition informed by the
-      accepted reference concepts and values, without copied engine code or an
-      ongoing synchronization contract.
-- [ ] Build a reference corpus with component and total parity; document every
-      intentional deviation.
-- [ ] Test symmetry, endgames, score scale, determinism and throughput.
-- [ ] Stop at a solid initial/fallback evaluator: no broad HCE feature or
-      tuning cycle.
+- [ ] **3.0 — Evaluation boundary:** Define score, evaluator and trace contracts
+      with static hot-path composition.
+- [ ] **3.1 — Initial Manta HCE:** Implement and verify the original Zig-native
+      bootstrap evaluator against the reference corpus.
+- [ ] **3.2 — Strategic HCE limit:** Freeze a solid fallback without starting a
+      broad HCE feature or tuning program.
 
 ### Phase 4 — Deterministic 1T search, UCI baseline and tooling
 
-- [ ] Add iterative PVS/qsearch with typed result provenance, legal completed
-      fallback and safe interruption.
-- [ ] Add TT, staged ordering, histories, the SEE search integration and
-      diagnostics with deterministic tests.
-- [ ] Activate Phase-1 1T UCI transcripts.
-- [ ] Implement the shared 40-position
-      `bench [depth] [repeats] [threads]` contract. Default 1T fingerprint is
-      deterministic; multi-thread nodes are speed data only.
-- [ ] Add tactical/WAC, mate/endgame canaries, repeated short-search
-      reproducibility CI and short Debug/ReleaseSafe self-play smoke games.
-- [ ] Implement and fake-clock/process-test conservative 1T handling for
-      `movetime`, clocks/increments/moves-to-go, overhead and hard deadlines;
-      pass a zero-forfeit smoke match before strength testing opens.
-- [ ] Qualify a pinned Colosseum CLI revision through self-test, capability
-      discovery and dry runs; keep only Manta configs/option mapping, not a
-      runner adapter or duplicated match/statistics code.
-- [ ] On the real 5950X, calibrate physical-core placement, reserved capacity,
-      concurrency and identical-binary null bias at the representative
-      Phase-5 TC. Size calibration from required precision and measured wall
-      time, and record the host profile. Fix generic gaps upstream.
+- [ ] **4.0 — Search correctness baseline:** Add deterministic iterative
+      search, qsearch, typed result provenance and safe interruption.
+- [ ] **4.1 — TT, ordering and diagnostics substrate:** Add transposition,
+      ordering, history, SEE integration and search observability.
+- [ ] **4.2 — UCI baseline completion:** Connect real search to the Phase-1 UCI
+      contract and deliver a conservative, forfeit-safe 1T clock.
+- [ ] **4.3 — Built-in bench and test suites:** Freeze the bench fingerprint,
+      search reproducibility CI and tactical/endgame canaries.
+- [ ] **4.4 — Experiment tooling foundation:** Qualify pinned Colosseum
+      workflows and retain only Manta configuration and option mapping.
+- [ ] **4.5 — 5950X host qualification and shared-tool boundary:** Calibrate
+      placement, concurrency, null bias and bounded job budgets on the real host.
 
 ### Phase 5 — Evidence-coherent single-thread search
 
-- [ ] Freeze the first tournament-capable functional baseline after the
-      conservative Phase-4 clock and harness gates pass.
-- [ ] Add coherent aspiration/root, NMP, selectivity/LMR, IIR/ProbCut/singular,
-      history/correction and result-provenance families with ablations.
-- [ ] Prefer one mechanism per candidate. Use a reversible cohesive bundle only
-      where the single-host rule permits it; do not claim each part of a passing
-      bundle helped or run low-value exhaustive ablations.
-- [ ] Integrate Syzygy under strict I/O, WDL/DTZ and rule-50 contracts.
-- [ ] Freeze architecture and normally defer SPSA until the retained NNUE/search
-      system is stable. An exceptional pre-NNUE run needs a written necessity
-      review, explicit PLAN amendment and approval; its baked result gets one
-      representative time-based final-build SPRT.
-- [ ] Investigate contempt only after the baseline freezes; add no UCI option
-      unless analysis/play semantics, draw-rule interactions and native games
-      provide positive evidence.
+- [ ] **5.0 — Freeze functional baseline:** Capture the first clean,
+      tournament-capable deterministic production baseline.
+- [ ] **5.1 — Search architecture:** Add evidence-led 1T search mechanisms as
+      independent candidates or justified reversible bundles.
+- [ ] **5.2 — Syzygy and endgame integration:** Add replaceable WDL/DTZ probing
+      under strict rule-50, score and I/O contracts.
+- [ ] **5.3 — Pre-NNUE freeze and conditional fit:** Freeze search, investigate
+      contempt and defer tuning unless its necessity is explicitly proven.
 
 ### Phase 6 — Time management, robust UCI parity and SMP
 
-- [ ] Preserve the Phase-4 monotonic receipt-based clock and hard deadline while
-      improving soft allocation with one completed-root confidence model for
-      timing, aspiration and fallback.
-- [ ] Activate every Phase-1 UCI transcript, including stale signals, barriers,
-      ponder-after-spent-time, malformed input and legal threaded PVs.
-- [ ] Add SMP under explicit pool/result/cancellation ownership.
-- [ ] Preserve inert 1T semantics; validate 1/2/4/8T scaling and zero forfeits.
-      Gate an SMP candidate once, normally at 4T `10+0.1`; do not duplicate it
-      automatically at 1T and several time controls.
+- [ ] **6.0 — Clock and root confidence:** Improve allocation around one
+      completed-root confidence model while preserving hard-deadline safety.
+- [ ] **6.1 — Full Phase-1 UCI parity:** Activate the complete robust protocol
+      transcript matrix against real engine capabilities.
+- [ ] **6.2 — SMP:** Add explicit worker/result/cancellation ownership and gate
+      1T inertness, 4T strength and wider scaling separately.
 
 ### Phase 7 — NNUE runway and data contract
 
-- [ ] Audit dirty state and accumulator refresh/push/pop completeness.
-- [ ] Freeze scalar features, perspectives, buckets, quantization and versioned
-      endian-defined network format.
-- [ ] Qualify and pin `net_trainer` as the shared owner of data tooling,
-      training recipes, export/file contracts and conformance vectors. Put
-      reusable fixes upstream; do not vendor it.
-- [ ] Define dataset generation, deduplication, splits, labels, seeds,
-      manifests and resume through that contract. Manta owns the original Zig
-      loader, inference, accumulator and optimized backends.
-- [ ] Land no-op scaffolding only when NNUE-off is bench-identical.
+- [ ] **7.0 — State and accumulator contract:** Freeze feature, perspective,
+      bucket, dirty-state and versioned network-format semantics.
+- [ ] **7.1 — Trainer and dataset preflight:** Qualify `net_trainer` and define
+      reproducible data, training, export and conformance contracts.
+- [ ] **7.2 — Runway gate:** Admit only complete, portable NNUE scaffolding that
+      is behaviorally inert while disabled.
 
 ### Phase 8 — Baseline NNUE
 
-- [ ] Train reproducible pilots with multiple seeds.
-- [ ] Prove trainer export, scalar full refresh and incremental parity across
-      randomized games and special moves.
-- [ ] Add exact portable, x86-64 and ARM64 inference backends.
-- [ ] Funnel HCE-versus-NNUE candidates with multiple seeds, validation,
-      conformance, NPS and fixed-node diagnostics, then give the clean survivor
-      one representative 1T time-based SPRT. Continue testing HCE after NNUE
-      becomes default.
+- [ ] **8.0 — Controlled pilot networks:** Train reproducible multi-seed pilots
+      and validate files, quantization and untouched metrics.
+- [ ] **8.1 — Scalar and incremental integration:** Prove original Zig scalar,
+      accumulator and trainer-export parity over realistic games.
+- [ ] **8.2 — Portable and vector backends:** Add bit-exact portable, x86-64
+      and ARM64 inference implementations.
+- [ ] **8.3 — Baseline acceptance:** Funnel candidates through conformance,
+      loss and speed, then give the survivor one representative SPRT.
 
 ### Phase 9 — NNUE frontier and final search fit
 
-- [ ] Use untouched residuals, search disagreements and games to drive data and
-      architecture changes.
-- [ ] Test feature/threat/king/material/bucket/width axes one at a time with
-      multiple seeds, integer parity and throughput as the funnel; give only
-      surviving promotion candidates their one representative game gate.
-- [ ] Reopen Phase-5 search assumptions under the retained NNUE: rerun
-      decision-useful ablations and permit structural changes to histories,
-      pruning/static-eval consumers, threat evidence and result provenance.
-- [ ] Freeze the co-adapted system and perform the SPSA necessity review plus a
-      small sensitivity pilot. If justified, run at most one checkpointed fit,
-      normally over 4–8 coordinates; more than 12 needs explicit evidence and
-      approval. Bake once and run one representative SPRT; otherwise skip.
+- [ ] **9.0 — Residual and disagreement analysis:** Use untouched errors,
+      search disagreements and games to identify real evaluator gaps.
+- [ ] **9.1 — Architecture ladder:** Test evidence-led NNUE axes with multi-seed
+      conformance, loss, throughput and one promotion gate per survivor.
+- [ ] **9.2 — Search/evaluator co-adaptation:** Reopen search assumptions under
+      the retained NNUE and permit evidence-led structural changes.
+- [ ] **9.3 — Consolidated post-NNUE fit:** Tune only if the necessity review
+      and sensitivity pilot justify one bounded checkpointed SPSA run.
 
 ### Phase 10 — ISA dispatch, platforms, scaling and release maturity
 
-- [ ] Build a portable semantic core with sibling x86-64 baseline, AVX2,
-      BMI2/PEXT and ARM64 NEON backends where measurements support them.
-- [ ] Keep AVX2 and BMI2 as independent capabilities; CPU feature presence is
-      not proof that PEXT is fastest.
-- [ ] Validate binaries natively across the supported Windows/Linux/macOS and
-      x86-64/ARM64 matrix; inspect emitted instructions and dependencies.
-- [ ] Profile before PGO/LTO, cache/layout, TT, vector or NUMA optimization.
-- [ ] Add demanded product features through planned seams and release with
-      reproducible manifests and external cohort evidence.
-- [ ] Activate draft-release publication: notes from `CHANGELOG.md`, exact-tag
-      native builds, artifact smoke tests, cross-backend fingerprints,
-      checksums and manifests before publishing.
+- [ ] **10.0 — Runtime backend dispatch:** Build one executable capability
+      contract around a portable core and measured sibling ISA backends.
+- [ ] **10.1 — Native platform validation:** Run and inspect production assets
+      on every supported native OS/architecture target.
+- [ ] **10.2 — Performance and scaling:** Profile and optimize build, layout,
+      cache, TT, vector, topology and scaling behavior.
+- [ ] **10.3 — Product completion and releases:** Complete demanded features,
+      reproducible artifacts, cumulative evidence and guarded publication.
 
 ### Phase 11 — Optional HCE fallback
 
 Enter only after serious NNUE retries fail and the user explicitly chooses it.
 
-- [ ] Document NNUE failure evidence and approve a narrow HCE scope.
-- [ ] Select a residual-driven HCE program rather than a broad feature list.
-- [ ] Apply the SPSA necessity review before one possible HCE fit, then use one
-      representative time-based promotion gate; add platform/ISA and cumulative
-      release evidence only if an HCE release is proposed.
+- [ ] **11.0 — Failure review and scope decision:** Document NNUE failure and
+      explicitly authorize a narrow fallback program.
+- [ ] **11.1 — HCE residual program:** Select only evidence-led HCE work not
+      already answered by the NNUE path.
+- [ ] **11.2 — HCE fit and release:** Tune only if justified, then gate one
+      clean candidate and add release evidence only if it will ship.
 
 ## Decision rules
 
