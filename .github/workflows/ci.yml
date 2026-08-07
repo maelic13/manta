@@ -63,8 +63,6 @@ jobs:
             label: linux-arm64
           - runner: windows-2025
             label: windows-x86-64
-          - runner: windows-11-arm
-            label: windows-arm64
           - runner: macos-26-intel
             label: macos-x86-64
           - runner: macos-26
@@ -87,25 +85,16 @@ jobs:
           zig env
 
       - name: Compile all roots
-        if: matrix.label != 'windows-arm64'
         run: zig build check -Doptimize=ReleaseSafe --summary all
 
       - name: Test ReleaseSafe
-        if: matrix.label != 'windows-arm64'
         run: zig build test -Doptimize=ReleaseSafe --summary all
 
       - name: Build ReleaseFast
-        if: matrix.label != 'windows-arm64'
         run: zig build -Doptimize=ReleaseFast
 
       - name: Smoke-test executable
-        if: matrix.label != 'windows-arm64'
         run: zig build run -Doptimize=ReleaseFast
-
-      - name: Verify Windows ARM64 directly
-        if: matrix.label == 'windows-arm64'
-        shell: pwsh
-        run: ./tools/ci/verify-windows-arm64.ps1
 
   cross-build:
     name: cross-build all targets
@@ -127,7 +116,6 @@ jobs:
           set -euxo pipefail
           for target in \
             x86_64-windows \
-            aarch64-windows \
             x86_64-linux \
             aarch64-linux \
             x86_64-macos \

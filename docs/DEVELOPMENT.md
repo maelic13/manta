@@ -33,18 +33,18 @@ zig build -Doptimize=ReleaseFast -Dcpu=native
 ```
 
 The authoritative CI workflow runs identically for pull requests to `master`,
-pushes to `master` and manual dispatches. It checks all six native host targets,
-cross-builds all six explicit target triples and reduces the result to
+pushes to `master` and manual dispatches. It checks five native host targets,
+cross-builds all five explicit target triples and reduces the result to
 `CI / gate`. CI installs the exact compiler from official platform archives,
 checks their pinned SHA-256 values and caches only the verified toolchain through
 current major action versions. Setup is bounded to six minutes. The
 workflow does not publish artifacts.
 
-Zig 0.16.0's native `zig build` currently exits without diagnostics on the
-hosted Windows ARM64 runner. That job therefore uses the same official native
-compiler to compile and execute the repository tests, policy checker and
-ReleaseSafe/ReleaseFast roots directly. This bypasses only the build runner and
-must be retried when Zig moves to a new stable release.
+The supported native matrix is Windows x86-64 plus Linux and macOS on x86-64
+and ARM64. Windows ARM64 is excluded because Zig 0.16.0's native compiler
+crashed during ordinary project tests on the hosted runner. Reconsider it at a
+stable Zig upgrade, and restore it only when the normal build/test/smoke path
+passes without target-specific handling.
 
 GitHub enables manual dispatch only after the workflow exists on default
 `master`. Before its first release merge, validate it by pushing `dev` and

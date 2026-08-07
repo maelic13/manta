@@ -2,19 +2,16 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $version = "0.16.0"
-$artifacts = @{
-    "X64"   = @("x86_64-windows", "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e")
-    "ARM64" = @("aarch64-windows", "aee38316ee4111717900f45dd3130145c39289e105541d737eb8c5ed653c78ef")
-}
+$artifact = "x86_64-windows"
+$expectedHash = "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e"
 
 if ($env:RUNNER_OS -ne "Windows") {
     throw "Windows installer received RUNNER_OS='$env:RUNNER_OS'."
 }
-if (-not $artifacts.ContainsKey($env:RUNNER_ARCH)) {
+if ($env:RUNNER_ARCH -ne "X64") {
     throw "Unsupported Windows runner architecture '$env:RUNNER_ARCH'."
 }
 
-$artifact, $expectedHash = $artifacts[$env:RUNNER_ARCH]
 $installDirectory = Join-Path $env:RUNNER_TEMP "zig-$version"
 $zigExecutable = Join-Path $installDirectory "zig.exe"
 

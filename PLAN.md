@@ -19,7 +19,7 @@ than a line-by-line port, and must exploit Zig's own strengths.
 
 | Item | State |
 |---|---|
-| Repository | Phase 0 and steps 1.0.1–1.0.2 are complete. Step 1.0.3 is implemented locally; its first remote probe exposed CI-bootstrap defects that are repaired locally, with a clean rerun pending. No UCI or chess behaviour exists. |
+| Repository | Phase 0 and steps 1.0.1–1.0.2 are complete. Step 1.0.3 is implemented locally; successive remote probes repaired CI bootstrap and excluded the unstable Windows ARM64 toolchain, with a clean five-platform rerun pending. No UCI or chess behaviour exists. |
 | Current phase | **Step 1.0.3 — CI and branch gate**, awaiting a clean remote rerun. Later Phase-1 steps and all later phases remain closed. |
 | Implementation permission | Open only for the work explicitly owned by Phase 1. No board, evaluation or search implementation may be pulled forward. |
 | License | **GPL-3.0-or-later**, copyright (C) 2026 Miloslav Macůrek. |
@@ -28,7 +28,7 @@ than a line-by-line port, and must exploit Zig's own strengths.
 | Initial evaluator | An original, replaceable Zig-native Manta HCE informed by Basilisk's proven feature set and accepted parameter values at the initial snapshot. It is not copied, linked or kept synchronized. No significant initial HCE tuning campaign is planned. |
 | Strategic evaluator | NNUE. HCE remains buildable and tested after NNUE lands so an explicit fallback remains possible. |
 | Protocol | UCI. Basilisk-level robustness and behaviour parity are a Phase-1 specification and a release requirement. |
-| Platforms | The Phase-0 matrix is frozen in `REQUIREMENTS.md`: Windows/Linux/macOS x86-64 and ARM64 build intent, target-native execution before publishing an asset, and WSL2 as the normal local Linux x86-64 test environment. |
+| Platforms | The Phase-0 matrix is frozen in `REQUIREMENTS.md`: Windows x86-64 plus Linux/macOS x86-64 and ARM64, target-native execution before publishing an asset, and WSL2 as the normal local Linux x86-64 test environment. Windows ARM64 is deferred until stable Zig tooling passes the ordinary gates. |
 | Long jobs | None authorized. SPRT, SPSA, gauntlet, datagen and timed performance work begin only when a later phase explicitly requests them. |
 
 ## 2. Non-negotiable engineering requirements
@@ -213,10 +213,12 @@ Model  -> apply the registered verdict, update PLAN + GUIDE + EXPERIMENTS, commi
    The release workflow extracts the matching version section; GitHub's
    pull-request-generated notes are not the primary release text.
 
-The initial supported release intent is native portable binaries for Linux,
-Windows and macOS across x86-64 and ARM64 where GitHub-hosted native runners
-are available. Accepted x86-64 ISA tiers become additional sibling assets in
-Phase 10; absence of an optimized tier never removes the portable fallback.
+The initial supported release intent is native portable binaries for Windows
+x86-64 plus Linux and macOS across x86-64 and ARM64 where GitHub-hosted native
+runners are available. Windows ARM64 is deferred until a stable Zig compiler
+passes the ordinary native gates. Accepted x86-64 ISA tiers become sibling
+assets in Phase 10; absence of an optimized tier never removes the portable
+fallback.
 WSL2 is the primary local Linux x86-64 build, test and artifact-smoke
 environment. Hosted/native Linux CI remains required for releases, and WSL2
 does not validate ARM64 or final target-native performance. GNU-linked,
@@ -620,8 +622,8 @@ no UCI or chess behaviour was introduced.
 workflow now gives `master` pull requests, `master` pushes and manual dispatches
 the identical job graph. It pins Zig 0.16.0 and current major action versions,
 runs the complete local quality and three-mode test gate, executes ReleaseSafe
-tests plus a ReleaseFast smoke build on six native hosted targets, cross-builds
-all six target triples, and reduces every result to stable `CI / gate`. The
+tests plus a ReleaseFast smoke build on five native hosted targets, cross-builds
+all five target triples, and reduces every result to stable `CI / gate`. The
 policy checker locks the workflow's essential trigger, security, toolchain and
 matrix contracts. No artifact publication or release automation was activated.
 The first draft-PR probe showed that the prior Zig setup action could stall on
@@ -633,12 +635,13 @@ in a separate host-tool package, so normal native and cross-target builds neithe
 resolve nor fetch lint dependencies. The second probe exposed a missing Unix
 execute bit and confirmed that the official native Windows ARM64 compiler exits
 silently from `zig build` on the hosted ARM runner. The composite action now
-invokes the Unix installer through Bash. Windows ARM64 retains the official
-native compiler but directly compiles and executes every required test, policy
-and smoke root, bypassing only the failing build runner; the normal build system
-remains covered on five native hosts and by all six cross-target builds. Recheck
-this narrow workaround at every stable Zig upgrade. The step closes only after
-the repair passes on the unmerged draft `dev` to `master` pull request. Manual
+invokes the Unix installer through Bash. A third probe bypassed the build runner
+and proved the compiler itself could pass one test before crashing with a Windows
+access violation on the next independent test. Windows ARM64 is therefore
+removed from current native and cross-build support, along with its special-case
+gate; reconsider it at a stable Zig upgrade and restore it only through the
+ordinary path. The step closes only after the simplified five-target repair
+passes on the unmerged draft `dev` to `master` pull request. Manual
 dispatch becomes available after the workflow later reaches default `master`.
 
 - Implement the §3.2 branch gate: identical manual and `master`-PR CI,
@@ -1028,7 +1031,7 @@ PEXT presence does not prove it is fast on that microarchitecture.
 
 #### 10.1 — Native platform validation
 
-Build and execute the supported Windows/Linux/macOS and x86-64/ARM64 matrix.
+Build and execute Windows x86-64 plus Linux/macOS x86-64 and ARM64.
 Require native tests, UCI/perft/bench agreement, lock-free atomic assertions
 where relied upon, target-native performance evidence and backend conformance.
 

@@ -73,9 +73,9 @@ zig build test -Doptimize=ReleaseFast
 | Development | Commit numbered steps to `dev` after local gates. Once the workflow exists on default `master`, it can be manually dispatched on `dev`; bootstrap it first with an unmerged draft PR. |
 | Release merge | Open `dev` → `master`; required CI runs on the pull request. The sole publisher enforces squash-only acceptance without repository branch protection. |
 | Master backstop | The same CI runs on every `master` push. Verify it, the finalized release and a clean worktree before resetting `dev` to `master`. |
-| CI jobs | Checksum-verified official Zig with bounded cached setup; docs/link/policy checks; format/AST/lint; Debug, ReleaseSafe and ReleaseFast tests; supported native target builds; direct native roots on Windows ARM64 while Zig 0.16's build runner fails there; later perft/UCI/bench agreement. |
+| CI jobs | Checksum-verified official Zig with bounded cached setup; docs/link/policy checks; format/AST/lint; Debug, ReleaseSafe and ReleaseFast tests; five supported native target builds; later perft/UCI/bench agreement. |
 | Local Linux | Use WSL2 for normal Linux x86-64 builds, tests and artifact smoke checks. Retained results record distribution/kernel/WSL versions. |
-| Release build | From the exact tagged `master` commit, build and smoke-test native Windows/Linux/macOS x86-64 and ARM64 assets where runners are available; compare deterministic fingerprints and generate hashes/manifests. |
+| Release build | From the exact tagged `master` commit, build and smoke-test Windows x86-64 plus Linux/macOS x86-64 and ARM64 assets where runners are available; compare deterministic fingerprints and generate hashes/manifests. |
 | Publication | Attach verified binaries to a draft GitHub Release, derive its notes from the matching `CHANGELOG.md` section, then publish only after the entire asset matrix succeeds. |
 
 `master` starts with one Phase-0 foundation squash commit so the public default
@@ -250,9 +250,10 @@ Enter only after serious NNUE retries fail and the user explicitly chooses it.
 
 ## What happens next
 
-Step 1.0.3's draft-PR probes exposed CI setup and Windows ARM64 build-runner
-defects; their local repair now needs a clean rerun on the existing unmerged
-draft pull request. Phase 1.1 remains closed until the six-platform matrix and
+Step 1.0.3's draft-PR probes exposed CI setup defects and an unstable Zig 0.16.0
+Windows ARM64 toolchain. Windows ARM64 has been removed from current support;
+the simplified five-platform repair now needs a clean rerun on the existing
+unmerged draft pull request. Phase 1.1 remains closed until that matrix and the
 stable `CI / gate` pass. Manual dispatch becomes available only after the
 workflow exists on default `master`.
 

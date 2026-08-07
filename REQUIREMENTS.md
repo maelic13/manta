@@ -163,14 +163,18 @@ The supported source and release matrix is:
 | macOS x86-64 | Required | Native hosted macOS CI while available | Initial release target |
 | macOS ARM64 | Required | Native hosted macOS CI | Initial release target |
 | Linux ARM64 | Required | Native ARM64 runner or named target hardware | Publish only after native gate |
-| Windows ARM64 | Required | Native ARM64 runner or named target hardware | Publish only after native gate |
 
-Hosted-runner facts verified on 2026-08-07: `windows-11-arm` and
-`ubuntu-24.04-arm` are available as public previews; stable native publication
-must account for that service status. GitHub now provides `macos-26-intel`, so
-the earlier assumption that `macos-15-intel` was the final hosted x86-64 macOS
-image is retired. `REL-007` governs withholding an asset if its native runner
-disappears before a replacement exists.
+Windows ARM64 is not currently supported. Zig 0.16.0's native compiler crashed
+on the hosted runner during independent project tests, so the target may return
+only after a later stable Zig toolchain passes the ordinary build, test and
+smoke gates without a target-specific bypass.
+
+Hosted-runner facts verified on 2026-08-07: `ubuntu-24.04-arm` is available as
+a public preview, so stable native publication must account for that service
+status. GitHub now provides `macos-26-intel`, so the earlier assumption that
+`macos-15-intel` was the final hosted x86-64 macOS image is retired. `REL-007`
+governs withholding an asset if its native runner disappears before a
+replacement exists.
 
 | ID | Requirement | Owner | Verification |
 |---|---|---:|---|
@@ -179,7 +183,7 @@ disappears before a replacement exists.
 | `PORT-003` | The default local build shall target the host CPU. Release builds shall declare an explicit portable CPU baseline and every optional ISA requirement in their name and manifest. | 1, 10 | Build metadata tests |
 | `PORT-004` | Linux packaging shall first prefer a self-contained Zig binary without a libc dependency where viable. GNU-linked and statically linked musl candidates shall be compared when C integration or deployment requires libc. | 1, 5, 10 | Dependency inspection and A/B |
 | `PORT-005` | musl is a compatibility/deployment choice, not a presumed performance winner. A musl asset may accompany the primary Linux artifact only after deterministic parity, WSL/native execution, dependency inspection and controlled performance comparison. | 5, 10 | Linux packaging gate |
-| `PORT-006` | The source/build contract shall cover Windows, Linux and macOS on x86-64 and ARM64, and each target shall cross-build once the build spine exists. Cross-compilation and a UCI handshake are necessary but insufficient for a downloadable artifact: the exact artifact requires native correctness, deterministic agreement and backend suitability. | 1, 10 | Build and native target matrix |
+| `PORT-006` | The source/build contract shall cover Windows x86-64 plus Linux and macOS on x86-64 and ARM64, and each target shall cross-build once the build spine exists. Cross-compilation and a UCI handshake are necessary but insufficient for a downloadable artifact: the exact artifact requires native correctness, deterministic agreement and backend suitability. Windows ARM64 remains excluded until a stable Zig toolchain passes the ordinary native gates without special handling. | 1, 10 | Build and native target matrix |
 | `PORT-007` | The portable runtime path shall reject an unsupported forced backend safely and shall always retain a baseline implementation. | 8, 10 | Feature-mask tests |
 
 ## 8. Quality and verification matrix
