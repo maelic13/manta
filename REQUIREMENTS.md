@@ -166,11 +166,11 @@ The supported source and release matrix is:
 | Windows ARM64 | Required | Native ARM64 runner or named target hardware | Publish only after native gate |
 
 Hosted-runner facts verified on 2026-08-07: `windows-11-arm` and
-`ubuntu-24.04-arm` are generally available, and `macos-15-intel` is the final
-GitHub-hosted x86-64 macOS image, announced as available until August 2027.
-macOS x86-64 therefore has a known end date rather than an open-ended runner
-supply; `REL-007` governs withholding that asset if the runner disappears
-before a native replacement exists.
+`ubuntu-24.04-arm` are available as public previews; stable native publication
+must account for that service status. GitHub now provides `macos-26-intel`, so
+the earlier assumption that `macos-15-intel` was the final hosted x86-64 macOS
+image is retired. `REL-007` governs withholding an asset if its native runner
+disappears before a replacement exists.
 
 | ID | Requirement | Owner | Verification |
 |---|---|---:|---|
@@ -236,9 +236,9 @@ linter.
 
 | ID | Requirement | Owner | Verification |
 |---|---|---:|---|
-| `REL-001` | Development shall occur on `dev`. `master` shall receive exactly one Phase-0 foundation squash commit establishing the license and accepted contracts on the default branch, and thereafter one squash commit per release through a pull request. | Repository setup | Branch audit |
+| `REL-001` | Development shall occur on `dev`. `master` shall receive exactly one Phase-0 foundation squash commit establishing the license and accepted contracts on the default branch, and thereafter one squash commit per release through a pull request. After the release commit and all gates are clean, `dev` shall be reset to that finalized `master` state. | Repository setup | Branch audit |
 | `REL-002` | One authoritative CI workflow shall run identically for pull requests targeting `master`, pushes to `master`, and manual dispatch from any branch. | 1 | Trigger tests |
-| `REL-003` | Branch protection shall require one stable aggregate check named `CI / gate`; matrix job names may evolve without weakening the aggregate result. | 1 | Repository settings review |
+| `REL-003` | The sole publisher shall require one stable aggregate check named `CI / gate` before accepting the release pull request, verify the post-merge `master` run and a clean worktree, and only then reset `dev`. This is a maintainer-enforced release procedure rather than a repository branch-protection rule; matrix job names may evolve without weakening the aggregate result. | 1 | Release checklist review |
 | `REL-004` | CI shall include docs/policy/traceability, exact-toolchain, format/AST/lint, Debug, ReleaseSafe, ReleaseFast and target-build jobs. UCI/perft/bench/backend jobs become mandatory when implemented. | 1 onward | Workflow inspection |
 | `REL-005` | A release workflow shall operate only on the exact tagged `master` commit, create a draft release, natively smoke-test every upload, compare fingerprints, generate hashes/manifests and publish only after all eligible assets pass. | 10 | Dry-run release |
 | `REL-006` | User-facing release notes shall be extracted from the matching `CHANGELOG.md` version section. Automatically generated pull-request summaries are supplemental only. | 10 | Release-note check |

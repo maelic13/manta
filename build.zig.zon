@@ -11,6 +11,7 @@
         },
     },
     .paths = .{
+        ".github",
         "build.zig",
         "build.zig.zon",
         "build_support",

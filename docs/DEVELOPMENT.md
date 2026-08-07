@@ -31,6 +31,12 @@ For the fastest local executable, use:
 zig build -Doptimize=ReleaseFast -Dcpu=native
 ```
 
-Portable targets and CI are owned by step 1.0.3. WSL2 is the normal local
-Linux x86-64 environment; native target execution remains required before a
-release artifact can be published.
+The authoritative CI workflow runs identically for pull requests to `master`,
+pushes to `master` and manual dispatches. It checks all six native host targets,
+cross-builds all six explicit target triples and reduces the result to
+`CI / gate`. It does not publish artifacts.
+
+WSL2 is the normal local Linux x86-64 environment; native target execution
+remains required before a release artifact can be published. The sole
+publisher verifies the release pull-request gate and post-merge `master` gate,
+then resets `dev` only after the release and local worktree are final and clean.

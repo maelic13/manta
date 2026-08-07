@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Preserve the backstop result for every release commit on master.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+jobs:
+  quality:
+    name: quality and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: 0.16.0
+          use-cache: true
+          cache-key: quality
+
+      - name: Verify exact Zig
+        shell: bash
+        run: test "$(zig version)" = "0.16.0"
+
+      - name: Format, AST, policy and lint
+        run: zig build lint
+
+      - name: Compile all roots
+        run: zig build check
+
+      - name: Test Debug
+        run: zig build test -Doptimize=Debug
+
+      - name: Test ReleaseSafe
+        run: zig build test -Doptimize=ReleaseSafe
+
+      - name: Test ReleaseFast
+        run: zig build test -Doptimize=ReleaseFast
+
+  native:
+    name: native ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            label: linux-x86-64
+          - runner: ubuntu-24.04-arm
+            label: linux-arm64
+          - runner: windows-2025
+            label: windows-x86-64
+          - runner: windows-11-arm
+            label: windows-arm64
+          - runner: macos-26-intel
+            label: macos-x86-64
+          - runner: macos-26
+            label: macos-arm64
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: 0.16.0
+          use-cache: true
+          cache-key: native-${{ matrix.label }}
+
+      - name: Verify exact Zig
+        shell: bash
+        run: test "$(zig version)" = "0.16.0"
+
+      - name: Test ReleaseSafe
+        run: zig build test -Doptimize=ReleaseSafe
+
+      - name: Build ReleaseFast
+        run: zig build -Doptimize=ReleaseFast
+
+      - name: Smoke-test executable
+        run: zig build run -Doptimize=ReleaseFast
+
+  cross-build:
+    name: cross-build all targets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: 0.16.0
+          use-cache: true
+          cache-key: cross-build
+
+      - name: Compile supported targets
+        shell: bash
+        run: |
+          set -euxo pipefail
+          for target in \
+            x86_64-windows \
+            aarch64-windows \
+            x86_64-linux \
+            aarch64-linux \
+            x86_64-macos \
+            aarch64-macos
+          do
+            zig build check -Dtarget="$target" -Doptimize=ReleaseFast
+          done
+
+  gate:
+    name: gate
+    if: ${{ always() }}
+    needs: [quality, native, cross-build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every CI job
+        shell: bash
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          NATIVE_RESULT: ${{ needs.native.result }}
+          CROSS_BUILD_RESULT: ${{ needs.cross-build.result }}
+        run: |
+          printf 'quality=%s\nnative=%s\ncross-build=%s\n' \
+            "$QUALITY_RESULT" "$NATIVE_RESULT" "$CROSS_BUILD_RESULT"
+          test "$QUALITY_RESULT" = success
+          test "$NATIVE_RESULT" = success
+          test "$CROSS_BUILD_RESULT" = success

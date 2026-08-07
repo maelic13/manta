@@ -10,11 +10,11 @@ Conditional experiment evidence lives in [`EXPERIMENTS.md`](EXPERIMENTS.md).
 
 | Item | State |
 |---|---|
-| Repository | Phase 0 and steps 1.0.1–1.0.2 are complete. The exact-version-guarded build/test and local quality spine exists without UCI or chess behaviour. |
-| Current phase | **Step 1.0.3 — CI and branch gate**, authorized but not started. |
+| Repository | Phase 0 and steps 1.0.1–1.0.2 are complete. Step 1.0.3 is implemented locally and awaits its first remote CI run. No UCI or chess behaviour exists. |
+| Current phase | **Step 1.0.3 — CI and branch gate**, awaiting remote validation. |
 | Implementation permission | **Open for Phase 1 only.** Board, evaluation and search work remain closed until their owning phases. |
 | License | **GPL-3.0-or-later**, copyright (C) 2026 Miloslav Macůrek. |
-| Branches | Develop on `dev`. One Phase-0 foundation squash commit establishes `master`; after that `master` takes one required-CI squash merge per release. |
+| Branches | Develop on `dev`; `master` takes one required-CI squash merge per release. The sole publisher enforces the gate and resets `dev` only after the release and post-merge checks are final. |
 | Required Zig | Latest official stable only: **0.16.0**, verified 2026-08-07. No master/dev/nightly builds. |
 | UCI | Basilisk-level parity is specified in Phase 1 and completed before tournament release. |
 | Evaluation | Original Zig-native Manta HCE first, informed once by Basilisk's proven features/values; no copied engine code or synchronization. NNUE is strategic; HCE stays tested as a fallback. |
@@ -72,8 +72,8 @@ zig build test -Doptimize=ReleaseFast
 | Stage | Contract |
 |---|---|
 | Development | Commit numbered steps to `dev` after the applicable local gates. CI can be manually dispatched on `dev` using the complete gate. |
-| Release merge | Open `dev` → `master`; required CI runs on the pull request. Squash merge only, with direct `master` pushes prohibited. |
-| Master backstop | The same CI runs on every `master` push so the exact release commit is independently recorded as green. |
+| Release merge | Open `dev` → `master`; required CI runs on the pull request. The sole publisher enforces squash-only acceptance without repository branch protection. |
+| Master backstop | The same CI runs on every `master` push. Verify it, the finalized release and a clean worktree before resetting `dev` to `master`. |
 | CI jobs | Exact Zig guard; docs/link/policy checks; format/AST/lint; Debug, ReleaseSafe and ReleaseFast tests; supported native target builds; later perft/UCI/bench agreement. |
 | Local Linux | Use WSL2 for normal Linux x86-64 builds, tests and artifact smoke checks. Retained results record distribution/kernel/WSL versions. |
 | Release build | From the exact tagged `master` commit, build and smoke-test native Windows/Linux/macOS x86-64 and ARM64 assets where runners are available; compare deterministic fingerprints and generate hashes/manifests. |
@@ -251,8 +251,9 @@ Enter only after serious NNUE retries fail and the user explicitly chooses it.
 
 ## What happens next
 
-Step 1.0.2 is complete. Continue with 1.0.3: add the CI/branch gate and
-supported-platform build matrix before UCI specification work begins in 1.1.
+Step 1.0.3 is implemented locally. Push `dev` and manually dispatch the
+workflow; Phase 1.1 remains closed until the six-platform matrix and stable
+`CI / gate` pass remotely.
 
 Do not implement board representation, move generation, evaluation, search or
 later features. Do not run any long or timed jobs.

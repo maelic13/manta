@@ -19,11 +19,11 @@ than a line-by-line port, and must exploit Zig's own strengths.
 
 | Item | State |
 |---|---|
-| Repository | Phase 0 and steps 1.0.1–1.0.2 are complete. The exact-version-guarded Zig build/test and local quality spine exists without UCI or chess behaviour. |
-| Current phase | **Step 1.0.3 — CI and branch gate**, authorized but not started. Later Phase-1 steps and all later phases remain closed. |
+| Repository | Phase 0 and steps 1.0.1–1.0.2 are complete. Step 1.0.3 is implemented locally and awaits its first remote CI run. No UCI or chess behaviour exists. |
+| Current phase | **Step 1.0.3 — CI and branch gate**, awaiting remote validation. Later Phase-1 steps and all later phases remain closed. |
 | Implementation permission | Open only for the work explicitly owned by Phase 1. No board, evaluation or search implementation may be pulled forward. |
 | License | **GPL-3.0-or-later**, copyright (C) 2026 Miloslav Macůrek. |
-| Branch workflow | Development occurs on `dev`. One Phase-0 foundation squash commit establishes `master`; every later `master` commit is a release squash-merged through a required-CI pull request. |
+| Branch workflow | Development occurs on `dev`. Every later `master` commit is a release squash-merged through a required-CI pull request. The sole publisher enforces the gate procedurally and resets `dev` only after the release and post-merge checks are final. |
 | Zig | **0.16.0**, verified as the latest official stable release on 2026-08-07. Development/nightly builds are forbidden. |
 | Initial evaluator | An original, replaceable Zig-native Manta HCE informed by Basilisk's proven feature set and accepted parameter values at the initial snapshot. It is not copied, linked or kept synchronized. No significant initial HCE tuning campaign is planned. |
 | Strategic evaluator | NNUE. HCE remains buildable and tested after NNUE lands so an explicit fallback remains possible. |
@@ -183,8 +183,10 @@ Model  -> apply the registered verdict, update PLAN + GUIDE + EXPERIMENTS, commi
 1. `dev` is the development branch. Normal step commits remain there and pass
    the applicable local gates before they are committed.
 2. `master` is release-only. A release moves from `dev` through a pull request
-   protected by required CI and is squash-merged into one release commit.
-   Direct pushes to `master` are forbidden by repository policy.
+   after required CI and is squash-merged into one release commit. The sole
+   publisher enforces this procedure; repository branch protection is not
+   required. Unverified direct pushes to `master` remain forbidden by project
+   policy.
    One accepted exception precedes that rule: at the end of Phase 0 the
    accepted project foundation is squash-merged from `dev` into `master` as a
    single foundation commit, so the public default branch carries the license,
@@ -197,7 +199,8 @@ Model  -> apply the registered verdict, update PLAN + GUIDE + EXPERIMENTS, commi
 4. The CI gate pins the exact stable Zig, checks documentation and internal
    links, formatting/AST/lint, Debug/ReleaseSafe/ReleaseFast tests, supported
    target builds and, once available, deterministic cross-platform bench
-   agreement. Branch protection requires it before squash merge.
+   agreement. The sole publisher requires it before squash merge, then verifies
+   the post-merge `master` run and a clean worktree before resetting `dev`.
 5. The release workflow operates on the exact tagged `master` revision. It
    creates or uses a draft GitHub Release, builds every supported native asset,
    smoke-tests the artifact that will be uploaded, compares deterministic
@@ -471,7 +474,7 @@ correctness, determinism and reproducibility rather than Elo.
 - the supported build/native-release matrix, WSL2's local Linux role,
   native-artifact release evidence and benchmark-driven libc/musl packaging;
   and
-- the `dev` to protected `master` squash workflow, stable aggregate CI gate and
+- the maintainer-gated `dev` to `master` squash workflow, stable aggregate CI gate and
   changelog-derived draft-release contract.
 
 #### 0.2 — Architecture design
@@ -610,8 +613,18 @@ no UCI or chess behaviour was introduced.
 
 ##### 1.0.3 — CI and branch gate
 
+**Implemented locally 2026-08-07; remote validation pending.** One read-only
+workflow now gives `master` pull requests, `master` pushes and manual dispatches
+the identical job graph. It pins Zig 0.16.0 and immutable action revisions,
+runs the complete local quality and three-mode test gate, executes ReleaseSafe
+tests plus a ReleaseFast smoke build on six native hosted targets, cross-builds
+all six target triples, and reduces every result to stable `CI / gate`. The
+policy checker locks the workflow's essential trigger, security, toolchain and
+matrix contracts. No artifact publication or release automation was activated.
+The step closes only after the committed workflow passes its first remote run.
+
 - Implement the §3.2 branch gate: identical manual and `master`-PR CI,
-  post-merge `master` backstop, stable aggregate branch-protection check, exact
+  post-merge `master` backstop, stable aggregate maintainer gate, exact
   Zig pin, complete quality/test modes and supported platform build matrix.
 - Pin only current-stable-compatible dependencies and action revisions. Release
   asset publication remains inert until its later correctness gates exist.

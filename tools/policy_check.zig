@@ -4,6 +4,7 @@ const max_file_size = 2 * 1024 * 1024;
 const expected_requirement_count = 90;
 
 const required_paths = [_][]const u8{
+    ".github/workflows/ci.yml",
     "AGENTS.md",
     "ARCHITECTURE.md",
     "CHANGELOG.md",
@@ -120,6 +121,62 @@ const Checker = struct {
                 "REQUIREMENTS.md has {d} requirement rows; expected {d}",
                 .{ count, expected_requirement_count },
             );
+        }
+    }
+
+    fn checkCiWorkflow(self: *Checker) !void {
+        const workflow = try self.read(".github/workflows/ci.yml");
+        defer self.allocator.free(workflow);
+
+        const required_fragments = [_][]const u8{
+            "name: CI",
+            "pull_request:",
+            "push:",
+            "workflow_dispatch:",
+            "contents: read",
+            "persist-credentials: false",
+            "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29",
+            "version: 0.16.0",
+            "cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}",
+            "zig build lint",
+            "zig build test -Doptimize=Debug",
+            "zig build test -Doptimize=ReleaseSafe",
+            "zig build test -Doptimize=ReleaseFast",
+            "ubuntu-24.04-arm",
+            "windows-11-arm",
+            "macos-26-intel",
+            "macos-26",
+            "x86_64-windows",
+            "aarch64-windows",
+            "x86_64-linux",
+            "aarch64-linux",
+            "x86_64-macos",
+            "aarch64-macos",
+            "name: gate",
+            "if: ${{ always() }}",
+            "needs: [quality, native, cross-build]",
+        };
+        for (required_fragments) |fragment| {
+            if (std.mem.indexOf(u8, workflow, fragment) == null) {
+                self.fail("CI workflow is missing required contract: {s}", .{fragment});
+            }
+        }
+
+        if (std.mem.count(u8, workflow, "branches: [master]") != 2) {
+            self.fail("CI workflow must gate both pull requests and pushes to master", .{});
+        }
+
+        const forbidden_fragments = [_][]const u8{
+            "pull_request_target:",
+            "continue-on-error:",
+            "actions/upload-artifact",
+            "\n  release:",
+        };
+        for (forbidden_fragments) |fragment| {
+            if (std.mem.indexOf(u8, workflow, fragment) != null) {
+                self.fail("CI workflow contains forbidden contract: {s}", .{fragment});
+            }
         }
     }
 
@@ -328,6 +385,7 @@ pub fn main(init: std.process.Init) !u8 {
     checker.checkRequiredPaths();
     try checker.checkPlanGuideSync();
     try checker.checkRequirements();
+    try checker.checkCiWorkflow();
     try checker.checkRepositoryFiles();
 
     if (checker.failures != 0) {
