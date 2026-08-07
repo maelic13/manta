@@ -27,11 +27,8 @@ jobs:
           persist-credentials: false
 
       - name: Set up Zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
-        with:
-          version: 0.16.0
-          use-cache: true
-          cache-key: quality
+        uses: ./.github/actions/setup-zig
+        timeout-minutes: 6
 
       - name: Verify exact Zig
         shell: bash
@@ -79,18 +76,21 @@ jobs:
           persist-credentials: false
 
       - name: Set up Zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
-        with:
-          version: 0.16.0
-          use-cache: true
-          cache-key: native-${{ matrix.label }}
+        uses: ./.github/actions/setup-zig
+        timeout-minutes: 6
 
       - name: Verify exact Zig
         shell: bash
-        run: test "$(zig version)" = "0.16.0"
+        run: |
+          set -euxo pipefail
+          test "$(zig version)" = "0.16.0"
+          zig env
+
+      - name: Compile all roots
+        run: zig build check -Doptimize=ReleaseSafe --summary all
 
       - name: Test ReleaseSafe
-        run: zig build test -Doptimize=ReleaseSafe
+        run: zig build test -Doptimize=ReleaseSafe --summary all
 
       - name: Build ReleaseFast
         run: zig build -Doptimize=ReleaseFast
@@ -109,11 +109,8 @@ jobs:
           persist-credentials: false
 
       - name: Set up Zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
-        with:
-          version: 0.16.0
-          use-cache: true
-          cache-key: cross-build
+        uses: ./.github/actions/setup-zig
+        timeout-minutes: 6
 
       - name: Compile supported targets
         shell: bash

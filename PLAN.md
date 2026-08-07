@@ -19,8 +19,8 @@ than a line-by-line port, and must exploit Zig's own strengths.
 
 | Item | State |
 |---|---|
-| Repository | Phase 0 and steps 1.0.1–1.0.2 are complete. Step 1.0.3 is implemented locally and awaits its first remote CI run. No UCI or chess behaviour exists. |
-| Current phase | **Step 1.0.3 — CI and branch gate**, awaiting remote validation. Later Phase-1 steps and all later phases remain closed. |
+| Repository | Phase 0 and steps 1.0.1–1.0.2 are complete. Step 1.0.3 is implemented locally; its first remote probe exposed CI-bootstrap defects that are repaired locally, with a clean rerun pending. No UCI or chess behaviour exists. |
+| Current phase | **Step 1.0.3 — CI and branch gate**, awaiting a clean remote rerun. Later Phase-1 steps and all later phases remain closed. |
 | Implementation permission | Open only for the work explicitly owned by Phase 1. No board, evaluation or search implementation may be pulled forward. |
 | License | **GPL-3.0-or-later**, copyright (C) 2026 Miloslav Macůrek. |
 | Branch workflow | Development occurs on `dev`. Every later `master` commit is a release squash-merged through a required-CI pull request. The sole publisher enforces the gate procedurally and resets `dev` only after the release and post-merge checks are final. |
@@ -616,7 +616,7 @@ no UCI or chess behaviour was introduced.
 
 ##### 1.0.3 — CI and branch gate
 
-**Implemented locally 2026-08-07; remote validation pending.** One read-only
+**Implemented locally 2026-08-07; clean remote rerun pending.** One read-only
 workflow now gives `master` pull requests, `master` pushes and manual dispatches
 the identical job graph. It pins Zig 0.16.0 and immutable action revisions,
 runs the complete local quality and three-mode test gate, executes ReleaseSafe
@@ -624,9 +624,16 @@ tests plus a ReleaseFast smoke build on six native hosted targets, cross-builds
 all six target triples, and reduces every result to stable `CI / gate`. The
 policy checker locks the workflow's essential trigger, security, toolchain and
 matrix contracts. No artifact publication or release automation was activated.
-The step closes only after the committed workflow passes on an unmerged draft
-`dev` to `master` pull request. Manual dispatch becomes available after the
-workflow later reaches default `master`.
+The first draft-PR probe showed that the prior Zig setup action could stall on
+a randomly selected mirror and still used a deprecated Node runtime. CI now
+downloads official platform archives directly, verifies their published SHA-256
+checksums, caches only the verified exact compiler through a current Node-24
+action, and bounds setup to six minutes. It also keeps source-pinned ZLint in a
+separate host-tool package, so normal native and cross-target builds neither
+resolve nor fetch lint dependencies; full build summaries and `zig env` preserve
+diagnostics if Windows ARM64 fails again. The step closes only after this repair
+passes on the unmerged draft `dev` to `master` pull request. Manual dispatch
+becomes available after the workflow later reaches default `master`.
 
 - Implement the §3.2 branch gate: identical manual and `master`-PR CI,
   post-merge `master` backstop, stable aggregate maintainer gate, exact

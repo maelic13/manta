@@ -43,7 +43,7 @@ Conditional experiment evidence lives in [`EXPERIMENTS.md`](EXPERIMENTS.md).
 
 ## Tooling policy
 
-The initial mandatory quality surface, once Phase 1 creates the build spine,
+The initial mandatory quality surface, now provided by the Phase-1 build spine,
 is:
 
 ```powershell
@@ -58,9 +58,8 @@ zig build test -Doptimize=ReleaseFast
 - Zig's formatter defines code style; no competing formatter is permitted.
 - The compiler, `ast-check`, project lint rules and tests are authoritative.
 - ZLS is recommended and must match the required stable Zig release.
-- ZLint 0.9.1 is source-pinned as host-only tooling and is part of
-  `zig build lint` after a reviewed zero-warning baseline. Step 1.0.3 supplies
-  its reproducible CI pass.
+- ZLint 0.9.1 is source-pinned in an isolated host-tool package and remains part
+  of `zig build lint`; normal builds do not resolve its dependencies.
 - Treat warnings, forbidden dependencies and unannotated unsafe operations as
   failures. Prefer domain-specific enums and integer types over loosely typed
   primitives and flags.
@@ -74,7 +73,7 @@ zig build test -Doptimize=ReleaseFast
 | Development | Commit numbered steps to `dev` after local gates. Once the workflow exists on default `master`, it can be manually dispatched on `dev`; bootstrap it first with an unmerged draft PR. |
 | Release merge | Open `dev` → `master`; required CI runs on the pull request. The sole publisher enforces squash-only acceptance without repository branch protection. |
 | Master backstop | The same CI runs on every `master` push. Verify it, the finalized release and a clean worktree before resetting `dev` to `master`. |
-| CI jobs | Exact Zig guard; docs/link/policy checks; format/AST/lint; Debug, ReleaseSafe and ReleaseFast tests; supported native target builds; later perft/UCI/bench agreement. |
+| CI jobs | Checksum-verified official Zig with bounded cached setup; docs/link/policy checks; format/AST/lint; Debug, ReleaseSafe and ReleaseFast tests; supported native target builds; later perft/UCI/bench agreement. |
 | Local Linux | Use WSL2 for normal Linux x86-64 builds, tests and artifact smoke checks. Retained results record distribution/kernel/WSL versions. |
 | Release build | From the exact tagged `master` commit, build and smoke-test native Windows/Linux/macOS x86-64 and ARM64 assets where runners are available; compare deterministic fingerprints and generate hashes/manifests. |
 | Publication | Attach verified binaries to a draft GitHub Release, derive its notes from the matching `CHANGELOG.md` section, then publish only after the entire asset matrix succeeds. |
@@ -251,11 +250,11 @@ Enter only after serious NNUE retries fail and the user explicitly chooses it.
 
 ## What happens next
 
-Step 1.0.3 is implemented locally. Push `dev`, open an unmerged draft pull
-request to `master`, and let its pull-request trigger validate the new
-workflow. Phase 1.1 remains closed until the six-platform matrix and stable
-`CI / gate` pass remotely. Manual dispatch becomes available only after the
-workflow exists on default `master`.
+Step 1.0.3's first draft-PR probe exposed CI setup defects; their local repair
+now needs a clean rerun on the existing unmerged draft pull request. Phase 1.1
+remains closed until the six-platform matrix and stable `CI / gate` pass.
+Manual dispatch becomes available only after the workflow exists on default
+`master`.
 
 Do not implement board representation, move generation, evaluation, search or
 later features. Do not run any long or timed jobs.

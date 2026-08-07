@@ -1,0 +1,21 @@
+name: Set up exact Zig
+description: Restore or install the checksum-pinned official Zig toolchain
+
+runs:
+  using: composite
+  steps:
+    - name: Cache Zig toolchain
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: ${{ runner.temp }}/zig-0.16.0
+        key: zig-0.16.0-${{ runner.os }}-${{ runner.arch }}
+
+    - name: Install Zig on Windows
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: ${{ github.workspace }}/tools/ci/install-zig.ps1
+
+    - name: Install Zig on Linux or macOS
+      if: runner.os != 'Windows'
+      shell: bash
+      run: ${{ github.workspace }}/tools/ci/install-zig.sh

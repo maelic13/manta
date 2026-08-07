@@ -97,6 +97,8 @@ pub fn build(b: *std.Build) void {
         "--ast-check",
         "--exclude",
         "zig-pkg",
+        "--exclude",
+        "tools/zlint/zig-pkg",
         ".",
     });
     fmt_command.setCwd(b.path("."));
@@ -109,26 +111,13 @@ pub fn build(b: *std.Build) void {
     const lint_step = b.step("lint", "Run formatting, policy and Zig lint checks");
     lint_step.dependOn(fmt_step);
     lint_step.dependOn(policy_step);
-    if (b.lazyDependency("zlint", .{
-        .target = b.graph.host,
-        .optimize = .ReleaseSafe,
-    })) |zlint| {
-        const run_zlint = b.addRunArtifact(dependencyExecutable(zlint, "zlint"));
-        run_zlint.setCwd(b.path("."));
-        lint_step.dependOn(&run_zlint.step);
-    }
-}
-
-fn dependencyExecutable(
-    dependency: *std.Build.Dependency,
-    name: []const u8,
-) *std.Build.Step.Compile {
-    for (dependency.builder.install_tls.step.dependencies.items) |step| {
-        const install = step.cast(std.Build.Step.InstallArtifact) orelse continue;
-        const artifact = install.artifact;
-        if (artifact.kind == .exe and std.mem.eql(u8, artifact.name, name)) {
-            return artifact;
-        }
-    }
-    std.debug.panic("dependency does not expose executable '{s}'", .{name});
+    const run_zlint = b.addSystemCommand(&.{
+        b.graph.zig_exe,
+        "build",
+        "--build-file",
+        "tools/zlint/build.zig",
+        "run",
+    });
+    run_zlint.setCwd(b.path("."));
+    lint_step.dependOn(&run_zlint.step);
 }

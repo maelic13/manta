@@ -19,8 +19,9 @@ anchors, PLAN/GUIDE step synchronization, requirement IDs and public-reference
 policy. Both are included in `zig build lint`.
 
 The lint command builds the source-pinned ZLint 0.9.1 executable for the host
-and applies the reviewed rules in [`zlint.json`](../zlint.json). Its first run
-may fetch source packages into the ignored `zig-pkg/` directory. ZLint is a
+and applies the reviewed rules in [`zlint.json`](../zlint.json). Its isolated
+tool package may fetch sources into ignored `tools/zlint/zig-pkg/`; ordinary
+build, check and test commands never resolve those dependencies. ZLint is a
 development tool, never a Manta runtime dependency. The repository avoids
 negated `.gitignore` entries because this ZLint release interprets them as
 lint exclusions.
@@ -34,7 +35,10 @@ zig build -Doptimize=ReleaseFast -Dcpu=native
 The authoritative CI workflow runs identically for pull requests to `master`,
 pushes to `master` and manual dispatches. It checks all six native host targets,
 cross-builds all six explicit target triples and reduces the result to
-`CI / gate`. It does not publish artifacts.
+`CI / gate`. CI installs the exact compiler from official platform archives,
+checks their pinned SHA-256 values and caches only the verified toolchain through
+immutable current action revisions. Setup is bounded to six minutes. The
+workflow does not publish artifacts.
 
 GitHub enables manual dispatch only after the workflow exists on default
 `master`. Before its first release merge, validate it by pushing `dev` and

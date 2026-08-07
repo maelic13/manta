@@ -5,6 +5,7 @@ const expected_requirement_count = 90;
 
 const required_paths = [_][]const u8{
     ".github/workflows/ci.yml",
+    ".github/actions/setup-zig/action.yml",
     "AGENTS.md",
     "ARCHITECTURE.md",
     "CHANGELOG.md",
@@ -22,6 +23,10 @@ const required_paths = [_][]const u8{
     "src/manta.zig",
     "tests/root.zig",
     "tools/policy_check.zig",
+    "tools/ci/install-zig.ps1",
+    "tools/ci/install-zig.sh",
+    "tools/zlint/build.zig",
+    "tools/zlint/build.zig.zon",
     "zlint.json",
 };
 
@@ -136,8 +141,8 @@ const Checker = struct {
             "contents: read",
             "persist-credentials: false",
             "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-            "mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29",
-            "version: 0.16.0",
+            "uses: ./.github/actions/setup-zig",
+            "timeout-minutes: 6",
             "cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}",
             "zig build lint",
             "zig build test -Doptimize=Debug",
@@ -166,16 +171,58 @@ const Checker = struct {
         if (std.mem.count(u8, workflow, "branches: [master]") != 2) {
             self.fail("CI workflow must gate both pull requests and pushes to master", .{});
         }
+        if (std.mem.count(u8, workflow, "timeout-minutes: 6") != 3) {
+            self.fail("every Zig setup step must have the six-minute bound", .{});
+        }
 
         const forbidden_fragments = [_][]const u8{
             "pull_request_target:",
             "continue-on-error:",
             "actions/upload-artifact",
+            "mlugg/setup-zig",
             "\n  release:",
         };
         for (forbidden_fragments) |fragment| {
             if (std.mem.indexOf(u8, workflow, fragment) != null) {
                 self.fail("CI workflow contains forbidden contract: {s}", .{fragment});
+            }
+        }
+
+        const setup_action = try self.read(".github/actions/setup-zig/action.yml");
+        defer self.allocator.free(setup_action);
+        const setup_contracts = [_][]const u8{
+            "actions/cache@caa296126883cff596d87d8935842f9db880ef25",
+            "using: composite",
+            "zig-0.16.0-${{ runner.os }}-${{ runner.arch }}",
+            "tools/ci/install-zig.ps1",
+            "tools/ci/install-zig.sh",
+        };
+        for (setup_contracts) |contract| {
+            if (std.mem.indexOf(u8, setup_action, contract) == null) {
+                self.fail("Zig setup action is missing required contract: {s}", .{contract});
+            }
+        }
+
+        const windows_installer = try self.read("tools/ci/install-zig.ps1");
+        defer self.allocator.free(windows_installer);
+        const unix_installer = try self.read("tools/ci/install-zig.sh");
+        defer self.allocator.free(unix_installer);
+        const installer_contracts = [_]struct {
+            content: []const u8,
+            fragment: []const u8,
+        }{
+            .{ .content = windows_installer, .fragment = "https://ziglang.org/download/$version/" },
+            .{ .content = windows_installer, .fragment = "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e" },
+            .{ .content = windows_installer, .fragment = "aee38316ee4111717900f45dd3130145c39289e105541d737eb8c5ed653c78ef" },
+            .{ .content = unix_installer, .fragment = "https://ziglang.org/download/$version/" },
+            .{ .content = unix_installer, .fragment = "70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00" },
+            .{ .content = unix_installer, .fragment = "ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17" },
+            .{ .content = unix_installer, .fragment = "0387557ed1877bc6a2e1802c8391953baddba76081876301c522f52977b52ba7" },
+            .{ .content = unix_installer, .fragment = "b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489" },
+        };
+        for (installer_contracts) |contract| {
+            if (std.mem.indexOf(u8, contract.content, contract.fragment) == null) {
+                self.fail("Zig installer is missing required contract: {s}", .{contract.fragment});
             }
         }
     }
