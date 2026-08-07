@@ -1,0 +1,41 @@
+# Zig build artifacts
+.zig-cache/
+zig-cache/
+zig-out/
+
+# Local experiment and profiling artifacts
+tools/bin/*
+tools/results/*
+tools/test_engines/*
+*.pgo
+*.profdata
+*.profraw
+*.trace
+*.etl
+*.pgn
+
+# Local executables and debug symbols
+*.exe
+*.dll
+*.so
+*.dylib
+*.pdb
+*.dSYM/
+
+# Editor and operating-system files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local environment and logs
+.env
+.env.*
+*.log
+
+# Preserve tracked placeholders in future artifact directories
+!tools/bin/.gitkeep
+!tools/results/.gitkeep
+!tools/test_engines/.gitkeep
