@@ -19,8 +19,8 @@ than a line-by-line port, and must exploit Zig's own strengths.
 
 | Item | State |
 |---|---|
-| Repository | Phase 0 is complete; no engine source or build spine exists yet. |
-| Current phase | **Phase 1.0 — latest-stable toolchain and build spine**, authorized but not started. Later phases remain closed. |
+| Repository | Phase 0 and step 1.0.1 are complete. The exact-version-guarded Zig package/build/test spine exists without UCI or chess behaviour. |
+| Current phase | **Step 1.0.2 — quality and development tooling**, authorized but not started. Later Phase-1 steps and all later phases remain closed. |
 | Implementation permission | Open only for the work explicitly owned by Phase 1. No board, evaluation or search implementation may be pulled forward. |
 | License | **GPL-3.0-or-later**, copyright (C) 2026 Miloslav Macůrek. |
 | Branch workflow | Development occurs on `dev`. One Phase-0 foundation squash commit establishes `master`; every later `master` commit is a release squash-merged through a required-CI pull request. |
@@ -572,18 +572,39 @@ UCI parity is defined here, before board or search details can distort it.
 
 #### 1.0 — Latest-stable toolchain and build spine
 
+##### 1.0.1 — Toolchain and build spine
+
+**Completed 2026-08-07.** Zig 0.16.0 remained the latest official stable and
+matched the local compiler. The `0.0.0-dev` package now has an exact compile-time
+version guard with negative tests, a silent executable composition root, an
+independently importable library facade, a repository test root and standard
+build/run/check/test steps. Native `ReleaseFast` plus `cpu=native`, all three
+test modes and an ARM64 Linux cross-target compile check passed. No UCI or chess
+behaviour was introduced.
+
 - Recheck the latest official stable Zig and migrate before any feature work.
-- Add version-guarded `build.zig`/`build.zig.zon`, library/executable/test
-  modules and standard build steps without chess behaviour.
-- Add `fmt`, `ast-check`, `lint`, Debug/ReleaseSafe/ReleaseFast tests and initial
-  cross-platform CI. Pin only current-stable-compatible dependencies.
+- Add exact-version-guarded `build.zig`/`build.zig.zon`, a minimal executable,
+  library facade, repository test root and build-support tests without UCI or
+  chess behaviour.
+- Provide standard native build, run, compile-check and
+  Debug/ReleaseSafe/ReleaseFast test steps. Keep local peak builds explicit as
+  `ReleaseFast` plus `cpu=native`; portable targets remain explicit.
+
+##### 1.0.2 — Quality and development tooling
+
+- Add `fmt`, `ast-check`, `lint`, documentation/policy checks and concise
+  development/ZLS guidance.
+- Pin ZLint 0.9.1 as host-only development tooling and evaluate it against a
+  reviewed zero-warning baseline. If it proves unsuitable, retain project lint
+  checks, record the reason and never downgrade Zig to keep it.
+
+##### 1.0.3 — CI and branch gate
+
 - Implement the §3.2 branch gate: identical manual and `master`-PR CI,
-  post-merge `master` backstop, branch-protection check names, exact Zig pin,
-  documentation/user-facing policy checks and platform build matrix. Release
+  post-merge `master` backstop, stable aggregate branch-protection check, exact
+  Zig pin, complete quality/test modes and supported platform build matrix.
+- Pin only current-stable-compatible dependencies and action revisions. Release
   asset publication remains inert until its later correctness gates exist.
-- Add ZLS guidance, pin ZLint 0.9.1 and evaluate it against a reviewed
-  zero-warning baseline. If it proves unsuitable, retain project lint checks,
-  record the reason and never downgrade Zig to keep it.
 
 #### 1.1 — UCI behavioural specification
 

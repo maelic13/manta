@@ -10,8 +10,8 @@ Conditional experiment evidence lives in [`EXPERIMENTS.md`](EXPERIMENTS.md).
 
 | Item | State |
 |---|---|
-| Repository | Phase 0 is complete; no engine source or build files exist yet. |
-| Current phase | **Phase 1.0 — Latest-stable toolchain and build spine**, authorized but not started. |
+| Repository | Phase 0 and step 1.0.1 are complete. The minimal exact-version-guarded Zig build/test spine exists without UCI or chess behaviour. |
+| Current phase | **Step 1.0.2 — Quality and development tooling**, authorized but not started. |
 | Implementation permission | **Open for Phase 1 only.** Board, evaluation and search work remain closed until their owning phases. |
 | License | **GPL-3.0-or-later**, copyright (C) 2026 Miloslav Macůrek. |
 | Branches | Develop on `dev`. One Phase-0 foundation squash commit establishes `master`; after that `master` takes one required-CI squash merge per release. |
@@ -111,6 +111,12 @@ separate implementation units.
 
 - [ ] **1.0 — Latest-stable toolchain and build spine:** Pin current stable Zig
       and create the minimal build, test, lint and CI foundation.
+  - [x] **1.0.1 — Toolchain and build spine:** Add the exact Zig guard, package,
+        executable, library facade and three-mode test foundation.
+  - [ ] **1.0.2 — Quality and development tooling:** Add formatting, AST,
+        project-policy, ZLint and ZLS guidance gates.
+  - [ ] **1.0.3 — CI and branch gate:** Add the identical manual/PR/master
+        workflow, native/cross-target matrix and stable aggregate check.
 - [ ] **1.1 — UCI behavioural specification:** Freeze command, state, timing,
       output and diagnostic transcript behavior before chess implementation.
 - [ ] **1.2 — Test harness and repository policy:** Build the asynchronous
@@ -245,10 +251,10 @@ Enter only after serious NNUE retries fail and the user explicitly chooses it.
 
 ## What happens next
 
-Phase 1 is authorized but no Phase-1 implementation has started. Begin with
-step 1.0: recheck the latest official stable Zig, decide the minimal build
-module/test layout and freeze the CI check names before creating the build
-spine. Then specify UCI behaviour and its process harness as Phase 1 requires.
+Step 1.0.1 is complete. Continue with 1.0.2: add formatting/AST integration,
+project policy checks, pinned ZLint evaluation and concise ZLS/development
+guidance. Step 1.0.3 then adds the CI/branch gate before UCI specification work
+begins in 1.1.
 
 Do not implement board representation, move generation, evaluation, search or
 later features. Do not run any long or timed jobs.
