@@ -20,6 +20,12 @@ illegal input transactionally.
   allocation, full-position copying or unrelated recomputation.
 - Null move has a distinct internal API and state contract; it is never an
   externally supplied chess move.
+- Played game ply advances only for real moves. Reversible rule counters use
+  saturating arithmetic in the child state, while unmake restores the exact
+  parent values through the stable state chain.
+- En-passant contributes to repetition identity only when the opponent has a
+  legal capture; every transition maintains full, pawn, minor and per-color
+  non-pawn keys incrementally.
 - Hot APIs have narrow documented preconditions established by move generation
   and assert them in safety builds.
 - External/FEN/UCI application uses a checked transactional layer. On failure,

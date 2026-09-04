@@ -1,0 +1,32 @@
+# Perft is a separate diagnostic mode with sorted root records and no bestmove.
+@phase 4.2
+> Manta {{VERSION}} by Miloslav Macurek
+< position startpos
+< go perft 1
+> info string perft move a2a3 nodes 1
+> info string perft move a2a4 nodes 1
+> info string perft move b1a3 nodes 1
+> info string perft move b1c3 nodes 1
+> info string perft move b2b3 nodes 1
+> info string perft move b2b4 nodes 1
+> info string perft move c2c3 nodes 1
+> info string perft move c2c4 nodes 1
+> info string perft move d2d3 nodes 1
+> info string perft move d2d4 nodes 1
+> info string perft move e2e3 nodes 1
+> info string perft move e2e4 nodes 1
+> info string perft move f2f3 nodes 1
+> info string perft move f2f4 nodes 1
+> info string perft move g1f3 nodes 1
+> info string perft move g1h3 nodes 1
+> info string perft move g2g3 nodes 1
+> info string perft move g2g4 nodes 1
+> info string perft move h2h3 nodes 1
+> info string perft move h2h4 nodes 1
+> info string perft depth 1 nodes 20
+! silence 100ms
+< go perft 0
+> info string perft depth 0 nodes 1
+! silence 100ms
+< quit
+! exit 0 within 1000ms

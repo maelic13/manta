@@ -1,0 +1,38 @@
+{
+    "TimeHorizonScale": {
+        "value": 1000,
+        "min_value": 700,
+        "max_value": 1300,
+        "step": 82
+    },
+    "TimeIncrementCredit": {
+        "value": 1000,
+        "min_value": 500,
+        "max_value": 1500,
+        "step": 164
+    },
+    "TimeMaximumRatio": {
+        "value": 4000,
+        "min_value": 2000,
+        "max_value": 6000,
+        "step": 328
+    },
+    "TimeStabilityResponse": {
+        "value": 1000,
+        "min_value": 0,
+        "max_value": 2000,
+        "step": 164
+    },
+    "TimeScoreResponse": {
+        "value": 1000,
+        "min_value": 0,
+        "max_value": 2000,
+        "step": 164
+    },
+    "TimeEffortResponse": {
+        "value": 1000,
+        "min_value": 0,
+        "max_value": 2000,
+        "step": 164
+    }
+}

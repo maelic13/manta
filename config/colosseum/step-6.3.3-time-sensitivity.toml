@@ -1,0 +1,31 @@
+# MAN-T01 is a sensitivity pilot, not a promotable tune. It uses the accepted
+# one-thread 3+0.03 host profile and publishes one durable checkpoint after
+# every 32-game, pair-atomic iteration.
+
+[options]
+label = "MAN-T01-time-sensitivity"
+option = ["Hash=64", "Threads=1", "Move Overhead=10"]
+tune = "step-6.3.3-time-sensitivity-vector.toml"
+r-end = 0.002
+iterations = 128
+games-per-iteration = 32
+final-window-percent = 10
+base-ms = 3000
+increment-ms = 30
+margin-ms = 100
+draw-move = 40
+draw-moves = 8
+draw-score-cp = 10
+resign-moves = 3
+resign-score-cp = 600
+max-moves = 120
+concurrency = 7
+cores-per-engine = 1
+placement = "auto"
+headroom-cores = 2
+memory-budget-mb = 1024
+book = "../../tools/books/UHO_Lichess_4852_v1.epd"
+book-order = "random"
+book-start = 0
+seed = 1890874432
+progress-interval-secs = 10

@@ -1,0 +1,135 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Existing release tag to upload assets to, for example v1.0.0
+        required: true
+        type: string
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            label: linux-x86-64
+            suffix: linux-x86-64
+          - runner: ubuntu-24.04-arm
+            label: linux-arm64
+            suffix: linux-arm64
+          - runner: windows-2025
+            label: windows-x86-64
+            suffix: windows-x86-64.exe
+          - runner: macos-26-intel
+            label: macos-x86-64
+            suffix: macos-x86-64
+          - runner: macos-26
+            label: macos-arm64
+            suffix: macos-arm64
+
+    steps:
+      - name: Check out tagged revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Validate tag and package version
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          version="${RELEASE_TAG#v}"
+          grep -qF ".version = \"$version\"," build.zig.zon
+          grep -qF "pub const current = \"$version\";" build_support/version.zig
+
+      - name: Set up Zig
+        uses: ./.github/actions/setup-zig
+        timeout-minutes: 6
+
+      - name: Build portable release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          zig build dist -Dportable -Dversion="$version"
+          mkdir -p release-output
+          built="zig-out/dist/manta-v${version}-${{ matrix.suffix }}"
+          test -f "$built"
+          cp "$built" "release-output/$(basename "$built")"
+
+      - name: Smoke-test published executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          binary="release-output/manta-v${version}-${{ matrix.suffix }}"
+          interpreter=python3
+          command -v python3 >/dev/null || interpreter=python
+          "$interpreter" tools/ci/release_smoke.py "$binary" "$version" "release-output/bench-${{ matrix.label }}.txt"
+
+      - name: Upload release candidate
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.label }}
+          path: release-output/*
+          if-no-files-found: error
+
+  publish:
+    name: Verify and upload assets
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag_name }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download release candidates
+        uses: actions/download-artifact@v7
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release-output
+
+      - name: Require cross-platform bench agreement
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(release-output/bench-*.txt)
+          test "${#files[@]}" -eq 5
+          reference=
+          for file in "${files[@]}"; do
+            value=$(<"$file")
+            value=${value%$'\r'}
+            [[ "$value" =~ ^[0-9]+$ ]]
+            echo "$file: $value"
+            if [[ -z "$reference" ]]; then
+              reference=$value
+            else
+              test "$value" = "$reference"
+            fi
+          done
+
+      - name: Create checksums and upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-output
+          sha256sum manta-v* > SHA256SUMS
+          gh release view "$RELEASE_TAG" >/dev/null
+          gh release upload "$RELEASE_TAG" manta-v* SHA256SUMS --clobber

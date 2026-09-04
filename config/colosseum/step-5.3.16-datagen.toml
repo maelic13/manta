@@ -1,0 +1,30 @@
+# Superseded reproduction profile. Colosseum's synchronous per-game durable
+# rewrite collapsed effective concurrency for short fixed-node games and hit a
+# Windows sharing failure. Step 5.3.16 now uses tools/datagen.ps1; retain this
+# checked profile only to reproduce and later qualify the upstream repair.
+
+[options]
+a-label = "manta-hce-label-a"
+b-label = "manta-hce-label-b"
+a-option = ["Hash=16", "Threads=1"]
+b-option = ["Hash=16", "Threads=1"]
+a-nodes = 8000
+b-nodes = 8000
+draw-move = 40
+draw-moves = 8
+draw-score-cp = 10
+resign-moves = 3
+resign-score-cp = 600
+max-moves = 200
+max-engine-faults = 0
+max-time-losses = 0
+concurrency = 14
+# Fixed-node labels have one active 1T search per game. Colosseum's hard
+# placement currently reserves a distinct core for both engine processes and
+# would require 28 physical cores for 14 games, although the two sides never
+# search simultaneously. Off mode lets Windows schedule the 14 active searches;
+# this job makes no wall-clock or playing-strength claim.
+placement = "off"
+memory-budget-mb = 1024
+book-order = "random"
+progress-interval-secs = 10

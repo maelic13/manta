@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-07
+- Amended: 2026-08-11 and 2026-08-29
 
 ## Context
 
@@ -23,8 +24,19 @@ search couples policy to the OS and makes edge cases flaky.
 - Search polls time/cancellation at an adjustable node interval rather than on
   every node. The poll interval is part of stop-latency evidence.
 - Ponderhit updates the active time state without restarting elapsed time.
+- Until the matching epoch is hit, ponder ignores soft/hard clock deadlines but
+  may finish an explicit depth/node limit. A hit activates the original
+  receipt-derived deadlines, so already-spent time is never reset or credited
+  twice.
+- Step 6.0.4 records the hit's monotonic input-receipt timestamp before its
+  epoch release and latches the saturating receipt-to-hit interval exactly once
+  on the matching worker transition. It remains observational until the
+  integrated time policy consumes it.
 - Move overhead and scheduling reserve are explicit inputs, not hidden global
   constants.
+- Worker completion wakes the controller directly. Timed polling is forbidden
+  between completed engine work and publication because Windows timer
+  quantization is part of clock spend and leaves the assigned CPU idle.
 - Phase 4 implements a conservative deterministic 1T policy for `movetime` and
   ordinary clocks/increments/moves-to-go before strength testing begins. Phase
   6 refines soft allocation, root-confidence use, ponder behavior and SMP
@@ -44,6 +56,8 @@ search couples policy to the OS and makes edge cases flaky.
 
 - Fake-clock boundary/property tests for zero, overflow, increments,
   moves-to-go, movetime, ponder and spent dispatch time.
+- Matching/stale epoch, single-latch and reversed-timestamp properties for
+  ponder credit.
 - Real process tests bound stop/quit and adverse scheduling.
 - Scope-matched 1T or 4T time-strength gate plus independent forfeit, process
   and scaling tests for the other dimensions.

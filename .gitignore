@@ -2,16 +2,50 @@
 .zig-cache/
 zig-cache/
 zig-out/
+zig-pkg/
+
+# Testing-harness working directories. The directories themselves are tracked
+# via .gitkeep so a fresh clone has somewhere for setup_tools.ps1 to write.
+tools/bin/*
+!tools/bin/.gitkeep
+tools/results/*
+!tools/results/.gitkeep
+tools/test_engines/*
+!tools/test_engines/.gitkeep
+tools/texel/data/*
+!tools/texel/data/.gitkeep
+tools/texel/out/*
+!tools/texel/out/.gitkeep
+
+# Local opening books / third-party chess assets (175 MB; staged by
+# tools/setup_tools.ps1, hashed into every run manifest)
+tools/books/*
+!tools/books/.gitkeep
+
+# weather-factory is a pinned upstream clone, patched in place by
+# tools/setup_tools.ps1 — never vendored into this repo
+tools/weather-factory/
+
+# weather-factory working file, copied to the repo root during SPSA runs
+/config.json
+
+# Python caches / virtualenvs (weather-factory and its patch validation)
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
 
 # Local experiment and profiling artifacts
-tools/bin/*
-tools/results/*
-tools/test_engines/*
 /artifacts/
 /books/
 /datasets/
 /networks/
 /tablebases/
+# Syzygy table data is a local asset under FILE-001; only the vendored probe
+# source in third_party/fathom/ is tracked.
+*.rtbw
+*.rtbz
 *.pgo
 *.profdata
 *.profraw
@@ -39,8 +73,3 @@ Thumbs.db
 .env
 .env.*
 *.log
-
-# Preserve tracked placeholders in future artifact directories
-!tools/bin/.gitkeep
-!tools/results/.gitkeep
-!tools/test_engines/.gitkeep

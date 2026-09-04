@@ -1,0 +1,109 @@
+{
+  "schema": "manta-production-manifest",
+  "schema_version": 1,
+  "baseline": {
+    "id": "manta-functional-baseline-v1",
+    "qualified_date": "2026-08-11",
+    "engine_version": "0.0.0-dev",
+    "engine_source_commit": "0cdd42dfe7d917fb3f00aa36cbf28f73f96708a1",
+    "engine_source_tree": "e11ae91abc070e933fd5d5dc0500f4b1118e339f",
+    "source_checkout": "clean detached worktree",
+    "playing_scope": "deterministic single-thread standard chess",
+    "strength_claim": null
+  },
+  "toolchain": {
+    "zig": "0.16.0",
+    "llvm": "21.1.0",
+    "host_target": "x86_64-windows.win11_dt...win11_dt-gnu",
+    "optimize": "ReleaseFast",
+    "pgo": false
+  },
+  "host": {
+    "cpu": "AMD Ryzen 9 5950X 16-Core Processor",
+    "physical_cores": 16,
+    "logical_processors": 32,
+    "os": "Microsoft Windows NT 10.0.26200.0"
+  },
+  "engine_contract": {
+    "evaluator": "original scalar Manta HCE",
+    "runtime_isa_dispatch": false,
+    "threads": 1,
+    "default_hash_mib": 64,
+    "default_move_overhead_ms": 10,
+    "embedded_networks": [],
+    "embedded_external_data": []
+  },
+  "artifacts": [
+    {
+      "role": "local-peak baseline",
+      "file": "manta-v0.0.0-dev-windows-x86-64-native.exe",
+      "retained_path": "zig-out/baselines/phase-5.0/manta-v0.0.0-dev-windows-x86-64-native.exe",
+      "build_command": "zig build dist -Dnative -Doptimize=ReleaseFast",
+      "build_mode": "native",
+      "profile": "x86-64",
+      "cpu_policy": "native",
+      "bytes": 1977856,
+      "sha256": "e05117ee3b94552d650fb4ac44f6985860d2d48b3c52deef642e4a7fd2be91f6"
+    },
+    {
+      "role": "portable fallback baseline",
+      "file": "manta-v0.0.0-dev-windows-x86-64.exe",
+      "retained_path": "zig-out/baselines/phase-5.0/manta-v0.0.0-dev-windows-x86-64.exe",
+      "build_command": "zig build dist -Dportable -Doptimize=ReleaseFast",
+      "build_mode": "portable",
+      "profile": "x86-64",
+      "cpu_policy": "supported platform baseline",
+      "bytes": 1977856,
+      "sha256": "e05117ee3b94552d650fb4ac44f6985860d2d48b3c52deef642e4a7fd2be91f6"
+    }
+  ],
+  "determinism": {
+    "profile": "manta-search-bench-v1",
+    "default_depth": 6,
+    "default_fingerprint_nodes": 9135205,
+    "reset_check_depth": 1,
+    "reset_check_repeats": 2,
+    "reset_fingerprint_nodes": 38164,
+    "native_portable_agreement": true
+  },
+  "verification": {
+    "lint": "zig build lint",
+    "test_modes": [
+      "zig build test -Doptimize=Debug",
+      "zig build test -Doptimize=ReleaseSafe",
+      "zig build test -Doptimize=ReleaseFast"
+    ],
+    "active_uci_transcript_cases": 16,
+    "artifact_smoke": "uci, isready, bench 6 1 1, bench 1 2 1, quit",
+    "result": "pass"
+  },
+  "tournament_evidence": {
+    "clock_smoke": "MAN-U01",
+    "runner_qualification": "MAN-U02",
+    "host_and_null_calibration": "MAN-U03",
+    "runner": {
+      "name": "Colosseum CLI",
+      "version": "0.1.0",
+      "source_commit": "dcfdc7ef59680916ec29f4ce5c3a9b9ddd91096f",
+      "sha256": "b76042281ce3aec6117a166bc2907efcd19800dd239aeece379a73abfd21ab7c",
+      "allowed_gate": "coarse early gates, normally [5,20] nElo, candidate as engine A",
+      "forbidden_gate": "[3,10] nElo, claims at 10 nElo or finer, and release-strength evidence"
+    },
+    "representative_config": {
+      "file": "config/colosseum/step-4.5-1t-3s.toml",
+      "sha256": "f779012ed996e9da29d92ec7984b82cb1cf969c036989280b0f4e7cb2f8729d1",
+      "time_control": "3+0.03",
+      "threads": 1,
+      "concurrency": 7
+    },
+    "opening_manifest": {
+      "file": "config/colosseum/step-4.5-book-manifest.toml",
+      "sha256": "00b15954c398c2d1f58b2ec7e1fd6fa55bbc1595a8d80dbe1170804dcdc7e952"
+    }
+  },
+  "reproducibility": {
+    "exact_artifact_hashes_recorded": true,
+    "byte_reproducibility_claimed": false,
+    "note": "Fresh Zig Windows builds from different roots produced behaviorally identical artifacts with different bytes; Phase 10 owns reproducible release assets."
+  }
+}

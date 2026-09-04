@@ -1,235 +1,115 @@
-# Manta experiment ledger
+# Manta Experiment Ledger
 
-This is the indexed maintainer record of Manta measurements and the conditional
-lessons they support. It is not a roadmap: [`PLAN.md`](PLAN.md) owns sequencing
-and gates; [`REQUIREMENTS.md`](REQUIREMENTS.md) owns normative acceptance
-criteria; [`GUIDE.md`](GUIDE.md) is the short operational view.
-[`CHANGELOG.md`](CHANGELOG.md) remains user-facing.
+This file is the compact decision index for tuning, playing-strength and
+performance evidence. Exact registrations, hashes, raw artifacts and detailed
+reasoning remain in the cited ADRs, `tools/results`, Git history and retained
+run directories.
 
-Manta currently has no implementation and therefore no native experiment
-results. The imported Basilisk/Rarog rows below are priors that shape test
-design. They never accept a Manta change or establish Manta Elo.
+## Evidence rules
 
-## Contents
+- Register the candidate, baseline, hypothesis, time/thread/hash/opening setup,
+  seed, bounds, game cap, anomaly policy and stop rule before a playing run.
+- Only a clean H1 SPRT promotes a prospectively registered candidate. H0 rejects;
+  a game-cap stop is unresolved and does not promote.
+- A post-result maintainer waiver is recorded explicitly and never rewritten as
+  a clean prospective gate.
+- Static tests, loss, fixed-node quality, speed and fingerprints are diagnostic
+  filters. They do not prove playing strength.
+- SPSA pilots establish coordinate activity only. Promote only a complete rounded
+  fit after its own clean game gate.
+- Do not repeat a rejected mechanism without the recorded trigger or genuinely
+  new evidence.
 
-- [1. How to use this ledger](#1-how-to-use-this-ledger)
-  - [Evidence vocabulary](#evidence-vocabulary)
-  - [Recording contract](#recording-contract)
-  - [Artifact contract](#artifact-contract)
-- [2. Measurement, harness and tuning](#2-measurement-harness-and-tuning)
-- [3. Board, state and correctness](#3-board-state-and-correctness)
-- [4. UCI, root, time management and SMP](#4-uci-root-time-management-and-smp)
-- [5. Search and selectivity](#5-search-and-selectivity)
-- [6. Evaluation, NNUE and data](#6-evaluation-nnue-and-data)
-- [7. Throughput, build and platforms](#7-throughput-build-and-platforms)
-- [8. Imported Basilisk/Rarog priors](#8-imported-basiliskrarog-priors)
-- [9. Open retry and adoption map](#9-open-retry-and-adoption-map)
-- [10. New experiment template](#10-new-experiment-template)
+## Manta 1 production state
 
-## 1. How to use this ledger
-
-Search by subsystem and stable ID before proposing a mechanism, tune, tool
-change or retry. Cite IDs in commit messages and `PLAN.md` when evidence changes
-a future decision. Do not copy ledger tables into the roadmap.
-
-Every result is conditional on one source state, Zig/compiler, build pipeline,
-machine population, time control, book, adjudication and engine interaction.
-Use cautious language: “under these conditions this suggests …”, never
-“feature X is universally good/bad.”
-
-### Evidence vocabulary
-
-| Term | Meaning |
-|---|---|
-| **Accepted** | Passed its prospectively registered gate and entered the accepted Manta baseline. |
-| **Retained** | Kept for correctness, infrastructure or structural value; strength may be unresolved. |
-| **Rejected** | Failed its registered gate or had clear adverse evidence and was reverted/disabled. |
-| **Neutral/inconclusive** | The registered evidence did not distinguish a useful effect at its resolution. |
-| **Observation** | Diagnostic or benchmark evidence; not an acceptance verdict. |
-| **Imported prior** | Evidence from Basilisk/Rarog or elsewhere. It may shape Manta experiment order/design but never bypasses Manta gates. |
-| **Parked** | Not accepted; preserved inert or on a branch until an objective retry trigger occurs. |
-
-### Recording contract
-
-Every experiment that reaches a verdict updates this file in the same commit
-that accepts, reverts or closes it. Record:
-
-1. stable ID, date, owner, baseline and candidate source SHAs;
-2. dirty-diff hash if either source was dirty;
-3. hypothesis and interacting producers/consumers expected to change;
-4. prospectively registered gate, hypotheses, budget and stop rule;
-5. exact Zig/LLVM, target/features, build options and PGO manifest;
-6. binary, book, configuration, dependency and network/data hashes;
-7. TC, threads, Hash, concurrency, physical-core affinity/topology and
-   adjudication profile;
-8. games, W-D-L, estimate/CI and LLR where applicable;
-9. diagnostics separately from the verdict: fingerprint, nodes, depth, EBF,
-   NPS, recall, contradictions, counters, static loss and suites;
-10. disposition, conditional lesson, objective retry trigger and artifact paths.
-
-Do not add accepted-arm Elo values together as a rating forecast. Each playing
-candidate has one prospectively registered, scope-representative time-based
-promotion gate. Fixed-node games and other time controls are observations unless
-they answer a distinct claim or a cumulative phase/release question; they are
-not automatic duplicate SPRTs. Fast-TC results may compress or reverse at
-longer time controls, so choose the authoritative condition before launch. A
-successful SPSA trajectory is a proposal, not proof; its baked production
-binary requires the registered SPRT.
-
-### Artifact contract
-
-- Store large PGNs, binaries, books, networks, datasets and profiles outside
-  Git under a versioned manifest; commit only compact durable metadata.
-- Record source and artifact hashes before a long job starts.
-- A dirty binary may diagnose but cannot become an accepted/release baseline.
-- Never time builds/benchmarks/games while another load is active. Record any
-  contamination and discard timing evidence rather than rationalize it.
-- Harness/runner changes use identical-binary calibration before engine
-  candidates resume.
-- When Colosseum becomes the default runner, preserve bridge manifests and the
-  last calibrated legacy adapter so old evidence remains interpretable.
-
-## 2. Measurement, harness and tuning
-
-No native Manta experiments yet.
-
-Future IDs use `MAN-Mnn`.
-
-| ID | Experiment and conditions | Result / disposition | Conditional lesson and retry trigger | Source |
-|---|---|---|---|---|
-| — | — | — | — | — |
-
-## 3. Board, state and correctness
-
-No native Manta experiments yet.
-
-Future IDs use `MAN-Bnn`.
-
-The Phase-2 board benchmark must name its exact profile:
-
-| Profile | Purpose | Direct comparison rule |
+| Area | Released state | Evidence |
 |---|---|---|
-| `basilisk-board-v1` | Reproduce Basilisk's current corpus/workload/statistics for historical comparison. | Compare only runs using this exact profile and manifest. |
-| `rarog-board-v1` | Reproduce Rarog's current corpus/workload/statistics for historical comparison. | Compare only runs using this exact profile and manifest. |
-| `cross-engine-board-v1` | Reconciled five-position, six-workload, median/MAD contract for future three-engine comparisons. | All engines must execute identical manifest/work counts on the same idle host. |
+| Classical evaluation | MAN-E19 fitted structural HCE | Accepted H1 over the prior evaluator after 1,932 scored games at `+50.09 +/- 15.49` nElo; ADR-0056 |
+| One-thread search | MAN-S29 complete rounded search fit | Accepted H1 over MAN-S19 after 4,596 games at `+22.49 +/- 10.04` nElo; ADR-0063 |
+| Clock policy | MAN-T05 complete rounded time fit | H1 after 4,188 games at `+24.48 +/- 10.52` nElo, accepted by explicit maintainer judgment despite the wrapper's prospective zero-timeout rejection; candidate had one completed time forfeit and baseline five |
+| SMP | MAN-R03 main-authoritative lazy SMP | 4T versus 1T accepted H1 after 194 games at `+187.72 +/- 48.89` nElo; ADR-0064 |
+| Deterministic identity | One-thread depth-6 bench | `799,610` nodes |
 
-Required `cross-engine-board-v1` workloads are legal moves, legal captures,
-make/unmake, pin-aware threshold SEE over captures, startpos perft(4), and
-two-ply game simulation. The finalized manifest and hashes are recorded as the
-first `MAN-Bnn` observation before any performance optimization.
+These measurements establish promotion decisions under their registered
+conditions. Small decisive samples, especially cumulative and 4T-versus-1T
+runs, are not precise ratings and cannot attribute value to individual bundled
+components.
 
-| ID | Experiment and conditions | Result / disposition | Conditional lesson and retry trigger | Source |
-|---|---|---|---|---|
-| — | — | — | — | — |
+## Cumulative release evidence
 
-## 4. UCI, root, time management and SMP
+| ID | Comparison | Verdict |
+|---|---|---|
+| `MAN-C01` | Final Phase-5 MAN-E19/MAN-S29 versus corrected Phase-5.0, 1T, `3+0.03`, `[5,20]` | Accepted H1 after 126 games at `+459.61 +/- 60.66` nElo without anomaly. This proves a material cumulative Phase-5 gain, not a precise 460-nElo rating. |
+| `MAN-C02` | Final MAN-T05 at 4T versus final Phase-5 MAN-S29 at 1T, `3+0.03`, `[5,20]` | Accepted H1 after 150 scored games at `+305.51 +/- 55.60` nElo without anomaly. This closes Phase 6 but does not isolate UCI, time or SMP value. |
 
-No native Manta experiments yet. Future IDs use `MAN-Unn` for protocol and
-`MAN-Rnn` for root/time/SMP.
+Raw cumulative evidence is retained under
+`tools/results/sprt_MAN-C01-*` and `tools/results/sprt_MAN-C02-*`.
 
-UCI transcript tests are specifications, not experiments. A deliberate change
-from the Phase-1 contract receives an ADR and regression; only performance or
-strength claims receive an experiment verdict.
+## Accepted development lineage
 
-| ID | Experiment and conditions | Result / disposition | Conditional lesson and retry trigger | Source |
-|---|---|---|---|---|
-| — | — | — | — | — |
+| ID | Decision retained in production |
+|---|---|
+| `MAN-S15` | Pre-NNUE search baseline after the rejected singular-extension candidate |
+| `MAN-S17` | Continuation-history evidence |
+| `MAN-S19` | Static-eval, TT and qsearch synchronization; final pre-fit search head |
+| `MAN-S22` | Behavior-identical convergence checkpoint |
+| `MAN-E19` | Completed classical evaluator coverage plus constrained fit |
+| `MAN-S29` | Complete ten-coordinate search SPSA bake |
+| `MAN-R03` | Main-authoritative lazy SMP pool |
+| `MAN-T05` | Complete six-coordinate integrated time-management fit |
 
-## 5. Search and selectivity
+Acceptance of a bundle does not establish that every included term helped.
+Frozen baselines exist only for reconstruction and do not remain runtime
+selectors unless a requirement explicitly needs them.
 
-No native Manta experiments yet.
+## Tuning history
 
-Future IDs use `MAN-Snn`.
+| ID | Scope and outcome |
+|---|---|
+| `MAN-S26` | Six-coordinate, 128-iteration search sensitivity pilot completed 4,096 games; pilot theta was not promoted. |
+| `MAN-S27` | Withdrawn before running because it omitted live interacting search/history controls. |
+| `MAN-S28` | Ten-coordinate search SPSA completed 2,000 iterations / 64,000 games; every coordinate remained active and away from rails. |
+| `MAN-S29` | Sole rounded MAN-S28 bake; accepted H1 and became production. |
+| `MAN-T01` | Colosseum time pilot invalid at iteration zero after engine faults; withdrawn. |
+| `MAN-T02` | Weather Factory replacement invalid because its recovering runner committed across an infrastructure stall; theta rejected. |
+| `MAN-T03` | Clean replacement prepared, then withdrawn unrun. |
+| `MAN-T04` | Six-coordinate Weather Factory time fit completed 1,000 iterations / 32,000 games with final floating theta `1034/957/4291/1036/1049/1046`. |
+| `MAN-T05` | Sole nearest-integer time bake, accepted by the documented maintainer judgment and made production. |
 
-| ID | Experiment and conditions | Result / disposition | Conditional lesson and retry trigger | Source |
-|---|---|---|---|---|
-| — | — | — | — | — |
+The time-sensitivity runner scores completed time forfeits as chess outcomes
+because clock safety is part of that fit. Crashes, disconnects, illegal moves,
+affinity faults, incomplete results and nonzero exits remain fatal. Other SPSA
+groups retain strict timeout handling.
 
-## 6. Evaluation, NNUE and data
+## Rejected or parked hypotheses
 
-No native Manta experiments yet.
+| ID or area | Verdict | Reopen only when |
+|---|---|---|
+| `MAN-S14` singular-extension family | Rejected and disabled | A new, independently justified extension authority exists |
+| `MAN-S16` capture history | Rejected and disabled | New evidence identifies the original missing relation |
+| `MAN-S18` LMR synchronization | Rejected | Search architecture changes invalidate the old result |
+| `MAN-S20` main selectivity | H0; disabled | A new producer/consumer relation changes the hypothesis |
+| `MAN-S21` extension/depth authority | Exhausted cap without H1; disabled | Materially new evidence and a newly registered candidate exist |
+| `MAN-S23` / `MAN-S24` correction selectivity | Deterministically refuted / never opened | A valid structural producer first passes its own gate |
+| `MAN-S25` pawn-structure correction history | H0; archived default-off | New evidence changes the producer or authority contract |
+| `MAN-E20` context-weighted space | Static fit reversed sign and missed validation floor | A different chess mechanism and label-quality case are established |
+| `MAN-E21` shelter-moderated king danger | H0 at `-9.31 +/- 7.98` nElo | A materially different coupling is derived |
+| `MAN-R01` root-uncertainty time consumer | H0; disabled | Root evidence or time architecture changes materially |
+| `MAN-R02` stability-gated aspiration | 16,000-game cap without H1; disabled | Evaluator/search head changes make the old gate stale |
+| Colosseum | Parked by maintainer direction | The maintainer explicitly authorizes re-evaluation |
+| Additional classical HCE fitting | Closed in the normal path | Serious NNUE retries fail and Phase 11 is explicitly entered |
+| Additional pre-NNUE search/time SPSA | Closed | Phase-9 co-adaptation freezes new interacting consumers and justifies a fit |
 
-Future IDs use `MAN-Enn` for HCE/evaluation, `MAN-Nnn` for NNUE and `MAN-Dnn`
-for datasets/training.
+## New experiment template
 
-The Phase-3 Basilisk HCE reference corpus is a conformance record, not proof of
-strength. Intentional differences from Basilisk receive native Manta IDs and
-must separate correctness/design rationale from later game evidence.
+Before creating a configuration or binary, record:
 
-| ID | Experiment and conditions | Result / disposition | Conditional lesson and retry trigger | Source |
-|---|---|---|---|---|
-| — | — | — | — | — |
-
-## 7. Throughput, build and platforms
-
-No native Manta experiments yet.
-
-Future IDs use `MAN-Pnn`.
-
-| ID | Experiment and conditions | Result / disposition | Conditional lesson and retry trigger | Source |
-|---|---|---|---|---|
-| — | — | — | — | — |
-
-## 8. Imported Basilisk/Rarog priors
-
-These rows are explicitly **not Manta results**. They capture lessons worth
-designing around and the Manta phase that must verify them locally. In the
-coverage column a `§` prefix cites a numbered `PLAN.md` section and a bare
-number cites a `PLAN.md` phase step.
-
-| ID | Imported evidence | Manta implication | PLAN coverage |
-|---|---|---|---|
-| MAN-X01 | Basilisk/Rarog found scheduler placement and concurrent compilation/timing capable of moving small game and NPS readings materially. | Discover physical cores, pin explicitly, reserve capacity, forbid concurrent timed work, and calibrate identical binaries before candidate tests. | §3.1–3.2, 4.4 |
-| MAN-X02 | Both engines encountered tuners fitted around defects or incomplete mechanisms; a correct standalone repair could look strongly negative until consumers were jointly refit. | Freeze architecture before SPSA, keep related mechanisms ablatable, diagnose interactions and use post-fit ablations. | §3.4, 5.1–5.3 |
-| MAN-X03 | Exact bench node identity survived behaviour-neutral speed work, but single-build/single-run NPS comparisons produced misleading conclusions. | Treat fingerprint as behaviour evidence only; use identical-binary calibration plus pooled/interleaved independent production builds for speed. | §3.3, §4.2, 10.2 |
-| MAN-X04 | KBNK/KQK, mate-distance, WAC, perft and rule-50 tests caught semantic failures but did not predict Elo reliably. | Keep canaries mandatory while reserving strength verdicts for registered games. | §3.3, 4.3 |
-| MAN-X05 | Multi-thread fixes and strength gains differed radically from 1T behavior; private helper clocks, node budgets and result ownership caused real failures. | Design SMP ownership before implementation and gate clock safety/strength independently at 1T and 4T. | 0.2, 6.0–6.2 |
-| MAN-X06 | Repeated HCE work in Basilisk stopped transferring reliably, while both engines identified NNUE as the main evaluation path. | Use Basilisk HCE as bootstrap/oracle/fallback, keep it maintained, but direct normal evaluation investment to NNUE. | 3, 7–9, 11 |
-| MAN-X07 | Cross-compiled ARM/x86 assets could handshake and agree on nodes while still lacking proven ISA behavior or native speed. | Inspect emitted instructions and dependencies; require target-native correctness and performance before release. | 10.0–10.1 |
-| MAN-X08 | Robust process tests exposed ordering, EOF, stale stop, ponder, spent-clock, threaded PV and malformed-input defects not covered by parser unit tests. | Freeze UCI transcripts in Phase 1 and complete process parity before tournament use. | 1.1–1.2, 4.2, 6.1 |
-| MAN-X09 | Current Basilisk and Rarog board benchmarks use similar names but differ in one FEN, one hot operation and sample/estimator choices. | Maintain historical profiles and publish an identical versioned cross-engine manifest before direct comparison. | §4.1, 2.3 |
-| MAN-X10 | Search bounds from static eval, stand pat, qsearch, ProbCut, null, reduced and full searches were not interchangeable; provenance leaks caused unsafe consumers. | Introduce typed result evidence with the initial search rather than retrofit it after tuning. | 4.0–4.1, 5.1 |
-| MAN-X11 | Root aspiration, timing, legal fallback and helper-result selection became inconsistent when driven by separate confidence signals. | Define one completed-root evidence model and use it across root consumers. | 5.1, 6.0–6.2 |
-| MAN-X12 | SPSA schedule/unit/default drift and tune-only option mismatches invalidated assumptions even when runs appeared to converge. | Generate defaults/options/clamps from one source, assert every emitted perturbation and register schedule/horizon before launch. | §3.4, 4.4 |
-| MAN-X13 | Fast-TC accepted gains compressed materially at longer time controls and external opponents. | Choose the development gate prospectively for the claim, then use one cumulative longer, threaded or external cohort matched to the phase/release claim rather than replaying every candidate at all conditions. | §3.3, 6.2, 10.3 |
-| MAN-X14 | NNUE static loss, teacher transfer and training trajectories did not consistently predict playing strength. | Require untouched sets, multiple seeds, integer conformance, NPS and SPRT; do not promote on loss alone. | 7–9 |
-| MAN-X15 | PEXT availability did not imply equal performance across x86 microarchitectures; ISA labels, build flags and runtime checks could drift. | Model AVX2/BMI2 as sibling capabilities, include measured microarchitecture suitability and make artifact/runtime contracts executable. | 10.0 |
-
-## 9. Open retry and adoption map
-
-This table contains repository-wide tool or hypothesis triggers that are not
-yet Manta experiments.
-
-| Item | Current state | Objective trigger | Destination |
-|---|---|---|---|
-| Third-party Zig linter | ZLint 0.9.1 declares Zig 0.16.0 compatibility; it is not yet a Manta gate. | Pin 0.9.1, reproduce it under exact Zig 0.16.0 and review a zero-warning baseline. If unsuitable, record the defect and retain project checks. | Phase 1 quality pipeline |
-| Colosseum runner | Desired future default; required CLI surface is not yet complete. | CLI supports Manta's SPRT/SPSA/gauntlet/manifests/affinity/adjudication needs; identical-binary calibration and legacy bridge pass. | Phase 4.5 |
-| Contempt | Baseline draw score is neutral; no public option exists. | Stable single-thread baseline permits a registered static/dynamic, analysis/play, root-perspective and draw-rule investigation with opponent-diverse native games. | Phase 5.3 |
-| Linux libc/musl packaging | WSL2 is the primary local Linux x86-64 test environment; no libc form is preselected as fastest. | C integration or release packaging exists, allowing libc-free/GNU/static-musl deterministic parity, dependency inspection, WSL/native smoke tests and controlled performance A/B. | Phase 5 or 10 |
-| HCE tuning | Closed during the normal NNUE path. | Serious NNUE retries fail and the user explicitly enters Phase 11 after written review. | Phase 11 |
-| Consolidated search SPSA | Deferred; phase entry alone never authorizes it and the normal plan has no pre-NNUE run. | Frozen consumers plus a written necessity review show that interacting continuous coordinates are sensitive/uncertain, smaller experiments are inadequate and tuning now is more valuable than deferral. | Normally Phase 9; earlier only by explicit PLAN amendment and approval |
-| Additional SPSA | Not authorized. | Evidence demonstrates that an authorized consolidated fit could not identify the necessary parameter class. | Explicit PLAN amendment |
-
-An imported prior or parked item becomes a new Manta experiment with a new
-native ID. It never overwrites historical evidence.
-
-## 10. New experiment template
-
-```markdown
-### MAN-<area><number> — <short name>
-
-- Date / owner:
-- Baseline SHA / candidate SHA / dirty-diff hash:
-- Hypothesis and interacting producers/consumers:
-- Registered gate, hypotheses, budget and stop rule:
-- Build: Zig/LLVM, optimize mode, target/features, PGO manifest:
-- Artifacts: binary/book/config/network/data/dependency hashes:
-- Games: TC, threads, Hash, concurrency, physical cores/affinity, adjudication:
-- Result: games, W-D-L, Elo/nElo and CI, LLR:
-- Deterministic evidence: tests, perft, fingerprint, conformance:
-- Diagnostics: nodes, EBF, NPS, depth, recall, contradictions, counters, loss:
-- Disposition: accepted / retained / rejected / neutral / observation / parked:
-- Conditional lesson:
-- Objective retry trigger or `closed`:
-- Artifact/manifests / commits:
-```
+1. ID, owning GUIDE/PLAN step and one mechanism-level hypothesis.
+2. Exact candidate and baseline revisions, binary hashes and switches.
+3. Chess/search producer, transformations, consumers and refutation evidence.
+4. Host, concurrency/affinity, time control, threads, hash, openings and
+   adjudication.
+5. SPRT bounds/alpha/beta/cap/seed, or SPSA coordinates/ranges/schedule/resume.
+6. Engine-fault, clock-forfeit and infrastructure-anomaly policy.
+7. Expected and worst-case time/storage and the maintainer-run command.
+8. Result, independent reconciliation, artifact hashes and the precise decision.

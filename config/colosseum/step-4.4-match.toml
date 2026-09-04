@@ -1,0 +1,24 @@
+# Registered bounded Step-4.4 CLI/artifact/resume qualification. This is a
+# correctness workflow with identical binaries and fixed work, not Elo evidence.
+
+[options]
+games = 2
+a-label = "manta-a"
+b-label = "manta-b"
+a-option = ["Hash=64"]
+b-option = ["Hash=64"]
+a-nodes = 500
+b-nodes = 500
+no-draw-adjudication = true
+no-resign-adjudication = true
+max-moves = 40
+max-engine-faults = 0
+max-time-losses = 0
+concurrency = 1
+placement = "off"
+memory-budget-mb = 256
+book = "step-4.4-openings.epd"
+book-order = "sequential"
+book-start = 0
+seed = 440044
+progress-interval-secs = 1

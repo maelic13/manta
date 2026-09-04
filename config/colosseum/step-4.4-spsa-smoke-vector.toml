@@ -1,0 +1,9 @@
+# Schedule/schema smoke only. Move Overhead is not a playing candidate and this
+# vector must never be promoted or launched as a tuning program.
+
+[[parameters]]
+name = "Move Overhead"
+initial = 10
+min = 0
+max = 100
+c_end = 0.5

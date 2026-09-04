@@ -1,0 +1,24 @@
+# Quit and EOF cancel work and exit without requiring a pending bestmove.
+@phase 1.2
+> Manta {{VERSION}} by Miloslav Macurek
+< quit
+! exit 0 within 1000ms
+
+---
+
+# EOF without active work is a clean Phase-1 shell shutdown.
+@phase 1.2
+> Manta {{VERSION}} by Miloslav Macurek
+! close-stdin
+! exit 0 within 1000ms
+
+---
+
+@phase 4.2
+> Manta {{VERSION}} by Miloslav Macurek
+< position startpos
+< go infinite searchmoves e2e4
+! allow-info begin
+! close-stdin
+! exit 0 within 1000ms
+! allow-info end

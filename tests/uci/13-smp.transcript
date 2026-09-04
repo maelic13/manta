@@ -1,0 +1,31 @@
+# Four search workers share bounded work while worker zero publishes one legal result.
+@phase 6.2
+> Manta {{VERSION}} by Miloslav Macurek
+< setoption name Threads value 4
+< position startpos
+< go nodes 20000
+! allow-info begin
+> {{BESTMOVE_LINE}}
+! allow-info end
+< setoption name Threads value 1
+< ucinewgame
+< position startpos
+< go depth 4
+! allow-info begin
+> {{BESTMOVE_LINE}}
+! allow-info end
+< quit
+! exit 0 within 1000ms
+
+---
+
+# Quit cancels and joins every helper without publishing a partial helper result.
+@phase 6.2
+> Manta {{VERSION}} by Miloslav Macurek
+< setoption name Threads value 4
+< position startpos
+< go infinite
+! allow-info begin
+< quit
+! exit 0 within 1000ms
+! allow-info end

@@ -1,0 +1,32 @@
+# Unknown commands are explained, ignored, and never make the shell unresponsive.
+@phase 1.2
+> Manta {{VERSION}} by Miloslav Macurek
+< frobnicate payload
+> info string unknown command "frobnicate" ignored
+< isready
+> readyok
+< debug on
+! silence 50ms
+< mystery
+> info string debug received "mystery"
+> info string unknown command "mystery" ignored
+< debug off
+> info string debug received "debug off"
+< isready extra
+> info string invalid isready: unexpected argument
+< isready
+> readyok
+< quit
+! exit 0 within 1000ms
+
+---
+
+# Oversized input is drained as one rejection and cannot prefix the next command.
+@phase 1.2
+> Manta {{VERSION}} by Miloslav Macurek
+! send-oversized-line
+> info string invalid input: line exceeds 65536 bytes
+< isready
+> readyok
+< quit
+! exit 0 within 1000ms

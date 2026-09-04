@@ -1,0 +1,37 @@
+# Bench uses the versioned 40-position contract and never emits bestmove.
+@phase 4.3
+> Manta {{VERSION}} by Miloslav Macurek
+< setoption name Hash value 1
+< bench 1 1 1
+> {{BENCH_POSITION_LINES}}
+> info string bench total depth 1 repeats 1 threads 1 nodes {{U64}} time_ms {{POSITIVE_U64}} nps {{U64}} ebf {{DECIMAL}} median_nodes {{U64}} top_share {{DECIMAL}}
+! silence 100ms
+< bench invalid
+> info string invalid bench: depth must be a positive integer
+< quit
+! exit 0 within 1000ms
+
+---
+
+# Multiple repeats omit per-position detail and preserve run-one identity.
+@phase 4.3
+> Manta {{VERSION}} by Miloslav Macurek
+< bench 1 2 1
+> info string bench run 1/2 depth 1 threads 1 nodes {{U64}} time_ms {{U64}} nps {{U64}}
+> info string bench run 2/2 depth 1 threads 1 nodes {{U64}} time_ms {{U64}} nps {{U64}}
+> info string bench summary depth 1 repeats 2 threads 1 fingerprint_nodes {{U64}} best_nps {{U64}} median_nps {{U64}}
+! silence 100ms
+< quit
+! exit 0 within 1000ms
+
+---
+
+# Controller-side cancellation closes the queued bench/stop epoch race.
+@phase 4.3
+> Manta {{VERSION}} by Miloslav Macurek
+< bench 6 1 1
+< stop
+> info string bench cancelled run 1/1 positions {{U64}}/40 nodes {{U64}}
+! silence 100ms
+< quit
+! exit 0 within 1000ms

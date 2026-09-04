@@ -1,0 +1,23 @@
+# Qualification-only one-iteration schedule. It exists to verify bounded SPSA
+# resolution and Manta option spelling; no live tune is authorized.
+
+[options]
+label = "manta-spsa-schema-smoke"
+option = ["Hash=64"]
+tune = "step-4.4-spsa-smoke-vector.toml"
+r-end = 0.002
+iterations = 1
+games-per-iteration = 2
+final-window-percent = 100
+nodes = 500
+no-draw-adjudication = true
+no-resign-adjudication = true
+max-moves = 40
+concurrency = 1
+placement = "off"
+memory-budget-mb = 256
+book = "step-4.4-openings.epd"
+book-order = "sequential"
+book-start = 0
+seed = 440044
+progress-interval-secs = 1

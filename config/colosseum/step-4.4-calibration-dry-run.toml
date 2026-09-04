@@ -1,0 +1,26 @@
+# Qualification-only identical-binary calibration shape. Step 4.5 replaces the
+# tiny cap and placement with a prospectively measured 5950X host design.
+
+[options]
+games = 2
+confidence = 0.95
+tolerance-nelo = 5
+a-label = "manta-a"
+b-label = "manta-b"
+a-option = ["Hash=64"]
+b-option = ["Hash=64"]
+a-nodes = 500
+b-nodes = 500
+no-draw-adjudication = true
+no-resign-adjudication = true
+max-moves = 40
+max-engine-faults = 0
+max-time-losses = 0
+concurrency = 1
+placement = "off"
+memory-budget-mb = 256
+book = "step-4.4-openings.epd"
+book-order = "sequential"
+book-start = 0
+seed = 440044
+progress-interval-secs = 1

@@ -1,0 +1,38 @@
+{
+  "schema": "manta-eval-reference-v1",
+  "recorded_utc": "2026-08-16",
+  "role": "Classical evaluation reference for the Step-5.3.0 residual harness",
+  "reference": {
+    "name": "final pre-NNUE Stockfish master",
+    "upstream": "https://github.com/official-stockfish/Stockfish",
+    "commit": "9587eeeb5ed29f834d4f956b92e0e732877c47a7",
+    "tree": "195aaf13e94aac16e4065e76b67aafd5f8704f63",
+    "why": "The plan pins this as the strongest final pre-NNUE snapshot. It is preferred over the Stockfish 11 release, which is the last released pure-HCE engine but the weaker evaluator, and over any other engine whose evaluation is weaker still.",
+    "license": "GPL-3.0",
+    "vendored": false
+  },
+  "build": {
+    "compiler": "zig c++ (clang) from the pinned Zig 0.16.0 toolchain",
+    "command": "zig c++ -O2 -std=c++17 -DNDEBUG -DIS_64BIT -DUSE_POPCNT -w -o sf-pre-nnue.exe src/*.cpp src/syzygy/*.cpp",
+    "identity": "Stockfish 160826 64 POPCNT",
+    "notes": [
+      "Only tbprobe.cpp lives outside src/, so src/syzygy/*.cpp must be included or the link fails on Tablebases symbols.",
+      "The upstream source is unmodified; -w suppresses warnings, including the -Wdate-time reproducibility warning that is promoted to an error by default.",
+      "The binary is a local diagnostic asset and is not committed."
+    ]
+  },
+  "extraction": {
+    "method": "One process invocation per position: `position fen <fen>` then `eval`, reading the `Final evaluation:` line and converting pawns to centipawns.",
+    "perspective": "white-relative",
+    "one_process_per_position": "Required. Batching all positions into a single process silently misaligns results, because the reference emits no evaluation for a position whose side to move is in check and the outputs then shift by one.",
+    "in_check_positions": "The reference refuses to evaluate while the side to move is in check, so those cases record a null reference rather than a substituted or interpolated value."
+  },
+  "storage": {
+    "location": "src/eval/cohorts.zig, field `reference_cp` on each case",
+    "why": "Freezing the values in the cohort table keeps the harness deterministic and reviewable, and lets it run on a machine with no reference build. Re-deriving them requires rebuilding the pinned reference and updating this record."
+  },
+  "observations": [
+    "The reference gives an identical evaluation to `rule-fifty-bishop-knight` (halfmove clock 98) and `disagreement-bishop-knight-mate` (halfmove clock 0), which are the same position. Its static evaluation is therefore rule-50 blind, exactly like Manta's.",
+    "Reference magnitudes in trivially won endings are very large (about 61 to 66 pawns), because that evaluator applies substantial winnable scaling. Residuals in those cohorts measure scaling philosophy, not material disagreement."
+  ]
+}

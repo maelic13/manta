@@ -1,0 +1,22 @@
+# isready is prompt during search but acknowledges an earlier ordered barrier.
+@phase 4.2
+> Manta {{VERSION}} by Miloslav Macurek
+< ucinewgame
+< isready
+> readyok
+< position startpos
+< go infinite searchmoves e2e4
+! allow-info begin
+< isready
+> readyok
+< position startpos moves d2d4
+> bestmove e2e4{{PONDER}}
+! allow-info end
+< isready
+> readyok
+< go nodes 1 searchmoves d7d5
+! allow-info begin
+> bestmove d7d5
+! allow-info end
+< quit
+! exit 0 within 1000ms

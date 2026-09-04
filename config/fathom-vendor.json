@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "role": "Vendored third-party Syzygy tablebase probing library (Step 5.2)",
+  "library": "Fathom",
+  "upstream": "https://github.com/jdart1/Fathom",
+  "commit": "c9c6fef0dddc05d2e242c183acf5833149ab676d",
+  "commit_subject": "Fix possible integer alignment issues",
+  "vendored_utc": "2026-08-16",
+  "license": {
+    "spdx": "MIT",
+    "copyright": [
+      "Copyright (c) 2013-2018 Ronald de Man",
+      "Copyright (c) 2015 basil00",
+      "Copyright (c) 2016-2025 by Jon Dart"
+    ],
+    "notice": "third_party/fathom/LICENSE is preserved verbatim; per-file notices in the vendored sources are unmodified.",
+    "compatibility": "MIT is compatible with Manta's GPL-3.0-or-later distribution."
+  },
+  "policy": {
+    "authorized_by": "PLAN.md source-exception clause: Fathom is the anticipated third-party source exception for Syzygy.",
+    "modifications": "none",
+    "scope": "Probe and format layer only. The typed WDL/DTZ contract, score conversion, rule-50 policy, root filtering and interior search policy remain original Manta Zig.",
+    "update_procedure": "Changing the pinned commit requires re-recording every hash below, re-running the deterministic gates, and an ADR amendment. The revision never moves silently.",
+    "byte_fidelity": "Files are stored exactly as published upstream with LF endings. '.gitattributes' marks 'third_party/** -text' so no line-ending normalization can alter them; without that rule a core.autocrlf checkout rewrites the bytes and invalidates every sha256 below."
+  },
+  "files": {
+    "LICENSE": {
+      "sha256": "C8038055839BD02F995CD7D1BBA19657720097F5604411A7977EBCB5B4A37759",
+      "upstream_blob": "274394e5db7392c356b9231ce25d6618b075a06b"
+    },
+    "stdendian.h": {
+      "sha256": "E5B8187EEC89EF83E731EA92BE8CA0DF4B533D8D21075FC4E2C86B4B00D7B7C3",
+      "upstream_blob": "9f598b5c579154a8a75e6c8c5eec9d4b5495216a"
+    },
+    "tbchess.c": {
+      "sha256": "119F19FA8714686798CA7BE011E5B234F99C93AEC751E9492F2664757D6C029D",
+      "upstream_blob": "bca4d1a58de446ed84dbfff18bf7457be097736b"
+    },
+    "tbconfig.h": {
+      "sha256": "69FE1821B471164BD759CF46C486D55B7FA727E348A5EE306B18D19537AC3A03",
+      "upstream_blob": "5836386e43b8464e14be73dcf60ce2d8134a6ea0"
+    },
+    "tbprobe.c": {
+      "sha256": "7ED0CC80626271342BFE413D6C421756B6851F977A064461F5F555E1B598DF35",
+      "upstream_blob": "5eac014dc5431d6e23a55b7c5dea45a34a89fa2a"
+    },
+    "tbprobe.h": {
+      "sha256": "DC7808DC58C2A1AF921A612F94041B917DFAC94D3215A76A2B2B0C53C94EA561",
+      "upstream_blob": "82850e72686b6e116e18123775716a66fb8ea060"
+    }
+  },
+  "excluded": {
+    "apps/": "Standalone CLI driver; not part of the engine build.",
+    "Makefile": "Upstream build driver; Manta owns its own build.zig integration.",
+    "README.md": "Not required for license compliance or the build."
+  }
+}

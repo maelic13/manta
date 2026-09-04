@@ -1,0 +1,7 @@
+# A blocked presenter cannot prevent urgent shutdown.
+@phase 1.2
+> Manta {{VERSION}} by Miloslav Macurek
+! block-stdout
+< frobnicate
+< quit
+! exit 0 within 1000ms

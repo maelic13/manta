@@ -1,0 +1,40 @@
+# MAN-S03 bounded throughput/fault pilot. Candidate is engine A because the
+# conditionally qualified CLI's observed calibration direction disadvantages A.
+
+command = ["match"]
+positionals = [
+  "../../zig-out/candidates/MAN-S03-null-move/manta-candidate.exe",
+  "../../zig-out/candidates/MAN-S03-null-move/manta-baseline.exe",
+]
+
+[options]
+games = 100
+a-label = "manta-null-move-candidate"
+b-label = "manta-phase-5.0-baseline"
+a-option = ["Hash=64"]
+b-option = ["Hash=64"]
+a-base-ms = 3000
+a-increment-ms = 30
+a-margin-ms = 100
+b-base-ms = 3000
+b-increment-ms = 30
+b-margin-ms = 100
+draw-move = 40
+draw-moves = 8
+draw-score-cp = 10
+resign-moves = 3
+resign-score-cp = 600
+max-moves = 120
+max-engine-faults = 0
+max-time-losses = 0
+concurrency = 7
+cores-per-engine = 1
+placement = "auto"
+headroom-cores = 2
+memory-budget-mb = 1024
+book = "../../books/step-4.5/8moves_v3-plies16-seed450045-n16384.epd"
+book-order = "random"
+book-start = 0
+seed = 510031
+dir = "../../zig-out/colosseum/MAN-S03-null-pilot"
+progress-interval-secs = 10

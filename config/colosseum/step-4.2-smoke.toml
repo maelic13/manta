@@ -1,0 +1,25 @@
+# Registered Step-4.2 protocol/time-safety smoke. Engine paths, game count and
+# durable run directory remain explicit launch arguments so the same policy
+# serves the one-pair pilot and four-pair continuation.
+
+[options]
+a-label = "manta-a"
+b-label = "manta-b"
+a-option = ["Hash=64"]
+b-option = ["Hash=64"]
+a-base-ms = 3000
+a-increment-ms = 30
+b-base-ms = 3000
+b-increment-ms = 30
+a-margin-ms = 100
+b-margin-ms = 100
+no-draw-adjudication = true
+no-resign-adjudication = true
+max-moves = 120
+max-engine-faults = 0
+max-time-losses = 0
+concurrency = 1
+placement = "off"
+memory-budget-mb = 256
+seed = 424242
+progress-interval-secs = 1

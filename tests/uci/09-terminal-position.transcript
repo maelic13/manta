@@ -1,0 +1,13 @@
+# Checkmate and stalemate share the deliberate no-legal-move token.
+@phase 4.2
+> Manta {{VERSION}} by Miloslav Macurek
+< position fen 7k/6Q1/6K1/8/8/8/8/8 b - - 0 1
+< go depth 1
+> info depth 0 score mate 0 nodes 0 time {{U64}}
+> bestmove (none)
+< position fen 7k/5Q2/6K1/8/8/8/8/8 b - - 0 1
+< go depth 1
+> info depth 0 score cp 0 nodes 0 time {{U64}}
+> bestmove (none)
+< quit
+! exit 0 within 1000ms

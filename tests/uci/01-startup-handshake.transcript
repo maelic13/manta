@@ -1,0 +1,15 @@
+# Startup identity is emitted once; repeated UCI handshakes do not reset state.
+@phase 1.2
+> Manta {{VERSION}} by Miloslav Macurek
+< uci
+> id name Manta {{VERSION}}
+> id author Miloslav Macurek
+> {{OPTION_DECLARATIONS}}
+> uciok
+< uci
+> id name Manta {{VERSION}}
+> id author Miloslav Macurek
+> {{OPTION_DECLARATIONS}}
+> uciok
+< quit
+! exit 0 within 1000ms

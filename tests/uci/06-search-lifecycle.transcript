@@ -1,0 +1,46 @@
+# Replacement go and repeated stop preserve one bestmove per accepted search.
+@phase 4.2
+> Manta {{VERSION}} by Miloslav Macurek
+< position startpos
+< go infinite searchmoves e2e4
+! allow-info begin
+< go nodes 1 searchmoves d2d4
+> bestmove e2e4{{PONDER}}
+> bestmove d2d4
+! allow-info end
+< stop
+< stop
+! silence 100ms
+< go
+> info string invalid go: no search limit
+< go movetime 10 wtime 1000
+> info string invalid go: movetime conflicts with clock fields
+< go movetime 1 searchmoves g1f3
+! allow-info begin
+> bestmove g1f3{{PONDER}}
+! allow-info end
+< go wtime 0 btime 0 searchmoves c2c4
+! allow-info begin
+> bestmove c2c4{{PONDER}}
+! allow-info end
+< quit
+! exit 0 within 1000ms
+
+---
+
+# The worker reports bounded live root and completed-iteration information.
+@phase 6.1
+> Manta {{VERSION}} by Miloslav Macurek
+< position startpos
+< go infinite
+! allow-info begin
+> {{SEARCH_INFO}}
+< isready
+> readyok
+< stop
+> {{BESTMOVE_LINE}}
+! allow-info end
+< stop
+! silence 100ms
+< quit
+! exit 0 within 1000ms

@@ -1,0 +1,63 @@
+{
+  "schema": "manta-search-reference-v1",
+  "recorded_utc": "2026-08-14",
+  "upstream": "https://github.com/official-stockfish/Stockfish",
+  "license": "GPL-3.0",
+  "vendored": false,
+  "references": {
+    "released_hce": {
+      "name": "Stockfish 11",
+      "ref": "sf_11",
+      "commit": "c3483fa9a7d7c0ffa9fcc32b467ca844cfb63790",
+      "tree": "93525fdd9d189002afdb47518c0d2d64e8066ea3",
+      "authored": "2020-01-15T22:39:27+01:00",
+      "files_sha256": {
+        "src/search.cpp": "850F8D20B650873EA3814DBA4D82605DA8260A5F86540A5B36AD328C994AC217",
+        "src/movepick.cpp": "0086794FC9ACCA7DC5BE0DB2AFF50B5526F16014CB8AFDEDFC7ACA33F42B8205",
+        "src/evaluate.cpp": "D22667CDD714A775A0DF6A056D153EF3BD9D999FBF68E2890A95D682605B06DE",
+        "src/search.h": "689C6169B56206A9EF6DA588A682A9A24A25DAC24598EE342FBEB5BF8407608F",
+        "src/movepick.h": "F66BB42979ED95F13365ECE491CB7551151B2182AAB2333BF6BB36462AA42162",
+        "Copying.txt": "0B383D5A63DA644F628D99C33976EA6487ED89AAA59F0B3257992DEAC1171E6B"
+      }
+    },
+    "final_pre_nnue": {
+      "name": "final pre-NNUE master",
+      "commit": "9587eeeb5ed29f834d4f956b92e0e732877c47a7",
+      "tree": "195aaf13e94aac16e4065e76b67aafd5f8704f63",
+      "authored": "2020-07-30T18:56:11+02:00",
+      "files_sha256": {
+        "src/search.cpp": "6FC09D21D1885BA33E29406A06D7C6EDCBBAA977549D3C7D1E109801C64C8418",
+        "src/movepick.cpp": "9AA5ED1AF68B2B22083888A451B0A7CAEEAE1B4A42113B682C6DC23AE9B830B2",
+        "src/evaluate.cpp": "FFBDA0D4F95962CC4EC91A08C8440B0DF3497122DF0438B8CD6D443442A02A13",
+        "src/search.h": "DB64A3A140B8421C5AE9944BBDDD5620DF5D488AED329C122AFC5496EAA7A7B5",
+        "src/movepick.h": "057DB695C597003301B075215D88A22E1BE39BD822483008159F73EF603A5376",
+        "Copying.txt": "0B383D5A63DA644F628D99C33976EA6487ED89AAA59F0B3257992DEAC1171E6B"
+      }
+    }
+  },
+  "rarog_prior": {
+    "repository": "https://github.com/maelic13/rarog.git",
+    "hybrid_commit": "75d0d43af230ecf969aac13dfdbde05344c99a42",
+    "hybrid_tree": "e9a78807f4a97c3f186682a77edc3c5cadac248b",
+    "search_convergence_commit": "19c803388f0edcead17afc45f5457c032b1b3e64",
+    "search_convergence_tree": "a3bd0fbb2f7a96d867f5c144671ca17b128389bc",
+    "frozen_stockfish_commit": "9587eeeb5ed29f834d4f956b92e0e732877c47a7",
+    "material_git_blobs": {
+      "hybrid": {
+        "PLAN.md": "1526ba653e373932cc7351996c4bc97a8658c410",
+        "GUIDE.md": "af91197adbf471c7f9a0eff12a383621943fd96e",
+        "EXPERIMENTS.md": "d39caa9de44d87a0c82c57e230b2dce6e18eac05",
+        "analysis/search_analysis.md": "7d5357aae8363c33aedd471dce93ac81ec7616af",
+        "hybrid/README.md": "00a80c45cfa53d9b379bdda33c337ed7cd349843",
+        "hybrid/stockfish/SOURCE_COMMIT": "b9bce98252d6725e67635013fd75e5e554e1a6a3"
+      },
+      "search_convergence": {
+        "PLAN.md": "69562a5e48cb4d1c630e2698d614da5390406dc9",
+        "GUIDE.md": "b4df4aa1fa1e81bb6ad590d72f422ba211ab6231",
+        "EXPERIMENTS.md": "f01a78e14c7a771a883131a7721798f528663a49",
+        "analysis/search_analysis.md": "7d5357aae8363c33aedd471dce93ac81ec7616af"
+      }
+    },
+    "use": "isolation and dependency-order prior only"
+  }
+}

@@ -1,0 +1,42 @@
+# Invalid replacements retain the last complete valid position.
+@phase 4.2
+> Manta {{VERSION}} by Miloslav Macurek
+< position startpos moves e2e4 e7e5
+! silence 50ms
+< position fen invalid
+> info string invalid position: FEN requires six fields
+< position startpos moves e2e5
+> info string invalid position: illegal move "e2e5"
+< go perft 1
+> info string perft move a2a3 nodes 1
+> info string perft move a2a4 nodes 1
+> info string perft move b1a3 nodes 1
+> info string perft move b1c3 nodes 1
+> info string perft move b2b3 nodes 1
+> info string perft move b2b4 nodes 1
+> info string perft move c2c3 nodes 1
+> info string perft move c2c4 nodes 1
+> info string perft move d1e2 nodes 1
+> info string perft move d1f3 nodes 1
+> info string perft move d1g4 nodes 1
+> info string perft move d1h5 nodes 1
+> info string perft move d2d3 nodes 1
+> info string perft move d2d4 nodes 1
+> info string perft move e1e2 nodes 1
+> info string perft move f1a6 nodes 1
+> info string perft move f1b5 nodes 1
+> info string perft move f1c4 nodes 1
+> info string perft move f1d3 nodes 1
+> info string perft move f1e2 nodes 1
+> info string perft move f2f3 nodes 1
+> info string perft move f2f4 nodes 1
+> info string perft move g1e2 nodes 1
+> info string perft move g1f3 nodes 1
+> info string perft move g1h3 nodes 1
+> info string perft move g2g3 nodes 1
+> info string perft move g2g4 nodes 1
+> info string perft move h2h3 nodes 1
+> info string perft move h2h4 nodes 1
+> info string perft depth 1 nodes 29
+< quit
+! exit 0 within 1000ms

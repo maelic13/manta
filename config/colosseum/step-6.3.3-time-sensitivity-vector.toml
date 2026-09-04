@@ -1,0 +1,49 @@
+# MAN-T01: one-thread integrated time-policy sensitivity vector.
+#
+# The six coordinates are the complete active continuous surface at 1T and
+# 3+0.03. Ponder credit and helper-instability response are deliberately absent
+# because this non-pondering one-thread pilot cannot exercise them. Safety
+# reserves, polling, evidence thresholds and categorical switches are not
+# tuning parameters.
+
+[[parameters]]
+name = "TimeHorizonScale"
+initial = 1000
+min = 700
+max = 1300
+c_end = 50
+
+[[parameters]]
+name = "TimeIncrementCredit"
+initial = 1000
+min = 500
+max = 1500
+c_end = 100
+
+[[parameters]]
+name = "TimeMaximumRatio"
+initial = 4000
+min = 2000
+max = 6000
+c_end = 200
+
+[[parameters]]
+name = "TimeStabilityResponse"
+initial = 1000
+min = 0
+max = 2000
+c_end = 100
+
+[[parameters]]
+name = "TimeScoreResponse"
+initial = 1000
+min = 0
+max = 2000
+c_end = 100
+
+[[parameters]]
+name = "TimeEffortResponse"
+initial = 1000
+min = 0
+max = 2000
+c_end = 100

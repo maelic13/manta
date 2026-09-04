@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-07
+- Amended: 2026-08-29
 
 ## Context
 
@@ -44,6 +45,10 @@ Architecture dependency.
   blocked or failed output cannot force `quit` or EOF to hang indefinitely.
 - Exactly-once completion requires the active epoch and a controller-owned
   publication state.
+- Step 6.1 realizes the worker side as one coalescible progress slot plus a
+  separate joined completion result. Epoch-specific atomics provide immediate
+  control; the corresponding queued command remains FIFO-authoritative so a
+  stop after a queued replacement `go` controls the replacement.
 
 The concrete input/presenter tasks may use Zig 0.16 `std.Io.concurrent` or
 dedicated adapter threads; Phase 1 selects the simpler correct form. CPU search
@@ -63,6 +68,8 @@ workers use a project-owned persistent `std.Thread` pool.
 - Repeated-go, stale-epoch, stop/quit/EOF and ponder race tests.
 - One writer/interleaving assertions and exactly one `bestmove`.
 - Dependency lint forbids UCI/stdout imports inward.
+- The active 20-case Phase-6.1 process matrix and secondary-reference ponder
+  lifecycle comparison cover retained completion and live reporting.
 
 ## Traceability
 

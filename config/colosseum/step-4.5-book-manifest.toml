@@ -1,0 +1,28 @@
+# Compact reconstruction manifest; generated book artifacts stay under the
+# ignored books/step-4.5 directory.
+
+[source]
+repository-id = "official-books"
+license = "CC0-1.0"
+commit = "2ec69181c0b1367c5c58bcf5304a79c7b198b655"
+archive = "8moves_v3.pgn.zip"
+archive-bytes = 807558
+archive-sha256 = "7e1e9dd118b4bb97d8a8b5b8a790c86e21f8509d59a27d2883767d94477be02e"
+extracted = "8moves_v3.pgn"
+extracted-bytes = 8037438
+extracted-sha256 = "5835239f88cc2c7511b177c32392a69f3ede21819cf0616f80a7f907cd21d17e"
+
+[slice]
+tool-source = "dcfdc7ef59680916ec29f4ce5c3a9b9ddd91096f"
+tool-version = "0.1.0"
+tool-sha256 = "b76042281ce3aec6117a166bc2907efcd19800dd239aeece379a73abfd21ab7c"
+plies = 16
+order = "random"
+seed = 450045
+start = 0
+count = 16384
+output = "8moves_v3-plies16-seed450045-n16384.epd"
+output-bytes = 1026946
+output-sha256 = "ba133061729ff541f852e9776180087652a7ecb7a458cb79f7b55853f9b30c8f"
+unique = 16384
+duplicates = 0

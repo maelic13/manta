@@ -1,0 +1,29 @@
+# Option parsing is strict and resource replacement is transactional.
+@phase 4.1
+> Manta {{VERSION}} by Miloslav Macurek
+< setoption name Hash value 128
+! silence 50ms
+< setoption name Threads value 4
+! silence 50ms
+< setoption name Threads value 0
+> info string invalid setoption: Threads is outside 1..1024
+! fail-next thread-allocation
+< setoption name Threads value 2
+> info string failed setoption: Threads resource allocation failed
+< setoption name Threads value 1
+! silence 50ms
+< setoption name Hash value 0
+> info string invalid setoption: Hash is outside 1..1048576
+< setoption name Future Knob value 1
+> info string unknown option "future knob" ignored
+! fail-next hash-allocation
+< setoption name Hash value 256
+> info string failed setoption: Hash resource allocation failed
+< isready
+> readyok
+< setoption name Clear Hash value now
+> info string invalid setoption: Clear Hash does not take a value
+< setoption name Clear Hash
+! silence 50ms
+< quit
+! exit 0 within 1000ms

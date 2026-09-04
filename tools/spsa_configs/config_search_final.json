@@ -1,0 +1,32 @@
+{
+    "ProbCutMargin": {
+        "value": 100,
+        "min_value": 25,
+        "max_value": 300,
+        "step": 20
+    },
+    "ReverseFutilityMargin": {
+        "value": 100,
+        "min_value": 25,
+        "max_value": 300,
+        "step": 20
+    },
+    "LateMoveDepthScale": {
+        "value": 2,
+        "min_value": 1,
+        "max_value": 6,
+        "step": 2
+    },
+    "SeePruningUnit": {
+        "value": 100,
+        "min_value": 25,
+        "max_value": 300,
+        "step": 20
+    },
+    "QsearchDeltaCushion": {
+        "value": 100,
+        "min_value": 25,
+        "max_value": 300,
+        "step": 20
+    }
+}

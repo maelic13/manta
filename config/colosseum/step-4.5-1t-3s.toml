@@ -1,0 +1,31 @@
+# Representative one-thread host-qualification conditions. The executable is
+# implicitly one-thread until Phase 6 adds the Threads UCI option.
+
+[options]
+a-label = "manta-a-45c773c"
+b-label = "manta-b-45c773c"
+a-option = ["Hash=64"]
+b-option = ["Hash=64"]
+a-base-ms = 3000
+a-increment-ms = 30
+a-margin-ms = 100
+b-base-ms = 3000
+b-increment-ms = 30
+b-margin-ms = 100
+draw-move = 40
+draw-moves = 8
+draw-score-cp = 10
+resign-moves = 3
+resign-score-cp = 600
+max-moves = 120
+max-engine-faults = 0
+max-time-losses = 0
+cores-per-engine = 1
+placement = "auto"
+headroom-cores = 2
+memory-budget-mb = 1024
+book = "../../books/step-4.5/8moves_v3-plies16-seed450045-n16384.epd"
+book-order = "random"
+book-start = 0
+seed = 450046
+progress-interval-secs = 10

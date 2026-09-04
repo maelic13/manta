@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Preserve the backstop result for every release commit on master.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+jobs:
+  quality:
+    name: quality and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Zig
+        uses: ./.github/actions/setup-zig
+        timeout-minutes: 6
+
+      - name: Verify exact Zig
+        shell: bash
+        run: test "$(zig version)" = "0.16.0"
+
+      - name: Format, AST, policy and lint
+        run: zig build lint
+
+      - name: Compile all roots
+        run: zig build check
+
+      - name: Test Debug
+        run: zig build test -Doptimize=Debug
+
+      # ReleaseSafe is exercised by every supported host in the native matrix.
+      - name: Test ReleaseFast
+        run: zig build test -Doptimize=ReleaseFast
+
+  native:
+    name: native ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            label: linux-x86-64
+          - runner: ubuntu-24.04-arm
+            label: linux-arm64
+          - runner: windows-2025
+            label: windows-x86-64
+          - runner: macos-26-intel
+            label: macos-x86-64
+          - runner: macos-26
+            label: macos-arm64
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Zig
+        uses: ./.github/actions/setup-zig
+        timeout-minutes: 6
+
+      - name: Verify exact Zig
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test "$(zig version)" = "0.16.0"
+          zig env
+
+      - name: Compile all roots
+        run: zig build check -Doptimize=ReleaseSafe --summary all
+
+      - name: Test ReleaseSafe
+        run: zig build test -Doptimize=ReleaseSafe --summary all
+
+      - name: Build canonical portable artifact
+        run: zig build dist -Dportable
+
+      - name: Smoke-test executable
+        run: zig build run -Dportable
+
+  gate:
+    name: gate
+    if: ${{ always() }}
+    needs: [quality, native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every CI job
+        shell: bash
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          NATIVE_RESULT: ${{ needs.native.result }}
+        run: |
+          printf 'quality=%s\nnative=%s\n' "$QUALITY_RESULT" "$NATIVE_RESULT"
+          test "$QUALITY_RESULT" = success
+          test "$NATIVE_RESULT" = success

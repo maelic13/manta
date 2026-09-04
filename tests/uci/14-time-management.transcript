@@ -1,0 +1,36 @@
+# Integrated clock allocation is invariant across the qualified 1/2/4/8-worker pool.
+@phase 6.3
+> Manta {{VERSION}} by Miloslav Macurek
+< setoption name Threads value 1
+< position startpos
+< go wtime 10000 btime 10000 depth 4
+! allow-info begin
+> info string time optimum_ms 260 maximum_ms 1115 root {{U64}} stability {{U64}} score {{U64}} effort {{U64}} smp {{U64}} combined {{U64}} ponder_credit_ns {{U64}} helper_events {{U64}} helpers 0 target_ns {{U64}} reason search_complete hard_overshoot_ns 0
+> {{BESTMOVE_LINE}}
+! allow-info end
+< setoption name Threads value 2
+< ucinewgame
+< position startpos
+< go wtime 10000 btime 10000 depth 4
+! allow-info begin
+> info string time optimum_ms 260 maximum_ms 1115 root {{U64}} stability {{U64}} score {{U64}} effort {{U64}} smp {{U64}} combined {{U64}} ponder_credit_ns {{U64}} helper_events {{U64}} helpers 1 target_ns {{U64}} reason search_complete hard_overshoot_ns 0
+> {{BESTMOVE_LINE}}
+! allow-info end
+< setoption name Threads value 4
+< ucinewgame
+< position startpos
+< go wtime 10000 btime 10000 depth 4
+! allow-info begin
+> info string time optimum_ms 260 maximum_ms 1115 root {{U64}} stability {{U64}} score {{U64}} effort {{U64}} smp {{U64}} combined {{U64}} ponder_credit_ns {{U64}} helper_events {{U64}} helpers 3 target_ns {{U64}} reason search_complete hard_overshoot_ns 0
+> {{BESTMOVE_LINE}}
+! allow-info end
+< setoption name Threads value 8
+< ucinewgame
+< position startpos
+< go wtime 10000 btime 10000 depth 4
+! allow-info begin
+> info string time optimum_ms 260 maximum_ms 1115 root {{U64}} stability {{U64}} score {{U64}} effort {{U64}} smp {{U64}} combined {{U64}} ponder_credit_ns {{U64}} helper_events {{U64}} helpers 7 target_ns {{U64}} reason search_complete hard_overshoot_ns 0
+> {{BESTMOVE_LINE}}
+! allow-info end
+< quit
+! exit 0 within 1000ms

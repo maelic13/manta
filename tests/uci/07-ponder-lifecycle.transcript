@@ -1,0 +1,58 @@
+# Completed ponder results wait; ponderhit retains time already spent.
+@phase 6.1
+> Manta {{VERSION}} by Miloslav Macurek
+< go ponder wtime 10000 btime 10000 nodes 1 searchmoves e2e4
+> info string invalid go: Ponder option is false
+< setoption name Ponder value true
+< position startpos
+< go ponder wtime 10000 btime 10000 nodes 1 searchmoves e2e4
+! allow-info begin
+! silence 100ms
+< isready
+> readyok
+< ponderhit
+> bestmove e2e4
+! allow-info end
+< ponderhit
+< stop
+! silence 100ms
+< quit
+! exit 0 within 1000ms
+
+---
+
+# Stop publishes a retained completed ponder exactly once.
+@phase 6.1
+> Manta {{VERSION}} by Miloslav Macurek
+< setoption name Ponder value true
+< position startpos
+< go ponder wtime 10000 btime 10000 nodes 1 searchmoves d2d4
+! allow-info begin
+! silence 100ms
+< stop
+> bestmove d2d4
+! allow-info end
+< stop
+< ponderhit
+! silence 100ms
+< quit
+! exit 0 within 1000ms
+
+---
+
+# An option barrier completes the old ponder before disabling future ponder.
+@phase 6.1
+> Manta {{VERSION}} by Miloslav Macurek
+< setoption name Ponder value true
+< position startpos
+< go ponder wtime 10000 btime 10000 searchmoves g1f3
+! allow-info begin
+< setoption name Ponder value false
+> bestmove g1f3{{PONDER}}
+! allow-info end
+< go ponder wtime 10000 btime 10000 nodes 1 searchmoves e2e4
+> info string invalid go: Ponder option is false
+< ponderhit extra
+> info string invalid ponderhit: unexpected argument
+< quit
+! exit 0 within 1000ms

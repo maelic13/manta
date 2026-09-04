@@ -27,6 +27,14 @@ Zig multiversioning mechanism years early would be brittle.
   current stable Zig and native evidence.
 - A forced unsupported backend is rejected and scalar remains usable.
 - Every optimized integer kernel is bit-exact with scalar behavior.
+- Build profiles use the curated `auto`, platform-baseline and retained ISA-tier
+  names. Raw CPU feature lists are not artifact identities. `auto` may prefer a
+  tier only after target-native evidence establishes the fastest retained
+  choice for that CPU family.
+- `zig build` is a ReleaseFast host-native build. `-Dportable` selects the
+  platform baseline, canonical artifacts are copied to `zig-out/dist`, and
+  native/portable, unimplemented-profile and premature-PGO conflicts fail
+  explicitly. Cross-target builds are outside the supported workflow.
 
 ## Consequences
 
@@ -36,6 +44,9 @@ Zig multiversioning mechanism years early would be brittle.
 - Portable release speed can improve without removing the broad fallback.
 - Presence of an instruction does not itself prove that implementation fastest
   on a microarchitecture.
+- The initial `auto` resolver selects only x86-64 or ARM64 baseline because no
+  optimized chess kernel exists yet; Phase 10 extends it without changing the
+  command contract.
 
 ## Verification
 
