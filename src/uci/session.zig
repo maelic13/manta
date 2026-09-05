@@ -1027,7 +1027,7 @@ fn drainSearchProgress(shared: *Shared, active: *Runtime.Active) void {
     };
     switch (progress) {
         .root_move => |root_move| {
-            _ = offerLine(shared, rootMoveInfo(
+            _ = tryOfferInfoLine(shared, rootMoveInfo(
                 root_move.depth,
                 root_move.chess_move,
                 root_move.number,
@@ -1036,7 +1036,7 @@ fn drainSearchProgress(shared: *Shared, active: *Runtime.Active) void {
             ));
         },
         .iteration => |iteration| {
-            _ = offerLine(shared, completedIterationInfo(
+            _ = tryOfferInfoLine(shared, completedIterationInfo(
                 iteration.completed,
                 iteration.tablebase_hits,
                 elapsedMilliseconds(spec.received_ns, iteration.observed_ns),
@@ -1406,12 +1406,16 @@ fn offerText(shared: *Shared, text: []const u8) bool {
 }
 
 fn offerLine(shared: *Shared, line: Line) bool {
+    shared.output.putOne(shared.io, .{ .line = line }) catch return false;
+    return true;
+}
+
+/// Live search progress is advisory and may be superseded. Never let it fill
+/// the bounded presenter queue at the expense of a required response such as
+/// `bestmove`; the worker/controller progress slot will publish a newer sample.
+fn tryOfferInfoLine(shared: *Shared, line: Line) bool {
     const accepted = shared.output.put(shared.io, &.{.{ .line = line }}, 0) catch return false;
-    if (accepted == 1) return true;
-    shared.fatal.store(true, .release);
-    urgentCancel(shared);
-    shared.shutdown.set(shared.io);
-    return false;
+    return accepted == 1;
 }
 
 fn presenter(shared: *Shared) std.Io.Cancelable!void {

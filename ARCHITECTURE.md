@@ -219,13 +219,14 @@ The control mailbox is bounded. Ordinary commands preserve FIFO order and may
 apply backpressure while the independently running controller drains them.
 Urgent stop/quit/ponder state is published immediately through `EngineControl`
 with the active search epoch once its line is read. The output mailbox may
-coalesce obsolete search info. Its offer operation never blocks the controller:
-if a completion cannot transfer immediately, the controller retains it as its
-single pending critical event, does not start another search, continues to
-service commands/control and retries after presenter progress. Completion is
-therefore bounded and non-droppable without making stdout part of controller
-progress. Concrete mailbox primitives and capacities are Phase-1 decisions
-verified by process tests.
+coalesce or drop obsolete search info. Required lines apply bounded
+backpressure to the controller, but never to a search worker; the input task
+still applies urgent epoch-scoped stop/quit state immediately, and shutdown
+closes the output queue to release a waiting controller. A completed result
+remains in its single joined slot until its required output transfers, and the
+controller does not start another search first. Completion is therefore
+bounded and non-droppable. Concrete mailbox primitives and capacities are
+Phase-1 decisions verified by process tests.
 
 The worker return path is also bounded. Progress snapshots may be overwritten
 or coalesced, while each active worker/job has one owned completion slot or an
@@ -240,10 +241,13 @@ Phase 1 fixes both the command and output mailboxes at 64 records. A formatted
 output record is at most 4,096 bytes, while an input command is derived from a
 line of at most 65,536 bytes and retains only bounded parsed/sanitized fields.
 The shell uses separate Zig `std.Io` input, controller and presenter tasks. Its
-output offer never waits: saturation closes the session instead of stalling
-control. Step 6.1 adds one worker-to-controller coalesced progress slot and a
-separate joined completion result; completion and required `bestmove` are never
-stored in the droppable slot. The fixed mailbox capacities are unchanged.
+live-search progress offer never waits and may be dropped when the presenter
+queue is full. Required protocol lines wait for bounded presenter capacity;
+urgent stop/quit state is still applied independently by the input task, and
+shutdown closes the queue to release a blocked producer. Step 6.1 adds one
+worker-to-controller coalesced progress slot and a separate joined completion
+result; completion and required `bestmove` are never stored in the droppable
+slot. The fixed mailbox capacities are unchanged.
 
 ## 5. Ownership and lifetimes
 

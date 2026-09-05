@@ -5,3 +5,17 @@
 < frobnicate
 < quit
 ! exit 0 within 1000ms
+---
+# Search progress is droppable, but a completed search must survive a slow reader.
+@phase 6.3
+> Manta {{VERSION}} by Miloslav Macurek
+! block-stdout
+< position startpos
+< go movetime 150
+! sleep 250ms
+! unblock-stdout
+! allow-info begin
+> {{BESTMOVE_LINE}}
+! allow-info end
+< quit
+! exit 0 within 1000ms

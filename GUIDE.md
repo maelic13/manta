@@ -6,14 +6,15 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 
 ## Current checkpoint
 
-- Manta 1.0.0 is the release candidate: a complete UCI engine with classical
+- Manta 1.0.0 is the release baseline: a complete UCI engine with classical
   evaluation, deterministic one-thread search, Syzygy, mature clock control and
   main-authoritative lazy SMP.
-- Phases 0–6 are complete. Phase 7 has not started.
+- Phases 0–6 and the Manta 1.0 release baseline are complete. Targeted
+  pre-NNUE performance Phase 6.5 is current; Phase 7 has not started.
 - Production is the MAN-E19 HCE, MAN-S29 search fit and MAN-T05 clock fit. The
   deterministic one-thread depth-6 fingerprint is `799,610` nodes.
-- No Phase-7 implementation, games, tuning or data generation begins without a
-  separately approved step.
+- No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
+  data generation begins without separate approval.
 
 ## Completed phases
 
@@ -102,6 +103,27 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   stronger, not a precise rating or component attribution.
 
 ## Open roadmap
+
+### Phase 6.5 — Pre-NNUE search and hot-path performance
+
+- [x] **6.5.0 — Comparable performance audit:** Confirmed identical board and
+  search corpora and separated tree-size, per-node, board and HCE costs.
+- [ ] **6.5.1 — Staged move picker:** Preserve exact chess behavior while
+  trying TT and tactical moves before lazily generating and scoring quiets.
+- [ ] **6.5.2 — Performance rebaseline:** Re-measure the unchanged search tree
+  and attribute the remaining per-node cost before further optimization.
+- [ ] **6.5.3 — LMR/search efficiency:** Diagnose MAN-S23's deep-endgame
+  re-search failure, then gate one structurally new reduction candidate.
+- [ ] **6.5.4 — Null-move verification:** Test a separately gated safe-material
+  policy that avoids redundant verification without weakening zugzwang safety.
+- [ ] **6.5.5 — Board and SEE hot paths:** Optimize measured move-generation,
+  transition and SEE costs with exact state and legality conformance.
+- [ ] **6.5.6 — HCE hot paths:** Optimize only measured full-refresh costs,
+  beginning with placement/phase traversal and pawn-cache evidence.
+- [ ] **6.5.7 — Build optimization:** Add PGO only if a representative training
+  workload produces a reproducible behavior-identical gain.
+- [ ] **6.5.8 — Qualification and close:** Run the final deterministic gates,
+  record accepted performance, and gate any chess-behavior changes in games.
 
 ### Phase 7 — NNUE runway and data contract
 

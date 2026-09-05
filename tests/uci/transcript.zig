@@ -10,6 +10,7 @@ pub const Step = union(enum) {
     send: []const u8,
     expect: []const u8,
     silence_ms: u32,
+    sleep_ms: u32,
     send_oversized_line,
     close_stdin,
     block_stdout,
@@ -85,6 +86,9 @@ pub fn parse(allocator: std.mem.Allocator, content: []const u8) (ParseError || s
             const directive = line[2..];
             if (std.mem.startsWith(u8, directive, "silence ")) {
                 break :blk .{ .silence_ms = try parseDuration(directive[8..]) };
+            }
+            if (std.mem.startsWith(u8, directive, "sleep ")) {
+                break :blk .{ .sleep_ms = try parseDuration(directive[6..]) };
             }
             if (std.mem.eql(u8, directive, "send-oversized-line")) break :blk .send_oversized_line;
             if (std.mem.eql(u8, directive, "close-stdin")) break :blk .close_stdin;

@@ -217,6 +217,7 @@ fn runCase(
                 return error.UnexpectedOutput;
             }
         },
+        .sleep_ms => |milliseconds| timer(io, milliseconds),
         .send_oversized_line => {
             if (!stdin_open) return error.UnsupportedActiveDirective;
             const oversized: [65_538]u8 = @splat('x');
@@ -235,6 +236,10 @@ fn runCase(
             if (stdout_blocked) return error.UnsupportedActiveDirective;
             _ = output_future.cancel(io) catch {};
             output_finished = true;
+            while (try takeAvailable(io, &output)) |line| {
+                std.debug.print("unexpected stdout before block: {s}\n", .{line.slice()});
+                return error.UnexpectedOutput;
+            }
             stdout_blocked = true;
         },
         .allow_info_begin => allow_info = true,
@@ -264,7 +269,13 @@ fn runCase(
             try stdin_writer.interface.writeAll(command);
             try stdin_writer.interface.flush();
         },
-        .unblock_stdout => return error.UnsupportedActiveDirective,
+        .unblock_stdout => {
+            if (!stdout_blocked) return error.UnsupportedActiveDirective;
+            output = std.Io.Queue(StreamLine).init(&output_storage);
+            output_future = try io.concurrent(streamPump, .{ io, child.stdout.?, &output });
+            output_finished = false;
+            stdout_blocked = false;
+        },
         .exit => |expected_exit| {
             if (stdin_open) {
                 try stdin_writer.interface.flush();
