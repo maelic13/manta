@@ -6,6 +6,17 @@ const types = @import("types.zig");
 
 pub const ways = 4;
 
+/// Exact partition of one store. `retained` is a declined write against an
+/// authenticated same-key entry; the two eviction cases separate ordinary
+/// ageing from genuine current-generation pressure. Purely diagnostic.
+pub const StoreOutcome = enum {
+    refreshed,
+    retained,
+    filled,
+    evicted_stale,
+    evicted_current,
+};
+
 pub const Record = struct {
     chess_move: chess.move.Move,
     value: score.Score,
@@ -89,6 +100,10 @@ pub const Table = struct {
         return null;
     }
 
+    /// Returns which replacement path the write took. The outcome is
+    /// diagnostic only: it names the branch that was already taken and can
+    /// change no stored value, so an observer may read table pressure without
+    /// the table gaining a dependency on one.
     pub fn store(
         self: *Table,
         key: chess.types.Key,
@@ -99,7 +114,7 @@ pub const Table = struct {
         bound: types.Bound,
         producer: types.Provenance,
         ply: usize,
-    ) void {
+    ) StoreOutcome {
         var record = Record{
             .chess_move = chess_move,
             .value = value,
@@ -117,15 +132,17 @@ pub const Table = struct {
                 // terminal path. Preserve an earlier exact raw evaluation of
                 // the same authenticated position rather than erasing it.
                 if (record.static_eval == null) record.static_eval = old.static_eval;
-                if (depth >= old.depth or bound == .exact or old.generation != self.generation)
+                if (depth >= old.depth or bound == .exact or old.generation != self.generation) {
                     entry.store(key, record, ply);
-                return;
+                    return .refreshed;
+                }
+                return .retained;
             }
         }
         for (&cluster.entries) |*entry| {
             if (entry.snapshot() == null) {
                 entry.store(key, record, ply);
-                return;
+                return .filled;
             }
         }
 
@@ -142,6 +159,7 @@ pub const Table = struct {
             }
         }
         cluster.entries[victim].store(key, record, ply);
+        return if (victim_record.generation == self.generation) .evicted_current else .evicted_stale;
     }
 
     fn index(self: *const Table, key: chess.types.Key) usize {
@@ -285,7 +303,7 @@ test "atomic payload validation turns mixed observations into misses" {
     var storage: [1]Cluster = undefined;
     var table = Table.init(&storage);
     const key: u64 = 0x1234_5678_9abc_def0;
-    table.store(key, chess.move.Move.normal(.e2, .e4), score.Score.fromOrdinary(42).?, score.Score.fromOrdinary(-17), 6, .exact, .full_search, 3);
+    _ = table.store(key, chess.move.Move.normal(.e2, .e4), score.Score.fromOrdinary(42).?, score.Score.fromOrdinary(-17), 6, .exact, .full_search, 3);
     try std.testing.expectEqual(@as(i32, -17), table.probe(key, 3, 0).?.static_eval.?.raw());
     storage[0].entries[0].payload.store(0xfeed_face, .monotonic);
     try std.testing.expect(table.probe(key, 3, 0) == null);
@@ -297,8 +315,14 @@ test "same-position store preserves an unavailable raw evaluation" {
     var storage: [1]Cluster = undefined;
     var table = Table.init(&storage);
     const key: u64 = 0x8765_4321;
-    table.store(key, .none, score.Score.fromOrdinary(12).?, score.Score.fromOrdinary(31), 2, .upper, .full_search, 0);
-    table.store(key, .none, score.Score.fromOrdinary(40).?, null, 3, .exact, .full_search, 0);
+    try std.testing.expectEqual(
+        StoreOutcome.filled,
+        table.store(key, .none, score.Score.fromOrdinary(12).?, score.Score.fromOrdinary(31), 2, .upper, .full_search, 0),
+    );
+    try std.testing.expectEqual(
+        StoreOutcome.refreshed,
+        table.store(key, .none, score.Score.fromOrdinary(40).?, null, 3, .exact, .full_search, 0),
+    );
     const record = table.probe(key, 0, 0).?;
     try std.testing.expectEqual(@as(i32, 40), record.value.raw());
     try std.testing.expectEqual(@as(i32, 31), record.static_eval.?.raw());
@@ -310,10 +334,15 @@ test "replacement is deterministic and prefers oldest then shallowest" {
     var table = Table.init(&storage);
     table.nextGeneration();
     for (0..ways) |slot| {
-        table.store(slot + 1, chess.move.Move.normal(.a2, .a3), score.Score.zero, null, @intCast(slot + 1), .upper, .full_search, 0);
+        _ = table.store(slot + 1, chess.move.Move.normal(.a2, .a3), score.Score.zero, null, @intCast(slot + 1), .upper, .full_search, 0);
     }
     table.nextGeneration();
-    table.store(99, chess.move.Move.normal(.b2, .b3), score.Score.zero, null, 1, .lower, .full_search, 0);
+    // The reported outcome must name the branch actually taken: every way is
+    // full and the victim belongs to the previous generation.
+    try std.testing.expectEqual(
+        StoreOutcome.evicted_stale,
+        table.store(99, chess.move.Move.normal(.b2, .b3), score.Score.zero, null, 1, .lower, .full_search, 0),
+    );
     try std.testing.expect(table.probe(99, 0, 0) != null);
     try std.testing.expect(table.probe(1, 0, 0) == null);
     try std.testing.expect(table.probe(4, 0, 0) != null);

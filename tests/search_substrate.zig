@@ -171,7 +171,7 @@ test "an illegal TT move invalidates the hit before it influences search" {
 
     var storage: [1]search.tt.Cluster = undefined;
     var table = search.tt.Table.init(&storage);
-    table.store(
+    _ = table.store(
         probed_position.current.key,
         chess.move.Move.normal(.a1, .a2),
         manta.score.Score.fromOrdinary(12_345).?,
@@ -1025,7 +1025,7 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
     var disabled_storage: [256]search.tt.Cluster = undefined;
     var table = search.tt.Table.init(&storage);
     var disabled_table = search.tt.Table.init(&disabled_storage);
-    table.store(
+    _ = table.store(
         seed_position.current.key,
         tt_move,
         manta.score.Score.fromOrdinary(1_000).?,
@@ -1035,7 +1035,7 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
         .full_search,
         1,
     );
-    disabled_table.store(
+    _ = disabled_table.store(
         seed_position.current.key,
         tt_move,
         manta.score.Score.fromOrdinary(1_000).?,
@@ -1125,7 +1125,7 @@ test "singular exclusion cancellation restores worker and board state" {
 
     var storage: [256]search.tt.Cluster = undefined;
     var table = search.tt.Table.init(&storage);
-    table.store(
+    _ = table.store(
         seed_position.current.key,
         tt_move,
         manta.score.Score.fromOrdinary(1_000).?,

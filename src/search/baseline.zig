@@ -652,6 +652,7 @@ fn negamaxNode(
     if (comptime features.search_context)
         context.observer.nodeContext(
             .main,
+            ply,
             context.thread.ply_contexts[ply],
             route,
             active_depth,
@@ -980,6 +981,10 @@ fn negamaxNode(
             const saved_context = context.thread.ply_contexts[ply];
             context.thread.ply_contexts[ply] = saved_context.withExcluded(tt_move);
             context.observer.singularAttempt();
+            // The exclusion search re-enters this ply, so the observer's
+            // per-ply path facts are saved and restored around it exactly like
+            // the ply context itself.
+            context.observer.exclusionEnter(ply);
             const alternatives = negamax(
                 features,
                 false,
@@ -994,10 +999,12 @@ fn negamaxNode(
                 .all,
                 .singular_probe,
             ) catch |err| {
+                context.observer.exclusionExit(ply);
                 context.thread.ply_contexts[ply] = saved_context;
                 context.thread.pv_lengths[ply] = 0;
                 return err;
             };
+            context.observer.exclusionExit(ply);
             context.thread.ply_contexts[ply] = saved_context;
             context.thread.pv_lengths[ply] = 0;
             singular_extension_plies = singularExtensionPlies(
@@ -1033,6 +1040,7 @@ fn negamaxNode(
                         const verification_depth = @max(@as(u16, 1), (depth + 1) / 2);
                         context.thread.ply_contexts[ply] = saved_context.withExcluded(tt_move);
                         context.observer.singularMultiCutProbe();
+                        context.observer.exclusionEnter(ply);
                         const verification = negamax(
                             features,
                             false,
@@ -1047,10 +1055,12 @@ fn negamaxNode(
                             .cut,
                             .singular_probe,
                         ) catch |err| {
+                            context.observer.exclusionExit(ply);
                             context.thread.ply_contexts[ply] = saved_context;
                             context.thread.pv_lengths[ply] = 0;
                             return err;
                         };
+                        context.observer.exclusionExit(ply);
                         context.thread.ply_contexts[ply] = saved_context;
                         context.thread.pv_lengths[ply] = 0;
                         const cutoff = exclusionProvesAtLeast(verification, beta);
@@ -1938,6 +1948,7 @@ fn quiescenceNode(
     if (comptime features.search_context)
         context.observer.nodeContext(
             .quiescence,
+            ply,
             context.thread.ply_contexts[ply],
             .quiescence,
             types.DepthIntent.full(0),
@@ -2145,15 +2156,25 @@ fn probeTable(
     alpha: i32,
     beta: i32,
 ) TableEvidence {
-    if (ply == 0 and context.root_moves != null) return .{};
-    const table = context.table orelse return .{};
-    const record = table.probe(value.current.key, ply, value.current.rule50) orelse return .{};
+    if (ply == 0 and context.root_moves != null) {
+        context.observer.ttLookup(.unavailable);
+        return .{};
+    }
+    const table = context.table orelse {
+        context.observer.ttLookup(.unavailable);
+        return .{};
+    };
+    const record = table.probe(value.current.key, ply, value.current.rule50) orelse {
+        context.observer.ttLookup(.miss);
+        return .{};
+    };
     var chess_move: ?chess.move.Move = null;
     if (record.chess_move.raw() == chess.move.Move.none.raw()) {
         chess_move = null;
     } else if (record.chess_move.isChessMove() and chess.movegen.isLegal(value, record.chess_move)) {
         chess_move = record.chess_move;
     } else {
+        context.observer.ttLookup(.illegal_move);
         return .{};
     }
     const sufficient_depth = record.depth >= depth;
@@ -2164,6 +2185,12 @@ fn probeTable(
     };
     const usable = sufficient_depth and usable_bound;
     context.observer.ttProbe(record.producer, record.bound, usable);
+    context.observer.ttLookup(if (!sufficient_depth)
+        .depth_rejected
+    else if (!usable_bound)
+        .bound_rejected
+    else
+        .usable);
     if (!usable) return .{ .chess_move = chess_move, .record = record };
     // A TT record owns only its stored move, not a continuation. The next PV
     // row may still describe an earlier sibling because no child search ran
@@ -2209,8 +2236,8 @@ fn storeTableWithReduction(
     if (!value.isValid() or value.isNone() or value.raw() == score.infinity_raw) return;
     const stored_depth = tableDepth(result.provenance, depth, reduction);
     const cached_eval = if (static_eval) |raw| score.Score.fromOrdinary(raw) else null;
-    table.store(key, chess_move, value, cached_eval, @intCast(stored_depth), result.bound, result.provenance, ply);
-    context.observer.ttStore(result.provenance, result.bound);
+    const outcome = table.store(key, chess_move, value, cached_eval, @intCast(stored_depth), result.bound, result.provenance, ply);
+    context.observer.ttStore(result.provenance, result.bound, outcome);
 }
 
 fn make(

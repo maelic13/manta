@@ -2,6 +2,7 @@
 const std = @import("std");
 const chess = @import("../chess/root.zig");
 const ordering = @import("ordering.zig");
+const tt = @import("tt.zig");
 const tablebase = @import("tablebase.zig");
 const types = @import("types.zig");
 
@@ -27,10 +28,62 @@ const expectation_count = @typeInfo(types.NodeExpectation).@"enum".fields.len;
 const tactical_consumer_count = @typeInfo(TacticalConsumer).@"enum".fields.len;
 const lmr_modifier_count = @typeInfo(LmrModifier).@"enum".fields.len;
 
+/// Step-6.5.2 whole-tree attribution. Every visited node is charged to the
+/// innermost speculative context that encloses it, so the charges partition the
+/// complete tree exactly: ordinary principal and scout work, the two research
+/// routes, both null-move routes, singular exclusion and ProbCut. Quiescence is
+/// deliberately not a charge because it is already counted separately and can
+/// occur under any of these; a qsearch node under a null probe is null-probe
+/// work. Entry counts stay in `context_by_route`, which answers how often a
+/// mechanism fired rather than what its subtree cost.
+pub const WorkCharge = enum {
+    ordinary,
+    pv_research,
+    lmr_probe,
+    lmr_research,
+    null_probe,
+    null_verification,
+    singular_probe,
+    probcut_probe,
+
+    /// Returns the charge a route opens, or null when the route inherits its
+    /// parent's charge. Root, first-move, scout and quiescence entries are
+    /// ordinary continuations of whatever work already contains them.
+    pub inline fn opened(route: types.EntryRoute) ?WorkCharge {
+        return switch (route) {
+            .root, .first_move, .scout, .quiescence => null,
+            .pv_research => .pv_research,
+            .reduced_probe => .lmr_probe,
+            .reduction_research => .lmr_research,
+            .null_probe => .null_probe,
+            .null_verification => .null_verification,
+            .singular_probe => .singular_probe,
+            .probcut_probe => .probcut_probe,
+        };
+    }
+};
+
+/// Exact partition of one transposition lookup. `unavailable` covers the root
+/// filter and a search without a table, so probe attempts remain countable
+/// against nodes.
+pub const TableLookup = enum {
+    unavailable,
+    miss,
+    illegal_move,
+    depth_rejected,
+    bound_rejected,
+    usable,
+};
+
 pub const FailHighBucket = enum { first, second, third, fourth_to_eighth, later };
 pub const PruneCause = enum { null_move, reverse_futility, razoring, probcut, multi_cut, late_move, futility, see, qsearch_delta };
 pub const ExtensionCause = enum { check, singular, recapture, passed_pawn };
 
+const charge_count = @typeInfo(WorkCharge).@"enum".fields.len;
+const table_lookup_count = @typeInfo(TableLookup).@"enum".fields.len;
+const store_outcome_count = @typeInfo(tt.StoreOutcome).@"enum".fields.len;
+/// Longest chain reported exactly; longer chains accumulate in the last bucket.
+pub const max_chain_bucket = 8;
 const fail_high_count = @typeInfo(FailHighBucket).@"enum".fields.len;
 const prune_count = @typeInfo(PruneCause).@"enum".fields.len;
 const extension_count = @typeInfo(ExtensionCause).@"enum".fields.len;
@@ -43,7 +96,7 @@ pub const Disabled = struct {
     pub inline fn stopCheck(_: *Disabled, _: u64) void {}
     pub inline fn abort(_: *Disabled, _: types.Termination, _: u64) void {}
     pub inline fn node(_: *Disabled, _: NodeKind, _: bool) void {}
-    pub inline fn nodeContext(_: *Disabled, _: NodeKind, _: types.PlyContext, _: types.EntryRoute, _: types.DepthIntent, _: types.NodeExpectation) void {}
+    pub inline fn nodeContext(_: *Disabled, _: NodeKind, _: usize, _: types.PlyContext, _: types.EntryRoute, _: types.DepthIntent, _: types.NodeExpectation) void {}
     pub inline fn nodeOutcome(_: *Disabled, _: types.OutcomeAttribution) void {}
     pub inline fn generated(_: *Disabled, _: usize) void {}
     pub inline fn liveHistoryTacticals(_: *Disabled, _: usize) void {}
@@ -51,7 +104,8 @@ pub const Disabled = struct {
     pub inline fn searched(_: *Disabled, _: NodeKind) void {}
     pub inline fn cutoff(_: *Disabled, _: NodeKind) void {}
     pub inline fn ttProbe(_: *Disabled, _: types.Provenance, _: types.Bound, _: bool) void {}
-    pub inline fn ttStore(_: *Disabled, _: types.Provenance, _: types.Bound) void {}
+    pub inline fn ttLookup(_: *Disabled, _: TableLookup) void {}
+    pub inline fn ttStore(_: *Disabled, _: types.Provenance, _: types.Bound, _: tt.StoreOutcome) void {}
     pub inline fn ttBest(_: *Disabled, _: bool) void {}
     pub inline fn moveSource(_: *Disabled, _: ordering.Source) void {}
     pub inline fn failHigh(_: *Disabled, _: usize, _: ordering.Source) void {}
@@ -111,6 +165,8 @@ pub const Disabled = struct {
     pub inline fn singularMultiCutProbe(_: *Disabled) void {}
     pub inline fn singularMultiCut(_: *Disabled, _: bool) void {}
     pub inline fn exclusionMoveSkipped(_: *Disabled) void {}
+    pub inline fn exclusionEnter(_: *Disabled, _: usize) void {}
+    pub inline fn exclusionExit(_: *Disabled, _: usize) void {}
     pub inline fn iteration(_: *Disabled, _: u16, _: chess.move.Move, _: types.Evidence) void {}
     pub inline fn pruning(_: *Disabled, _: u8, _: u8) void {}
 };
@@ -132,6 +188,14 @@ pub const Counters = struct {
     context_by_route: [route_count]u64 = @splat(0),
     context_by_arrival: [arrival_count]u64 = @splat(0),
     context_by_expectation: [expectation_count]u64 = @splat(0),
+    nodes_by_charge: [charge_count]u64 = @splat(0),
+    nodes_under_charge: [charge_count]u64 = @splat(0),
+    check_chain_lengths: [max_chain_bucket]u64 = @splat(0),
+    check_chain_max: u16 = 0,
+    extension_chain_lengths: [max_chain_bucket]u64 = @splat(0),
+    extension_chain_max: u16 = 0,
+    tt_lookups_by_outcome: [table_lookup_count]u64 = @splat(0),
+    tt_stores_by_outcome: [store_outcome_count]u64 = @splat(0),
     outcomes: u64 = 0,
     outcomes_by_disposition: [disposition_count]u64 = @splat(0),
     outcomes_by_producer: [provenance_count]u64 = @splat(0),
@@ -285,6 +349,22 @@ pub const Counters = struct {
     previous_root_best: ?chess.move.Move = null,
     previous_root_score: ?i32 = null,
     previous_stop_check: u64 = 0,
+    /// Depth-first scratch stacks. Search enters a node at ply `p` only while
+    /// its parent's slot at `p - 1` still holds that parent's live value, so a
+    /// plain array reproduces the path without a second traversal.
+    charge_stack: [chess.types.max_ply]WorkCharge = @splat(.ordinary),
+    charge_mask_stack: [chess.types.max_ply]u16 = @splat(0),
+    check_chain_stack: [chess.types.max_ply]u16 = @splat(0),
+    extension_chain_stack: [chess.types.max_ply]u16 = @splat(0),
+    /// One saved copy per ply for the exclusion search, which is the only
+    /// caller that re-enters a node at its own ply and therefore the only one
+    /// that would otherwise leave the scratch stacks describing the probe
+    /// instead of the node that launched it. Exclusion searches cannot nest,
+    /// so a single slot per ply is sufficient.
+    saved_charge_stack: [chess.types.max_ply]WorkCharge = @splat(.ordinary),
+    saved_charge_mask_stack: [chess.types.max_ply]u16 = @splat(0),
+    saved_check_chain_stack: [chess.types.max_ply]u16 = @splat(0),
+    saved_extension_chain_stack: [chess.types.max_ply]u16 = @splat(0),
 
     pub fn reset(self: *Counters) void {
         self.* = .{};
@@ -311,6 +391,7 @@ pub const Counters = struct {
     pub inline fn nodeContext(
         self: *Counters,
         kind: NodeKind,
+        ply: usize,
         ply_context: types.PlyContext,
         route: types.EntryRoute,
         depth: types.DepthIntent,
@@ -326,6 +407,55 @@ pub const Counters = struct {
         if (depth.extension != 0) self.extended_depth_intents += 1;
         self.context_nominal_depth += depth.nominal;
         self.context_searched_depth += depth.searched();
+        self.chargeNode(ply, route);
+        self.chainNode(ply, ply_context.in_check, depth.extension != 0);
+    }
+
+    /// Charges this node to the innermost speculative context on its path. The
+    /// parent slot is still live because search is depth first, so the charges
+    /// sum to `context_nodes` exactly.
+    inline fn chargeNode(self: *Counters, ply: usize, route: types.EntryRoute) void {
+        const inherited: WorkCharge = if (ply == 0) .ordinary else self.charge_stack[ply - 1];
+        const inherited_mask: u16 = if (ply == 0) 0 else self.charge_mask_stack[ply - 1];
+        const opened = WorkCharge.opened(route);
+        const charge = opened orelse inherited;
+        const mask = inherited_mask |
+            (if (opened) |value| @as(u16, 1) << @intFromEnum(value) else 0);
+        self.charge_stack[ply] = charge;
+        self.charge_mask_stack[ply] = mask;
+        self.nodes_by_charge[@intFromEnum(charge)] += 1;
+        // Inclusive cost answers a different question than the exclusive
+        // partition: how much of the tree disappears if a mechanism stops
+        // opening subtrees, including the nested speculation it pays for.
+        // A node inside two nested probes of the same kind still counts once.
+        if (mask == 0) {
+            self.nodes_under_charge[@intFromEnum(WorkCharge.ordinary)] += 1;
+        } else {
+            inline for (1..charge_count) |index| {
+                if (mask & (@as(u16, 1) << index) != 0) self.nodes_under_charge[index] += 1;
+            }
+        }
+    }
+
+    /// Records how long consecutive in-check and extended runs actually get.
+    /// A chain of one is an isolated node; the last bucket is open ended.
+    inline fn chainNode(self: *Counters, ply: usize, in_check: bool, extended: bool) void {
+        const checks: u16 = if (!in_check)
+            0
+        else if (ply == 0) 1 else self.check_chain_stack[ply - 1] +| 1;
+        const extensions: u16 = if (!extended)
+            0
+        else if (ply == 0) 1 else self.extension_chain_stack[ply - 1] +| 1;
+        self.check_chain_stack[ply] = checks;
+        self.extension_chain_stack[ply] = extensions;
+        if (checks != 0) {
+            self.check_chain_lengths[@min(checks, max_chain_bucket) - 1] += 1;
+            self.check_chain_max = @max(self.check_chain_max, checks);
+        }
+        if (extensions != 0) {
+            self.extension_chain_lengths[@min(extensions, max_chain_bucket) - 1] += 1;
+            self.extension_chain_max = @max(self.extension_chain_max, extensions);
+        }
     }
 
     pub inline fn nodeOutcome(self: *Counters, outcome: types.OutcomeAttribution) void {
@@ -371,9 +501,19 @@ pub const Counters = struct {
         }
     }
 
-    pub inline fn ttStore(self: *Counters, producer: types.Provenance, bound: types.Bound) void {
+    pub inline fn ttLookup(self: *Counters, outcome: TableLookup) void {
+        self.tt_lookups_by_outcome[@intFromEnum(outcome)] += 1;
+    }
+
+    pub inline fn ttStore(
+        self: *Counters,
+        producer: types.Provenance,
+        bound: types.Bound,
+        outcome: tt.StoreOutcome,
+    ) void {
         self.tt_stores_by_producer[@intFromEnum(producer)] += 1;
         self.tt_stores_by_bound[@intFromEnum(bound)] += 1;
+        self.tt_stores_by_outcome[@intFromEnum(outcome)] += 1;
     }
 
     pub inline fn ttBest(self: *Counters, recalled: bool) void {
@@ -764,6 +904,23 @@ pub const Counters = struct {
         if (did_cutoff) self.singular_multicut_cutoffs += 1;
     }
 
+    /// Saves the launching node's path facts before a same-ply exclusion
+    /// search overwrites them, and restores them afterwards so the node's own
+    /// children inherit their real ancestry rather than the probe's.
+    pub inline fn exclusionEnter(self: *Counters, ply: usize) void {
+        self.saved_charge_stack[ply] = self.charge_stack[ply];
+        self.saved_charge_mask_stack[ply] = self.charge_mask_stack[ply];
+        self.saved_check_chain_stack[ply] = self.check_chain_stack[ply];
+        self.saved_extension_chain_stack[ply] = self.extension_chain_stack[ply];
+    }
+
+    pub inline fn exclusionExit(self: *Counters, ply: usize) void {
+        self.charge_stack[ply] = self.saved_charge_stack[ply];
+        self.charge_mask_stack[ply] = self.saved_charge_mask_stack[ply];
+        self.check_chain_stack[ply] = self.saved_check_chain_stack[ply];
+        self.extension_chain_stack[ply] = self.saved_extension_chain_stack[ply];
+    }
+
     pub inline fn exclusionMoveSkipped(self: *Counters) void {
         self.exclusion_moves_skipped += 1;
     }
@@ -789,6 +946,57 @@ pub const Counters = struct {
         if (@popCount(candidate_mask) > 1) self.pruning_overlaps += 1;
     }
 };
+
+test "whole-tree charge follows real ancestry across a same-ply exclusion search" {
+    // Step 6.5.2: an exclusion search re-enters its own ply, so without the
+    // save/restore pair the launching node's later children would inherit the
+    // probe's ancestry and their cost would be billed to singular extension.
+    // The oracle here is the shape of the walk itself, not a search result.
+    const ordinary_index = @intFromEnum(WorkCharge.ordinary);
+    const singular_index = @intFromEnum(WorkCharge.singular_probe);
+    var counters: Counters = .{};
+    const context = types.PlyContext.root(false);
+    const depth = types.DepthIntent.full(3);
+
+    counters.nodeContext(.main, 0, context, .root, depth, .principal);
+    counters.nodeContext(.main, 1, context, .scout, depth, .cut);
+    counters.exclusionEnter(1);
+    counters.nodeContext(.main, 1, context, .singular_probe, depth, .all);
+    counters.nodeContext(.main, 2, context, .scout, depth, .cut);
+    counters.exclusionExit(1);
+    counters.nodeContext(.main, 2, context, .scout, depth, .cut);
+
+    // Root, the launching node and the node's own child are ordinary work; the
+    // probe and the node it searched are singular work.
+    try std.testing.expectEqual(@as(u64, 3), counters.nodes_by_charge[ordinary_index]);
+    try std.testing.expectEqual(@as(u64, 2), counters.nodes_by_charge[singular_index]);
+    try std.testing.expectEqual(@as(u64, 3), counters.nodes_under_charge[ordinary_index]);
+    try std.testing.expectEqual(@as(u64, 2), counters.nodes_under_charge[singular_index]);
+    var total: u64 = 0;
+    for (counters.nodes_by_charge) |count| total += count;
+    try std.testing.expectEqual(counters.context_nodes, total);
+}
+
+test "nested speculation charges the innermost context and every enclosing one" {
+    // The exclusive partition answers "whose work is this node", the inclusive
+    // view answers "what disappears if this mechanism stops opening subtrees".
+    // A reduced probe inside a null probe must satisfy both readings at once.
+    var counters: Counters = .{};
+    const context = types.PlyContext.root(false);
+    const depth = types.DepthIntent.full(2);
+
+    counters.nodeContext(.main, 0, context, .root, depth, .principal);
+    counters.nodeContext(.main, 1, context, .null_probe, depth, .all);
+    counters.nodeContext(.main, 2, context, .reduced_probe, depth, .cut);
+    counters.nodeContext(.quiescence, 3, context, .quiescence, types.DepthIntent.full(0), .cut);
+
+    try std.testing.expectEqual(@as(u64, 1), counters.nodes_by_charge[@intFromEnum(WorkCharge.null_probe)]);
+    try std.testing.expectEqual(@as(u64, 2), counters.nodes_by_charge[@intFromEnum(WorkCharge.lmr_probe)]);
+    // Both nested nodes still lie under the null probe that paid for them.
+    try std.testing.expectEqual(@as(u64, 3), counters.nodes_under_charge[@intFromEnum(WorkCharge.null_probe)]);
+    try std.testing.expectEqual(@as(u64, 2), counters.nodes_under_charge[@intFromEnum(WorkCharge.lmr_probe)]);
+    try std.testing.expectEqual(@as(u64, 1), counters.nodes_under_charge[@intFromEnum(WorkCharge.ordinary)]);
+}
 
 test "diagnostic overlap and root stability counters describe without deciding" {
     var counters: Counters = .{};

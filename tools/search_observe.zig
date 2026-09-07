@@ -189,6 +189,36 @@ fn validate(
     {
         return error.ShallowSelectivityAccounting;
     }
+    // Step 6.5.2: the whole-tree charge is an exact partition of the visited
+    // tree, and both chain histograms must account for every node that was
+    // actually in check or actually extended. A charge that leaks nodes would
+    // silently misattribute the cost of one mechanism to another.
+    var charge_index: usize = 0;
+    while (charge_index < counters.nodes_by_charge.len) : (charge_index += 1) {
+        if (counters.nodes_under_charge[charge_index] < counters.nodes_by_charge[charge_index])
+            return error.AttributionAccounting;
+    }
+    if (sum(counters.nodes_by_charge) != counters.context_nodes or
+        counters.nodes_under_charge[@intFromEnum(search.diagnostics.WorkCharge.ordinary)] !=
+            counters.nodes_by_charge[@intFromEnum(search.diagnostics.WorkCharge.ordinary)] or
+        sum(counters.check_chain_lengths) != counters.context_in_check or
+        sum(counters.extension_chain_lengths) != counters.extended_depth_intents or
+        (counters.context_in_check == 0) != (counters.check_chain_max == 0) or
+        (counters.extended_depth_intents == 0) != (counters.extension_chain_max == 0))
+    {
+        return error.AttributionAccounting;
+    }
+    const lookup_outcomes = counters.tt_lookups_by_outcome;
+    const authenticated = lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.depth_rejected)] +
+        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.bound_rejected)] +
+        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.usable)];
+    if (authenticated != sum(counters.tt_probes_by_bound) or
+        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.usable)] !=
+            sum(counters.tt_usable_by_bound) or
+        sum(counters.tt_stores_by_outcome) != sum(counters.tt_stores_by_bound))
+    {
+        return error.TableLookupAccounting;
+    }
     if (counters.context_nodes != result.nodes or counters.outcomes != result.nodes or
         sum(counters.context_by_route) != counters.context_nodes or
         sum(counters.context_by_arrival) != counters.context_nodes or
@@ -382,6 +412,10 @@ fn printRecord(case: search.observation.Case, record: Record) void {
     printEnumCounts(search.diagnostics.PruneCause, "prunes", record.counters.prunes_by_cause);
     printEnumCounts(search.diagnostics.ExtensionCause, "extensions", record.counters.extensions_by_cause);
     printEnumCounts(search.types.EntryRoute, "routes", record.counters.context_by_route);
+    printEnumCounts(search.diagnostics.WorkCharge, "charged_nodes", record.counters.nodes_by_charge);
+    printEnumCounts(search.diagnostics.WorkCharge, "nodes_under", record.counters.nodes_under_charge);
+    printEnumCounts(search.diagnostics.TableLookup, "tt_lookups", record.counters.tt_lookups_by_outcome);
+    printEnumCounts(search.tt.StoreOutcome, "tt_store_outcomes", record.counters.tt_stores_by_outcome);
     printEnumCounts(search.types.Arrival, "arrivals", record.counters.context_by_arrival);
     printEnumCounts(
         search.types.NodeExpectation,
@@ -409,6 +443,8 @@ fn printRecord(case: search.observation.Case, record: Record) void {
             record.counters.context_searched_depth,
         },
     );
+    printBuckets("check_chain", record.counters.check_chain_max, record.counters.check_chain_lengths);
+    printBuckets("extension_chain", record.counters.extension_chain_max, record.counters.extension_chain_lengths);
     std.debug.print(
         "mechanisms null={d}/{d}/{d}/{d} lmr={d}/{d}/{d}/{d} lmr_depth={d}/{d}/{d} history={d}/{d}/{d}/{d} tt_move={d}/{d}\n",
         .{
@@ -571,6 +607,19 @@ fn printRecord(case: search.observation.Case, record: Record) void {
             completed.root_confidence.best_score_delta,
         },
     );
+}
+
+/// Chain lengths are an open-ended histogram: bucket `i` counts runs of
+/// exactly `i + 1`, and the last bucket absorbs everything longer.
+fn printBuckets(label: []const u8, longest: u16, values: [search.diagnostics.max_chain_bucket]u64) void {
+    std.debug.print("{s} max={d}", .{ label, longest });
+    for (values, 1..) |count, length| {
+        if (length == values.len)
+            std.debug.print(" {d}+={d}", .{ length, count })
+        else
+            std.debug.print(" {d}={d}", .{ length, count });
+    }
+    std.debug.print("\n", .{});
 }
 
 fn printEnumCounts(comptime Enum: type, label: []const u8, values: anytype) void {
