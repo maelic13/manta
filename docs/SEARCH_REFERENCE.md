@@ -26,7 +26,7 @@ explicit local reasoning. The reference revisions never move silently.
 
 ## Observation population
 
-The current `manta-search-observation-v22` is defined in
+The current `manta-search-observation-v23` is defined in
 [`src/search/observation.zig`](../src/search/observation.zig). It contains two
 legal, nonterminal roots in each cohort: opening, quiet middlegame, tactical,
 check/evasion, zugzwang-sensitive pawn endings, and general endgames. Every
@@ -45,6 +45,8 @@ The report contains no clock-derived value. It records:
 - main/qsearch and PV/non-PV nodes;
 - prospective principal/cut/all node expectations;
 - generated and searched moves;
+- Phase-6.5.1b staged-node, tactical-generation, quiet-stage and delayed-quiet
+  counts (zero in the production specialization);
 - ordering source and fail-high move-index populations;
 - TT probes, usable hits and stores by bound and producer;
 - quiet-history rewards and accumulated nominal depth;
@@ -167,7 +169,7 @@ an automatic task. “Deferred” preserves the current phase boundary.
 | Iterative deepening and completed root authority | `baseline.runRestrictedWithFeatures` produces `CompletedIteration`; UCI/time/fallback consume only completed evidence | Equivalent at the current 1T scope; MAN-S22 changes no behavior | Preserve through the cumulative freeze and Phase 5 |
 | Aspiration retries | Parked compile-time candidate around completed ordinary scores | Intentionally different/inert | Revisit with root confidence in 6.0, not in 5.1.2 |
 | PV/non-PV PVS and full-depth verification | `NodeExpectation` carries principal/cut/all context while `negamax` produces typed `full_search`, `pvs_probe` and `reduced_search`; PV/TT/root consume only completed provenance | MAN-S18's bounded expectation consumer was rejected; outcome authority is unchanged | Retain MAN-S17 policy; 5.1.5.8R closed skipped without new evidence |
-| Staged TT/good tactical/killer/history/bad tactical ordering | `ordering.Picker`, SEE, TT move, killers and accepted quiet/reply history feed one stable allocation-free selector; MAN-S16 capture history is archived default off | Accepted substrate; capture evidence rejected | 5.1.5.4 starts from MAN-S15 without tactical history |
+| Staged TT/good tactical/killer/history/bad tactical ordering | Production `ordering.Picker` freezes one stable allocation-free rank snapshot. Default-off Phase-6.5.1b generates exact tacticals first, then ranks delayed non-tactical quiets from live worker-local history; MAN-S16 capture history remains archived off. | Stable substrate accepted; live-history candidate is correct at `775,451` but awaits MAN-S30 | Promote only on registered remote 1T H1; otherwise retain production `799,610` |
 | Rich history families and outcome attribution | MAN-S13 supplies accepted one-ply reply evidence; MAN-S17 adds switched two-/four-/six-ply check/tactical continuation contexts through one worker-local table. Capture history was rejected; low-ply/counter evidence remains absent as unproven overlap. | MAN-S17 accepted; MAN-S18's majority consumer rejected | Capture history may repeat only through the 5.1.5.6R trigger |
 | Contextual LMR and post-reduction feedback | Accepted MAN-S15 supplies the monotone nominal-depth/searched-move base and mandatory alpha-rise re-search. MAN-S18 added a one-ply-bounded two-signal vote layer plus symmetric full-depth-only contextual feedback. | MAN-S18 rejected on H0; archived off | 5.1.5.8R closed skipped: the accepted head supplied no materially new populated relation |
 | Raw static evaluation versus searched/TT evidence | MAN-S19 caches exact near-balanced raw HCE in spare authenticated TT bits, keeps improving raw and refines a separate pruning evaluation only with compatible ordinary searched bounds | Accepted on the integrated `[1,5]` SPRT; exact feature-off identity and populated diagnostics | Production input to 5.1.5.7 |

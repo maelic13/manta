@@ -924,11 +924,30 @@ fn negamaxNode(
     }
 
     var moves = chess.position.MoveList.init();
+    var delay_non_tactical_quiets = if (comptime features.live_history_staging)
+        ply != 0 and value.current.checkers == 0 and !exclusion_node and
+            context.heuristics != null
+    else
+        false;
     if (ply == 0) {
         if (context.root_moves) |restricted| {
             for (restricted) |chess_move| moves.append(chess_move);
         } else {
             chess.movegen.generate(.all, value, &moves);
+        }
+    } else if (delay_non_tactical_quiets) {
+        chess.movegen.generate(.tacticals, value, &moves);
+        context.observer.liveHistoryTacticals(moves.count);
+        if (table_evidence.chess_move) |tt_move| {
+            if (!chess.movegen.isTactical(value, tt_move)) moves.append(tt_move);
+        }
+        // With no legal TT/tactical move, the quiet subset is required now to
+        // distinguish an ordinary quiet node from stalemate. No descendant
+        // can update history before that proof, so delaying it adds no value.
+        if (moves.count == 0) {
+            chess.movegen.generateAppend(.non_tactical_quiets, value, &moves);
+            context.observer.liveHistoryQuiets(moves.count);
+            delay_non_tactical_quiets = false;
         }
     } else {
         chess.movegen.generate(.all, value, &moves);
@@ -1056,20 +1075,37 @@ fn negamaxNode(
     else
         null;
     const continuation_contexts = continuationSet(features, context.thread, ply, value.side_to_move);
-    var picker = ordering.Picker.init(
-        features.capture_history,
-        &moves,
-        value,
-        binding,
-        table_evidence.chess_move,
-        context.heuristics,
-        context.params,
-        ply,
-        reply_context,
-        continuation_contexts,
-        context.heuristics != null,
-        @TypeOf(context.observer.*).observes_move_sources,
-    );
+    var picker = if (comptime features.live_history_staging)
+        ordering.LiveHistoryPicker.init(
+            features.capture_history,
+            &moves,
+            value,
+            binding,
+            table_evidence.chess_move,
+            context.heuristics,
+            context.params,
+            ply,
+            reply_context,
+            continuation_contexts,
+            context.heuristics != null,
+            @TypeOf(context.observer.*).observes_move_sources,
+            delay_non_tactical_quiets,
+        )
+    else
+        ordering.Picker.init(
+            features.capture_history,
+            &moves,
+            value,
+            binding,
+            table_evidence.chess_move,
+            context.heuristics,
+            context.params,
+            ply,
+            reply_context,
+            continuation_contexts,
+            context.heuristics != null,
+            @TypeOf(context.observer.*).observes_move_sources,
+        );
 
     const original_alpha = alpha_initial;
     var alpha = alpha_initial;
@@ -1097,7 +1133,28 @@ fn negamaxNode(
         if (features.capture_history) chess.types.move_capacity else 0
     ]chess.move.Move = undefined;
     var searched_capture_count: usize = 0;
-    while (picker.next()) |selection| {
+    while (true) {
+        const maybe_selection = picker.next();
+        if (comptime features.live_history_staging) {
+            if (maybe_selection == null) {
+                if (picker.enterQuiets(
+                    features.capture_history,
+                    value,
+                    binding,
+                    table_evidence.chess_move,
+                    context.heuristics,
+                    context.params,
+                    ply,
+                    reply_context,
+                    continuation_contexts,
+                )) |generated| {
+                    context.observer.generated(generated);
+                    context.observer.liveHistoryQuiets(generated);
+                    continue;
+                }
+            }
+        }
+        const selection = maybe_selection orelse break;
         const chess_move = selection.chess_move;
         const move_index = selection.index;
         if (exclusion_node and chess_move.raw() == excluded_move.raw()) {

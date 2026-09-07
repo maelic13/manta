@@ -162,8 +162,12 @@ the fitted vector default on, while the off arm reconstructs untuned MAN-S29.
 The cumulative `MAN-C02` final MAN-T05-4T versus final-Phase-5-1T gate accepted
 H1 after 150 scored games at `+305.51 +/- 55.60` nElo without anomaly. The
 short decisive gate establishes a material cumulative gain, not a precise
-rating or component attribution. Step 6.3.3c and Phase 6 are complete. Stop
-before Phase 7; its first step requires separate maintainer approval.
+rating or component attribution. Step 6.3.3c and Phase 6 are complete. Targeted
+pre-NNUE Phase 6.5 is current. Step 6.5.1a rejected only the behavior-identical
+staged-picker formulation. Step 6.5.1b implementation and deterministic
+qualification are complete at candidate fingerprint `775,451`; it remains
+default-off pending registered remote-host `MAN-S30`. Stop before Phase 7; its
+first step requires separate maintainer approval.
 
 ## Product objective
 
@@ -199,6 +203,13 @@ Correctness tests, code similarity, node reduction, depth, NPS and static loss
 do not prove playing strength. Once tournament-capable, registered games decide
 playing changes; diagnostics explain them.
 
+During Phase 6.5, every retained production-executable candidate, including an
+exact speed optimization, requires one prospectively registered 1T SPRT. A
+candidate claiming behavior identity must reproduce the accepted fingerprint,
+PV and results; a diagnosed legal deterministic mismatch reclassifies it as a
+playing candidate rather than rejecting it for strength. Documentation, tests
+and disabled diagnostics require no games.
+
 For a coherent evaluation-strength candidate, evaluator throughput is a cost
 diagnostic rather than an automatic refutation: stronger chess decisions may
 justify slower evaluation, and representative time-controlled games measure
@@ -225,11 +236,14 @@ switches and run one final production SPRT. A passing bundle licenses the bundle
 not a claim that every component helped; use targeted, value-of-information
 ablations rather than an exhaustive matrix.
 
-The designated game-testing and tuning host is one Ryzen 9 5950X. Do not start
-long jobs as a coding agent. Prepare a bounded job with an exact host profile,
-prospective pair/game cap, pilot-measured pair rate, expected and worst-case
-wall time, storage estimate, checkpoint/resume path and stop rule for the user
-to run. Do not overlap it with data generation or other timed work on that
+The designated game-testing, tuning and final cross-engine comparison host is
+the separate Ryzen 9 5950X, not the development workspace computer. Do not
+start long jobs as a coding agent. Prepare exact candidate/baseline source and
+binary identities, hashes, toolchain/options, a setup-only command, prospective
+pair/game cap, pilot-measured pair rate, expected and worst-case wall time,
+storage estimate, checkpoint/resume path and stop rule for the user to run.
+Require the returned manifest, log, PGN and checkpoint before recording a
+verdict. Do not overlap it with data generation or other timed work on that
 machine.
 
 Colosseum is parked until the maintainer explicitly authorizes trying it again.

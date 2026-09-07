@@ -58,7 +58,39 @@ the maintainer inspects or launches it. `SprtElo0` and `SprtElo1` default to
 `3` and `10`; a different prospectively registered gate must supply both
 explicitly.
 
-## Pending MAN-R02 gate
+## Pending MAN-S30 gate
+
+Phase 6.5.1b is implemented behind the default-off live-history staged-picker
+switch. On the separate clean 5950X checkout, build both sides from the same
+frozen revision with Zig 0.16.0:
+
+```powershell
+& .\tools\build_test.ps1 -Suffix MAN-S30-candidate -LiveHistoryStaging
+& .\tools\build_test.ps1 -Suffix MAN-S30-baseline
+```
+
+The schema-7 sidecars must report native ReleaseFast, non-PGO, integrated time
+enabled, candidate `live_history_staging: true`, baseline `false`, candidate
+fingerprint `775451`, baseline `799610`, clean source and distinct binary
+SHA-256s. This is an internal-search-only candidate: engine protocol, clock
+policy, runner, Ryzen host, placement, book and adjudication are unchanged and
+already qualified by retained Manta, Rarog and Basilisk evidence, so no fresh
+pilot is required. Dry-run and then launch the exact registered SPRT shape:
+
+```powershell
+& .\tools\step_5_1_fastchess.ps1 -Job sprt -DryRun `
+  -Candidate .\tools\test_engines\manta-MAN-S30-candidate.exe `
+  -Baseline .\tools\test_engines\manta-MAN-S30-baseline.exe `
+  -CandidateName MAN-S30-live-history-staging -BaselineName MAN-S29 `
+  -RunId MAN-S30 -SprtSeed 1445075129 -SprtElo0 1 -SprtElo1 5 `
+  -MaxGames 16000
+```
+
+Any timeout, crash, disconnect, illegal move, incomplete result, nonzero exit or
+affinity anomaly invalidates the run. The coding agent does not remove
+`-DryRun` or start the remote job.
+
+## Archived MAN-R02 gate
 
 Step 6.0.3 uses the unchanged qualified one-thread bridge. Clean native Zig
 0.16.0 binaries from `7b4b61a` are candidate

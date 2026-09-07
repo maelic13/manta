@@ -48,6 +48,9 @@
     -StabilityAspiration enables the default-off Step-6.0.3 stability-gated
     aspiration candidate. It changes no UCI surface.
 
+    -LiveHistoryStaging enables the default-off Step-6.5.1b staged-picker
+    candidate. It changes no UCI surface.
+
     By default the build is smoke-tested before the manifest is written: the
     freshly built binary runs `bench` and must report a positive node count, so
     a broken build fails here rather than 3 hours into an SPRT. `-BuildOnly`
@@ -89,6 +92,9 @@
 .PARAMETER StabilityAspiration
     Build the Step-6.0.3 stability-gated aspiration candidate arm.
 
+.PARAMETER LiveHistoryStaging
+    Build the Step-6.5.1b live-history staged-picker candidate arm.
+
 .PARAMETER BenchDepth
     Depth for the verification bench. Default 6 (the manta-search-bench-v1
     default). Lower it for a quicker smoke test; the node count is only a
@@ -124,6 +130,7 @@ param(
     [switch]$RootConfidenceTime,
     [switch]$IntegratedTime,
     [switch]$StabilityAspiration,
+    [switch]$LiveHistoryStaging,
     [switch]$BuildOnly,
     [int]$BenchDepth = 6,
     [string]$TestEnginesDir = "$PSScriptRoot\test_engines",
@@ -170,6 +177,7 @@ function Write-EngineManifest {
         [Parameter(Mandatory)][bool]$RootConfidenceTime,
         [Parameter(Mandatory)][bool]$IntegratedTime,
         [Parameter(Mandatory)][bool]$StabilityAspiration,
+        [Parameter(Mandatory)][bool]$LiveHistoryStaging,
         [switch]$SkipBench
     )
 
@@ -194,7 +202,7 @@ function Write-EngineManifest {
     }
 
     $manifest = [ordered]@{
-        schema_version     = 6
+        schema_version     = 7
         engine             = $binary.Name
         binary_sha256      = $binaryHash
         binary_size_bytes  = $binary.Length
@@ -208,6 +216,7 @@ function Write-EngineManifest {
         root_confidence_time = $RootConfidenceTime
         integrated_time     = $IntegratedTime
         stability_aspiration = $StabilityAspiration
+        live_history_staging = $LiveHistoryStaging
         search_spsa_bake    = $false
         git_sha            = $sha
         git_tree           = $tree
@@ -251,7 +260,8 @@ try {
     $integratedTimeText = $integratedTimeEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dintegrated-time=$integratedTimeText"
     if ($StabilityAspiration) { $buildArgs += "-Dstability-aspiration=true" }
-    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })"
+    if ($LiveHistoryStaging) { $buildArgs += "-Dlive-history-staging=true" }
+    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($LiveHistoryStaging) { '-live-history-staging' } else { '' })"
 
     Write-Host ""
     Write-Host "Building Manta ($flavor) - suffix: $Suffix"
@@ -283,7 +293,8 @@ try {
         -CorrectionHistory ([bool]$CorrectionHistory) -Tune ([bool]$Tune) `
         -RootConfidenceTime ([bool]$RootConfidenceTime) `
         -IntegratedTime $integratedTimeEnabled `
-        -StabilityAspiration ([bool]$StabilityAspiration) -SkipBench:$BuildOnly
+        -StabilityAspiration ([bool]$StabilityAspiration) `
+        -LiveHistoryStaging ([bool]$LiveHistoryStaging) -SkipBench:$BuildOnly
     Write-Host ""
     Write-Host "Done: $dest"
     Write-Host ""

@@ -803,6 +803,20 @@ search without heuristic state retains generation order entirely. Main,
 qsearch and ProbCut consume the same substrate, but neither node expectation
 nor stage label controls pruning, reduction, extension or TT storage yet.
 
+Step 6.5.1a retained this eager rank snapshot and rejected only the exact
+staged-generation formulation. A genuinely lazy quiet stage observed descendant
+worker-local history mutations and changed the production depth-six fingerprint
+from `799,610` to `775,451`; ranking quiets before the first child restored
+identity but eliminated the intended saved work. The prototype was removed.
+Step 6.5.1b reconstructs live-history staging behind the default-off
+`live_history_staging` feature and `-Dlive-history-staging` artifact switch.
+Ordinary non-root, non-check, non-exclusion nodes generate the exact tactical
+subset first; after no TT or good tactical move remains, the same bounded list
+receives exact non-tactical quiets and ranks them from then-current worker-local
+history. Root, check-evasion and exclusion paths retain eager generation. The
+candidate repeats deterministically at fingerprint `775,451`, but it has no
+strength verdict until registered remote-host `MAN-S30` accepts H1.
+
 Accepted ADR-0036 adds one independently ablatable dynamic base-LMR consumer.
 Eligibility remains the accepted late quiet, non-checking, non-singular scope.
 Only nominal depth and searched legal-move ordinal determine magnitude through
@@ -1071,7 +1085,6 @@ baseline sizes and performance, then turns approved budgets into assertions.
 
 The following remain open until their evidence phase:
 
-- staged move-generation shape and any evidence-led layout-budget revision;
 - additional sliding-attack backends and retained backend selection;
 - TT cluster packing, replacement constants and optional 1T storage policy;
 - mailbox primitive and scheduling implementation;

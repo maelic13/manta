@@ -66,6 +66,7 @@ fn observe(
         .{
             .correction_history = search_build_options.correction_history,
             .aspiration = search_build_options.stability_aspiration,
+            .live_history_staging = search_build_options.live_history_staging,
         },
         &position,
         harness.binding(),
@@ -99,6 +100,16 @@ fn validate(
         return error.NodeTypeAccounting;
     if (counters.searched_main_moves + counters.searched_quiescence_moves != sum(counters.searched_by_source))
         return error.MoveSourceAccounting;
+    if (comptime search_build_options.live_history_staging) {
+        if (counters.live_history_quiet_stages > counters.live_history_staged_nodes)
+            return error.LiveHistoryStageAccounting;
+    } else if (counters.live_history_staged_nodes != 0 or
+        counters.live_history_tacticals_generated != 0 or
+        counters.live_history_quiet_stages != 0 or
+        counters.live_history_quiets_generated != 0)
+    {
+        return error.LiveHistoryStageAccounting;
+    }
     if (counters.main_cutoffs + counters.quiescence_cutoffs != sum(counters.fail_high_by_index) or
         counters.main_cutoffs + counters.quiescence_cutoffs != sum(counters.cutoffs_by_source))
     {
@@ -287,6 +298,7 @@ fn compareDisabled(
         .{
             .correction_history = search_build_options.correction_history,
             .aspiration = search_build_options.stability_aspiration,
+            .live_history_staging = search_build_options.live_history_staging,
         },
         &position,
         harness.binding(),
@@ -417,6 +429,15 @@ fn printRecord(case: search.observation.Case, record: Record) void {
             record.counters.history_penalty_depth,
             record.counters.tt_move_best,
             record.counters.tt_move_available,
+        },
+    );
+    std.debug.print(
+        "live_history_staging nodes={d} tacticals={d} quiet_stages={d} quiets={d}\n",
+        .{
+            record.counters.live_history_staged_nodes,
+            record.counters.live_history_tacticals_generated,
+            record.counters.live_history_quiet_stages,
+            record.counters.live_history_quiets_generated,
         },
     );
     std.debug.print(

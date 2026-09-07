@@ -2,7 +2,7 @@
 const std = @import("std");
 const chess = @import("../chess/root.zig");
 
-pub const version = "manta-search-observation-v22";
+pub const version = "manta-search-observation-v23";
 pub const hash_mib: u64 = 16;
 
 pub const Cohort = enum {

@@ -46,6 +46,8 @@ pub const Disabled = struct {
     pub inline fn nodeContext(_: *Disabled, _: NodeKind, _: types.PlyContext, _: types.EntryRoute, _: types.DepthIntent, _: types.NodeExpectation) void {}
     pub inline fn nodeOutcome(_: *Disabled, _: types.OutcomeAttribution) void {}
     pub inline fn generated(_: *Disabled, _: usize) void {}
+    pub inline fn liveHistoryTacticals(_: *Disabled, _: usize) void {}
+    pub inline fn liveHistoryQuiets(_: *Disabled, _: usize) void {}
     pub inline fn searched(_: *Disabled, _: NodeKind) void {}
     pub inline fn cutoff(_: *Disabled, _: NodeKind) void {}
     pub inline fn ttProbe(_: *Disabled, _: types.Provenance, _: types.Bound, _: bool) void {}
@@ -134,6 +136,10 @@ pub const Counters = struct {
     outcomes_by_disposition: [disposition_count]u64 = @splat(0),
     outcomes_by_producer: [provenance_count]u64 = @splat(0),
     generated_moves: u64 = 0,
+    live_history_staged_nodes: u64 = 0,
+    live_history_tacticals_generated: u64 = 0,
+    live_history_quiet_stages: u64 = 0,
+    live_history_quiets_generated: u64 = 0,
     searched_main_moves: u64 = 0,
     searched_quiescence_moves: u64 = 0,
     main_cutoffs: u64 = 0,
@@ -330,6 +336,16 @@ pub const Counters = struct {
 
     pub inline fn generated(self: *Counters, count: usize) void {
         self.generated_moves += count;
+    }
+
+    pub inline fn liveHistoryTacticals(self: *Counters, count: usize) void {
+        self.live_history_staged_nodes += 1;
+        self.live_history_tacticals_generated += count;
+    }
+
+    pub inline fn liveHistoryQuiets(self: *Counters, count: usize) void {
+        self.live_history_quiet_stages += 1;
+        self.live_history_quiets_generated += count;
     }
 
     pub inline fn searched(self: *Counters, kind: NodeKind) void {

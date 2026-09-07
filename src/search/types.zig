@@ -251,6 +251,11 @@ pub const Features = struct {
     continuation_distance_2: bool = true,
     continuation_distance_4: bool = true,
     continuation_distance_6: bool = true,
+    /// Phase-6.5.1b playing candidate. Ordinary non-check interior nodes emit
+    /// TT and good tactical moves before generating non-tactical quiets. The
+    /// delayed quiet rank observes descendant-completed worker-local history;
+    /// legality, score, bound, pruning and thread ownership remain unchanged.
+    live_history_staging: bool = false,
     /// Archived rejected MAN-S14 switch, default off. Only an authoritative
     /// full-depth fail-low after an LMR false positive may add one negative
     /// reply-history update; history still has no reduction authority.
@@ -366,6 +371,7 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     try std.testing.expect(!features.capture_history);
     try std.testing.expect(!features.balanced_history);
     try std.testing.expect(!features.history_lmr);
+    try std.testing.expect(!features.live_history_staging);
     try std.testing.expect(!features.lmr_reply_feedback);
     try std.testing.expect(!features.main_selectivity_sync);
     try std.testing.expect(!features.depth_authority_sync);

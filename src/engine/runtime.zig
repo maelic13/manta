@@ -693,6 +693,7 @@ fn executeSearch(
     const features: search.types.Features = .{
         .correction_history = search_build_options.correction_history,
         .aspiration = search_build_options.stability_aspiration,
+        .live_history_staging = search_build_options.live_history_staging,
     };
     if (execution) |worker_execution| return search.baseline.runRestrictedWorkerWithTablebaseAndParams(
         features,

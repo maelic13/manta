@@ -525,8 +525,12 @@ pub const Picker = struct {
     }
 
     pub fn next(self: *Picker) ?Selection {
-        if (self.cursor >= self.moves.count) return null;
+        const selected_index = self.bestRemainingIndex() orelse return null;
+        return self.takeAt(selected_index);
+    }
 
+    fn bestRemainingIndex(self: *const Picker) ?usize {
+        if (self.cursor >= self.moves.count) return null;
         var selected_index = self.cursor;
         if (self.select_best) {
             var candidate = self.cursor + 1;
@@ -537,7 +541,11 @@ pub const Picker = struct {
                     selected_index = candidate;
             }
         }
+        return selected_index;
+    }
 
+    fn takeAt(self: *Picker, selected_index: usize) Selection {
+        std.debug.assert(selected_index >= self.cursor and selected_index < self.moves.count);
         const selected_move = self.moves.moves[selected_index];
         const selected_rank = self.ranks[selected_index];
         var shift = selected_index;
@@ -557,6 +565,123 @@ pub const Picker = struct {
         return result;
     }
 };
+
+/// Candidate-only staged selection for ordinary non-check interior nodes.
+/// Tactical ranks are frozen at node entry. Non-tactical quiets are generated
+/// and ranked only when no TT or good tactical move remains, so their ranking
+/// deliberately observes history learned by completed descendant searches.
+/// The caller retains terminal, score, pruning and thread authority.
+pub const LiveHistoryPicker = struct {
+    inner: Picker,
+    phase: Phase,
+    classify_sources: bool,
+
+    const Phase = enum { tactical, complete };
+
+    pub inline fn init(
+        comptime use_capture_history: bool,
+        moves: *chess.position.MoveList,
+        value: *const chess.position.Position,
+        binding: anytype,
+        tt_move: ?chess.move.Move,
+        state: ?*const State,
+        search_params: params.Values,
+        ply: usize,
+        reply: ?ReplyContext,
+        continuations: ContinuationSet,
+        select_best: bool,
+        classify_sources: bool,
+        staged: bool,
+    ) LiveHistoryPicker {
+        return .{
+            .inner = Picker.init(
+                use_capture_history,
+                moves,
+                value,
+                binding,
+                tt_move,
+                state,
+                search_params,
+                ply,
+                reply,
+                continuations,
+                select_best,
+                classify_sources,
+            ),
+            .phase = if (staged) .tactical else .complete,
+            .classify_sources = classify_sources,
+        };
+    }
+
+    pub fn next(self: *LiveHistoryPicker) ?Selection {
+        const selected_index = self.inner.bestRemainingIndex() orelse return null;
+        if (self.phase == .tactical and
+            self.inner.ranks[selected_index].source == .bad_tactical) return null;
+        return self.inner.takeAt(selected_index);
+    }
+
+    /// Opens the delayed quiet stage exactly once and returns the number of
+    /// newly generated unique moves for observation accounting. A quiet TT
+    /// move was already emitted from the initial list and is removed from the
+    /// appended subset before ranking.
+    pub fn enterQuiets(
+        self: *LiveHistoryPicker,
+        comptime use_capture_history: bool,
+        value: *const chess.position.Position,
+        binding: anytype,
+        tt_move: ?chess.move.Move,
+        state: ?*const State,
+        search_params: params.Values,
+        ply: usize,
+        reply: ?ReplyContext,
+        continuations: ContinuationSet,
+    ) ?usize {
+        if (self.phase != .tactical) return null;
+        self.phase = .complete;
+
+        const appended_start = self.inner.moves.count;
+        chess.movegen.generateAppend(.non_tactical_quiets, value, self.inner.moves);
+        if (tt_move) |candidate| {
+            if (!chess.movegen.isTactical(value, candidate))
+                removeAppendedDuplicate(self.inner.moves, appended_start, candidate);
+        }
+        const generated = self.inner.moves.count - appended_start;
+        for (appended_start..self.inner.moves.count) |index| {
+            self.inner.ranks[index] = if (self.inner.select_best or self.classify_sources)
+                rank(
+                    use_capture_history,
+                    value,
+                    binding,
+                    self.inner.moves.moves[index],
+                    tt_move,
+                    state,
+                    search_params,
+                    ply,
+                    reply,
+                    continuations,
+                )
+            else
+                .{ .source = .quiet_history, .history = 0 };
+        }
+        return generated;
+    }
+};
+
+fn removeAppendedDuplicate(
+    moves: *chess.position.MoveList,
+    appended_start: usize,
+    duplicate: chess.move.Move,
+) void {
+    var index = appended_start;
+    while (index < moves.count) : (index += 1) {
+        if (moves.moves[index].raw() != duplicate.raw()) continue;
+        var shift = index;
+        while (shift + 1 < moves.count) : (shift += 1)
+            moves.moves[shift] = moves.moves[shift + 1];
+        moves.count -= 1;
+        return;
+    }
+}
 
 fn stage(source_value: Source) u3 {
     return switch (source_value) {
@@ -651,7 +776,7 @@ fn rank(
     if (tt_move) |candidate| {
         if (candidate.raw() == chess_move.raw()) return .{ .source = .tt, .history = 0 };
     }
-    const tactical = chess.movegen.isCapture(value, chess_move) or chess_move.kind() == .promotion;
+    const tactical = chess.movegen.isTactical(value, chess_move);
     if (tactical) {
         return .{
             .source = if (binding.seeAtLeast(value, chess_move, 0)) .good_tactical else .bad_tactical,

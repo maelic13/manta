@@ -108,22 +108,35 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 
 - [x] **6.5.0 — Comparable performance audit:** Confirmed identical board and
   search corpora and separated tree-size, per-node, board and HCE costs.
-- [ ] **6.5.1 — Staged move picker:** Preserve exact chess behavior while
-  trying TT and tactical moves before lazily generating and scoring quiets.
-- [ ] **6.5.2 — Performance rebaseline:** Re-measure the unchanged search tree
-  and attribute the remaining per-node cost before further optimization.
-- [ ] **6.5.3 — LMR/search efficiency:** Diagnose MAN-S23's deep-endgame
-  re-search failure, then gate one structurally new reduction candidate.
-- [ ] **6.5.4 — Null-move verification:** Test a separately gated safe-material
-  policy that avoids redundant verification without weakening zugzwang safety.
-- [ ] **6.5.5 — Board and SEE hot paths:** Optimize measured move-generation,
-  transition and SEE costs with exact state and legality conformance.
-- [ ] **6.5.6 — HCE hot paths:** Optimize only measured full-refresh costs,
-  beginning with placement/phase traversal and pawn-cache evidence.
-- [ ] **6.5.7 — Build optimization:** Add PGO only if a representative training
-  workload produces a reproducible behavior-identical gain.
-- [ ] **6.5.8 — Qualification and close:** Run the final deterministic gates,
-  record accepted performance, and gate any chess-behavior changes in games.
+- [x] **6.5.1a — Exact staged move picker:** Rejected only as an exact
+  optimization. Preserving the parent-node history snapshot removed the saved
+  quiet work; the live-history formulation remains a distinct playing idea.
+- [ ] **6.5.1b — Live-history staged picker:** Implementation and deterministic
+  qualification are complete at candidate fingerprint `775,451`; the switch
+  remains default-off pending the registered remote-host `MAN-S30` 1T SPRT.
+  Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+- [ ] **6.5.2 — Whole-tree attribution:** Re-measure the post-MAN-S29 depth
+  curve and attribute main, qsearch, proof, re-search, TT and forcing-line work.
+  Model: GPT-5.6 Terra High.
+- [ ] **6.5.3 — Forcing-line selectivity:** Test blanket check extension,
+  checking-move protection and evasion reductions as separately gated playing
+  candidates. Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+- [ ] **6.5.4 — Aspiration-aware contextual LMR:** Build a dependency-complete,
+  non-saturating reduction policy and give it one remote-host SPRT. Model:
+  GPT-6 Astra XHigh; GPT-5.6 Sol Max fallback.
+- [ ] **6.5.5 — Forward proof and pruning efficiency:** Diagnose and separately
+  gate null verification, ProbCut and prospective-depth LMP/futility/SEE work.
+  Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+- [ ] **6.5.6 — TT and qsearch efficiency:** Measure replacement/cutoff yield
+  and remove unnecessary non-check qsearch move generation before considering
+  broader TT changes. Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+- [ ] **6.5.7 — Exact hot paths:** Reprofile the accepted search head, then
+  optimize measured board, SEE and HCE costs. Model: GPT-5.6 Terra High.
+- [ ] **6.5.8 — Build optimization:** Add PGO only if a representative training
+  workload produces a reproducible gain. Model: GPT-5.6 Terra High.
+- [ ] **6.5.9 — Qualification and close:** Require the common depth curve and a
+  routinely runnable `bench 13`, per-candidate remote-host H1 evidence and one
+  cumulative SPRT. Model: GPT-5.6 Sol High.
 
 ### Phase 7 — NNUE runway and data contract
 

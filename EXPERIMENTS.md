@@ -15,6 +15,14 @@ run directories.
   a clean prospective gate.
 - Static tests, loss, fixed-node quality, speed and fingerprints are diagnostic
   filters. They do not prove playing strength.
+- During Phase 6.5, every retained production-executable candidate—including
+  behavior-identical speed and PGO work—requires its own clean 1T H1. Tests,
+  documentation and disabled diagnostics are not production candidates.
+- Phase-6.5 games run on the separate designated Ryzen 9 5950X. Registration
+  and returned evidence bind source/archive identity, candidate/baseline binary
+  hashes, Zig/build options, feature switches, runner/book hashes, setup-only
+  output, manifest, log, PGN and checkpoint. Development-machine games cannot
+  promote a candidate.
 - SPSA pilots establish coordinate activity only. Promote only a complete rounded
   fit after its own clean game gate.
 - Do not repeat a rejected mechanism without the recorded trigger or genuinely
@@ -80,6 +88,32 @@ The time-sensitivity runner scores completed time forfeits as chess outcomes
 because clock safety is part of that fit. Crashes, disconnects, illegal moves,
 affinity faults, incomplete results and nonzero exits remain fatal. Other SPSA
 groups retain strict timeout handling.
+
+## Registered pending gate
+
+| ID | Candidate and hypothesis | Prospective gate | Status |
+|---|---|---|---|
+| `MAN-S30` | Phase-6.5.1b live-history staged picker against production MAN-S29. Delaying non-tactical quiet generation and consuming descendant-completed worker-local history will reduce abandoned generation and improve time-controlled play without changing chess or evidence authority. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `1445075129` | Implementation qualified at fingerprint `775,451`; default-off and awaiting clean remote artifacts and direct SPRT |
+
+`MAN-S30` runs only on the separate designated Ryzen 9 5950X. Candidate and
+baseline shall be clean native ReleaseFast, non-PGO Zig 0.16.0 builds from the
+same frozen source identity; candidate uses only
+`-Dlive-history-staging=true`. The candidate fingerprint must be `775,451` and
+the baseline `799,610` at depth six before admission. Record both binary
+SHA-256s and schema-7 sidecars before the SPRT. This internal-search-only change
+retains the already qualified engine/protocol, clock, runner, Ryzen host,
+placement, book and adjudication boundaries; retained Manta, Rarog and Basilisk
+calibration supplies the rate and capacity evidence, so no fresh pilot is
+required. Any timeout, crash, disconnect, illegal move, incomplete result,
+nonzero exit or placement anomaly invalidates the playing run.
+
+The registered SPRT has a normal planning range of 45–90 minutes, a 2.9-hour
+worst-case estimate, a 3.5-hour operational stop and a 100-MiB storage reserve.
+The bridge has no pair-atomic resume; interruption restarts from zero with the
+same seed and command. H1 promotes only the complete candidate; H0 rejects it,
+and cap exhaustion is unresolved and cannot promote. Return the dry-run output,
+both sidecars, run manifest, log, PGN and checkpoint/LLR state for independent
+reconciliation.
 
 ## Rejected or parked hypotheses
 

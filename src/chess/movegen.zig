@@ -13,6 +13,14 @@ pub const Mode = enum {
     all,
     captures,
     quiets,
+    /// Captures plus capture and non-capture promotions. This is the exact
+    /// tactical subset used by a staged search picker; promotions remain
+    /// tactical because their material transformation is not a quiet move.
+    tacticals,
+    /// Legal non-captures excluding promotions. Together with `tacticals`
+    /// this partitions `all` without changing either subset's filtered
+    /// generation order.
+    non_tactical_quiets,
 };
 
 /// Generates a complete legal subset into a caller-owned fixed-capacity list.
@@ -23,6 +31,16 @@ pub fn generate(
     list: *position.MoveList,
 ) void {
     list.count = 0;
+    generateAppend(mode, value, list);
+}
+
+/// Appends a legal subset to an existing caller-owned list. The caller must
+/// compose disjoint modes; the fixed legal-move capacity bounds their union.
+pub fn generateAppend(
+    comptime mode: Mode,
+    value: *const position.Position,
+    list: *position.MoveList,
+) void {
     switch (value.side_to_move) {
         .white => generateFor(.white, mode, value, list),
         .black => generateFor(.black, mode, value, list),
@@ -100,6 +118,12 @@ pub fn isCapture(value: *const position.Position, chess_move: move.Move) bool {
             value.physical.pieceOn(chess_move.to()) != .none);
 }
 
+/// Search ordering treats every promotion as tactical even when the pawn
+/// advances to an empty square.
+pub fn isTactical(value: *const position.Position, chess_move: move.Move) bool {
+    return isCapture(value, chess_move) or chess_move.kind() == .promotion;
+}
+
 fn generateFor(
     comptime us: types.Color,
     comptime mode: Mode,
@@ -117,11 +141,11 @@ fn generateFor(
     const king = queries.kingSquare(value, us);
     const target = switch (mode) {
         .all => ~friendly,
-        .captures => enemy,
-        .quiets => ~occupied,
+        .captures, .tacticals => enemy,
+        .quiets, .non_tactical_quiets => ~occupied,
     };
 
-    if (mode == .captures) {
+    if (mode == .captures or mode == .tacticals) {
         @call(.always_inline, generateKing, .{ us, value, king, target, list });
     } else {
         generateKing(us, value, king, target, list);
@@ -137,7 +161,7 @@ fn generateFor(
     };
     const pinned = pinnedPieces(value, us, king, occupied);
 
-    if (mode == .captures) {
+    if (mode == .captures or mode == .tacticals) {
         @call(.always_inline, generatePawns, .{
             us,
             mode,
@@ -156,7 +180,8 @@ fn generateFor(
     generatePieces(us, .rook, value, king, pinned, check_mask, target, list);
     generatePieces(us, .queen, value, king, pinned, check_mask, target, list);
 
-    if (mode != .captures and checkers == 0) generateCastling(us, value, list);
+    if ((mode == .all or mode == .quiets or mode == .non_tactical_quiets) and
+        checkers == 0) generateCastling(us, value, list);
 }
 
 fn generateKing(
@@ -242,10 +267,12 @@ fn generatePawns(
     const free_promotions = free & promotion_rank;
     const free_non_promotions = free & ~promotion_rank;
 
-    if (mode != .captures) {
+    if (mode == .all or mode == .quiets or mode == .tacticals) {
         var promotion_pushes = shiftPawns(us, free_promotions) & ~occupied & check_mask;
         appendPawnSet(list, &promotion_pushes, -push, true);
+    }
 
+    if (mode == .all or mode == .quiets or mode == .non_tactical_quiets) {
         var single_pushes = shiftPawns(us, free_non_promotions) & ~occupied & check_mask;
         appendPawnSet(list, &single_pushes, -push, false);
 
@@ -254,7 +281,7 @@ fn generatePawns(
         appendPawnSet(list, &double_pushes, -(push * 2), false);
     }
 
-    if (mode != .quiets) {
+    if (mode == .all or mode == .captures or mode == .tacticals) {
         const promotion_left_sources = free_promotions & ~file_a;
         const promotion_right_sources = free_promotions & ~file_h;
         var promotion_left = (if (us == .white)
@@ -284,17 +311,21 @@ fn generatePawns(
         const pin_ray = attacks.line[king.index()][from.index()];
         const promotion_from = types.relativeRank(us, from.rank()) == .seven;
 
-        if (mode != .captures) {
+        if (mode == .all or mode == .quiets or mode == .tacticals or
+            mode == .non_tactical_quiets)
+        {
             if (offsetSquare(from, push)) |one| {
                 if (occupied & one.bit() == 0) {
                     if (one.bit() & pin_ray & check_mask != 0) {
-                        if (promotion_from) {
+                        if (promotion_from and mode != .non_tactical_quiets) {
                             appendPromotions(list, from, one);
-                        } else {
+                        } else if (!promotion_from and mode != .tacticals) {
                             list.append(move.Move.normal(from, one));
                         }
                     }
-                    if (!promotion_from and types.relativeRank(us, from.rank()) == .two) {
+                    if (mode != .tacticals and !promotion_from and
+                        types.relativeRank(us, from.rank()) == .two)
+                    {
                         if (offsetSquare(one, push)) |two| {
                             if (occupied & two.bit() == 0 and
                                 two.bit() & pin_ray & check_mask != 0)
@@ -307,7 +338,7 @@ fn generatePawns(
             }
         }
 
-        if (mode != .quiets) {
+        if (mode == .all or mode == .captures or mode == .tacticals) {
             var captures = attacks.pawn[us.index()][from.index()] & enemy &
                 pin_ray & check_mask;
             while (captures != 0) {
@@ -322,7 +353,9 @@ fn generatePawns(
     }
 
     const ep = value.current.ep_square;
-    if (mode != .quiets and ep != .none) {
+    if ((mode == .all or mode == .captures or mode == .tacticals) and
+        ep != .none)
+    {
         var candidates = attacks.pawn[us.opposite().index()][ep.index()] & pawns;
         while (candidates != 0) {
             const from = popSquare(&candidates);
@@ -553,20 +586,39 @@ test "legal generation partitions coherent legal positions exactly" {
         var all = position.MoveList.init();
         var captures = position.MoveList.init();
         var quiets = position.MoveList.init();
+        var tacticals = position.MoveList.init();
+        var non_tactical_quiets = position.MoveList.init();
         generate(.all, &value, &all);
         generate(.captures, &value, &captures);
         generate(.quiets, &value, &quiets);
+        generate(.tacticals, &value, &tacticals);
+        generate(.non_tactical_quiets, &value, &non_tactical_quiets);
         try expectUnique(&all);
         try expectUnique(&captures);
         try expectUnique(&quiets);
+        try expectUnique(&tacticals);
+        try expectUnique(&non_tactical_quiets);
         try std.testing.expectEqual(all.slice().len, captures.slice().len + quiets.slice().len);
+        try std.testing.expectEqual(
+            all.slice().len,
+            tacticals.slice().len + non_tactical_quiets.slice().len,
+        );
 
+        var tactical_index: usize = 0;
+        var non_tactical_index: usize = 0;
         for (all.slice()) |chess_move| {
             try std.testing.expect(isLegal(&value, chess_move));
             try std.testing.expect(contains(
                 if (isCapture(&value, chess_move)) &captures else &quiets,
                 chess_move,
             ));
+            if (isTactical(&value, chess_move)) {
+                try std.testing.expectEqual(tacticals.moves[tactical_index], chess_move);
+                tactical_index += 1;
+            } else {
+                try std.testing.expectEqual(non_tactical_quiets.moves[non_tactical_index], chess_move);
+                non_tactical_index += 1;
+            }
             const us = value.side_to_move;
             var child: position.PositionState = .{};
             transition.makeMove(&value, chess_move, &child);
@@ -591,6 +643,8 @@ test "legal generation partitions coherent legal positions exactly" {
             try std.testing.expect(!isCapture(&value, chess_move));
             try std.testing.expect(contains(&all, chess_move));
         }
+        try std.testing.expectEqual(tacticals.count, tactical_index);
+        try std.testing.expectEqual(non_tactical_quiets.count, non_tactical_index);
     }
 }
 

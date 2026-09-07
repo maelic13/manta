@@ -66,6 +66,39 @@ Across the unchanged 140,391 nodes it records 5,915 principal, 90,670 cut and
 43,806 all expectations. No game test is appropriate because search behavior
 is identical by contract.
 
+## Step 6.5.1 follow-up
+
+The later exact staged-generation candidate was rejected on 2026-09-07.
+Generating and ranking quiet moves only after tactical children allowed
+descendant search to update worker-local main, reply and continuation histories
+before the parent consumed them. The resulting move set was identical, but the
+depth-six fingerprint changed from production `799,610` to `775,451`.
+
+An eager control retained `799,610`. Forcing the staged prototype to generate
+and rank its quiets before the first child also restored `799,610`, isolating
+node-entry rank timing as the cause. That exact variant removed the intended
+abandoned-tail saving and added stage overhead, so the prototype was removed.
+The original initialized-prefix rank snapshot remains authoritative; no new
+legality, score, bound, history or pruning authority was accepted.
+
+That evidence rejects only the behavior-identical claim. Phase 6.5.1b now
+reconstructs live-history staging as an explicit default-off playing candidate:
+legal move membership and uniqueness remain fixed, while stage-time history may
+change quiet ordering, PV and the fingerprint. The candidate uses exact
+tactical and non-tactical-quiet generator subsets in one caller-owned bounded
+list, retains eager root/check/exclusion paths and records stage work through
+the existing observer boundary.
+
+Deterministic qualification reproduces the diagnosed `775,451` depth-six
+fingerprint, repeats with legal PV and restored state, and passes all twelve
+fixed observation cohorts. The cohort records `79,446` staged nodes and
+`56,539` quiet-stage entries: `22,907` completed nodes cut off without
+generating quiets. A five-repeat development-host depth-six diagnostic measured
+baseline/candidate median wall time `791/766 ms` and median NPS
+`1,010,884/1,012,338`. Those results establish correctness and a live candidate,
+not strength or authoritative speed. Production remains `799,610`; only
+registered remote 1T `MAN-S30` H1 may promote the candidate.
+
 ## Traceability
 
 Supports `FUNC-004` through `FUNC-006`, `SCORE-010`, `SCORE-015`, `PERF-006`,

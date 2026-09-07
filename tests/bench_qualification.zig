@@ -178,6 +178,33 @@ test "default-off candidate heads build and search" {
     }
 }
 
+test "Phase 6.5 live-history candidate builds on production MAN-S29" {
+    if (builtin.mode == .Debug) return;
+    // Unlike the archived candidates above, MAN-S30 is a prospective change
+    // to the current rounded MAN-S29 parameter head. This exact total proves
+    // that its artifact switch is live; only the remote SPRT decides strength.
+    var hash = try manta.engine.runtime.HashResource.init(
+        std.testing.allocator,
+        bench.hash_bytes / (1024 * 1024),
+    );
+    defer hash.deinit(std.testing.allocator);
+    var thread = manta.search.types.ThreadState.init();
+    var ordering: manta.search.ordering.State = .{};
+    var control: manta.search.types.NeverStop = .{};
+    var clock = IncrementingClock{};
+    const report = bench.runWithFeatures(
+        .{ .live_history_staging = true },
+        .{ .depth = bench.default_depth },
+        &clock,
+        &control,
+        &thread,
+        &hash.table,
+        &ordering,
+    );
+    try std.testing.expect(!report.cancelled and !report.failed);
+    try std.testing.expectEqual(@as(u64, 775_451), report.fingerprint_nodes);
+}
+
 test "MAN-R02 stability aspiration builds on current production parameters" {
     if (builtin.mode == .Debug) return;
     // This exact total proves that the default-off candidate is live and

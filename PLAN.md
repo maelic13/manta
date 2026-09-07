@@ -53,8 +53,14 @@ approval.
   strength measurement.
 - Fixed-work and throughput measurements diagnose cost, scaling and quality per
   node but do not promote playing changes.
-- Once tournament-capable, one prospectively registered representative SPRT
-  decides a playing candidate. H1 promotes; H0 or an unresolved cap rejects.
+- A candidate claiming exact behavior must reproduce the accepted fingerprint,
+  PV and results. A mismatch requires a causal record and reclassifies a legal,
+  deterministic candidate as playing behavior; it does not reject it for
+  strength.
+- Once tournament-capable, every retained production-executable candidate,
+  including exact speed work, receives one prospectively registered,
+  representative SPRT. H1 promotes; H0 rejects and an unresolved cap does not
+  promote. Documentation, tests and disabled diagnostics require no games.
 - A cohesive bundle may be gated only when its parts are inseparable or below
   affordable independent resolution. Its result licenses only the bundle.
 - SPSA begins only after consumers freeze and a sensitivity pilot justifies the
@@ -65,8 +71,18 @@ approval.
 - Use exactly Zig 0.16.0 until a separately approved stable-toolchain migration.
 - Use Manta's checked fastchess bridge for matches and its pinned local Weather
   Factory wrapper for SPSA. Colosseum is parked until explicitly re-enabled.
-- The game/tuning host is one Ryzen 9 5950X. Agents prepare bounded resumable
-  commands and estimates; the maintainer starts long jobs.
+- Development, implementation and local diagnostics occur on the current
+  workspace computer. Authoritative games, tuning and final cross-engine
+  timings run on the separate designated Ryzen 9 5950X.
+- Agents prepare candidate and baseline from exact source identities with the
+  same Zig version, target and build options. A remote handoff records source
+  revision/tree or archive hash, binary SHA-256, feature switches, benchmark
+  fingerprint, runner/book hashes and the complete setup-only command.
+- The maintainer runs setup validation and the registered resumable job on the
+  designated host, then returns the manifest, log, PGN and checkpoint for
+  verification. Require a fresh bounded pilot only when a changed engine/
+  protocol, clock, runner, host, placement, book or adjudication boundary needs
+  qualification. Agents do not start long jobs on either host.
 - Do not overlap games, tuning or data generation on that host.
 
 ### Release policy
@@ -244,13 +260,35 @@ precise rating or attribution to time, UCI or SMP individually.
 
 ### Phase 6.5 — Pre-NNUE search and hot-path performance
 
-This phase repairs the measured performance deficit before the board and
-evaluation contracts become inputs to NNUE work. It does not reopen rejected
-search ideas by preference. Behavior-neutral work must preserve legal move
-membership and order, terminal/draw/history semantics, score/bound/provenance,
-TT/PV results and the exact one-thread search tree. A behavior-changing search
-candidate receives a prospective deterministic filter and its own game gate.
-Static speed, node count and depth are diagnostics, never strength evidence.
+This phase repairs two separately measured deficits before the board and
+evaluation contracts become inputs to NNUE work: Manta processes each node too
+slowly and searches far too many nodes to reach the same nominal depth. The
+post-MAN-S29 audit measured `9–14x` more depth-ten nodes and `2.6–3.2x` more
+time per node than the sibling engines. Small hot-path or PGO gains cannot close
+that combined gap, so tree efficiency is the first-class objective.
+
+Behavior-neutral work must preserve legal move membership and order,
+terminal/draw/history semantics, score/bound/provenance, TT/PV results and the
+exact one-thread search tree. If an implementation instead changes a history
+snapshot, move order, score, bound or searched subtree, diagnose and record the
+cause, then treat the legal deterministic result as a playing candidate. A
+fingerprint change never rejects such a candidate for strength. Node reduction,
+depth, NPS, fixed-node quality and static tests remain diagnostics.
+
+Every retained production-executable candidate in this phase, including an
+exact speed optimization, must pass its own prospectively registered 1T
+time-based SPRT on the separate designated game-testing computer. Correctness,
+operational and throughput gates admit a candidate to games and may show that
+it does not solve this phase's performance objective; only clean H1 promotes
+it. Do not combine independent mechanisms to save game budget.
+
+Track the whole depth curve rather than minimizing the depth-six fingerprint.
+Deep selectivity may leave shallow totals nearly unchanged. The final
+operational gate requires the common corpus through depth thirteen and a
+routinely runnable `bench 13 1 1` under a prospective wall-time limit frozen by
+the maintainer before the run. Equal-depth comparisons use identical positions,
+1T, Hash, toolchain class and fresh processes; fixed-node quality and SPRT guard
+against obtaining a smaller tree by discarding valuable chess work.
 
 #### 6.5.0 — Comparable performance audit
 
@@ -280,135 +318,236 @@ a secondary per-node cost rather than an explanation for the search-tree gap.
 The audit creates priorities, not Elo claims. The repository remained
 unchanged while it was measured.
 
-#### 6.5.1 — Staged move picker
+#### 6.5.1a — Exact staged move picker
 
-Replace eager all-legal generation/ranking at ordinary non-check interior
-nodes with one allocation-free staged picker: validated TT move, good tactical
-moves, lazily generated quiets, then bad tactical moves. Quiet promotions must
-remain tactical despite not being captures. Reuse the pinned set across the
-tactical and quiet generators, retain the first SEE verdict and move class for
-downstream pruning, and let late-move pruning abandon the remaining quiet
-stage without generating or scoring it.
+Complete — rejected only as an exact optimization. The allocation-free
+prototype split ordinary non-check interior generation into validated TT, good
+tactical, lazy quiet and bad tactical stages. Its random legal-position
+differential covered equal membership, order and uniqueness, including
+castling, en passant and every promotion shape, and the full Debug gate passed.
 
-This is behavior-neutral. Retain original generation ordinal as the final
-tie-break so a complete drain is byte-for-byte order-equivalent to the current
-TT/good-tactical/killer/history/bad-tactical order. Root, in-check and
-captures-only callers may keep their current complete path until independently
-measured. Random legal-position comparison must prove equal membership, order
-and no duplicates, including castling, en passant and every promotion shape.
-Make/unmake recomputation, perft, legal PV and mate/draw tests must pass. Exact
-fingerprint and node counts plus a controlled repeated native throughput A/B
-accept a reliable speed gain; any chess-output drift or no resolved gain
-refutes the step. No SPRT is required for an exact search tree.
+Lazy quiet generation and ranking produced `775,451` depth-six nodes instead
+of production `799,610`. The eager control retained `799,610`, and forcing the
+prototype to generate and rank quiets before searching its first child also
+restored `799,610`. Descendant searches update worker-local main, reply and
+continuation histories; the accepted picker snapshots every sibling rank at
+parent entry, while the lazy stage consumed later history. Preserving that
+snapshot required the eager quiet work and removed the intended saving. The
+prototype was removed and the production picker remains unchanged.
 
-#### 6.5.2 — Performance rebaseline
+This result rejects only the behavior-neutral formulation. It does not decide
+whether live-history ordering is stronger or whether its combined tree and
+per-node change improves time-controlled play.
 
-Freeze the accepted picker implementation, then run the board benchmark,
-evaluator benchmark, fresh-process depth-eight-to-ten search profile and search
-observation once. Add native sampling when an elevated profiler is available.
-Separate move generation, picker/history/SEE, make/unmake, evaluation, TT and
-repetition/checker maintenance rather than inferring them from aggregate NPS.
-This step changes no production mechanism. Its output selects the smallest
-next implementation and prevents the remaining steps from repeating costs the
-picker already removed.
+#### 6.5.1b — Live-history staged picker
 
-#### 6.5.3 — LMR/search efficiency
+Rebuild the lazy generator as an explicitly behavior-changing candidate. The
+producer is authoritative worker-local history updated by completed descendant
+searches; tactical and quiet generation transform it at the time each stage is
+entered; ordering is the sole consumer. It gains no legality, terminal/draw,
+score, bound, provenance, TT, PV, pruning, reduction, allocation or thread
+authority.
 
-First explain the retained MAN-S23 failure: its deeper surface reduced nodes at
-depths four through eleven but one queen-and-rook ending grew `41.5%` at depth
-twelve, consistent with a reduction/re-search interaction. Extend diagnostics
-only as needed to identify eligibility, applied depth, alpha rises, full-depth
-re-search and accepted reduced fail-lows per position and move class.
+Prove deterministic 1T execution, equal legal membership, uniqueness and state
+restoration across castling, en passant, all promotions, checks, evasions,
+terminal positions, repetitions and rule-50 cases. Record complete depth curves,
+per-stage generated/searched counts, NPS and wall time. The fingerprint and PV
+may change and receive a causal ledger entry. Prepare exact candidate/baseline
+artifacts and a setup-only manifest; the maintainer runs one prospectively
+registered 1T SPRT directly on the separate game host. No fresh pilot is needed
+because this candidate changes only internal search ordering and retains the
+qualified engine/protocol, clock, runner, host, placement, book and adjudication
+boundaries. Only clean H1 may promote it.
 
-Only then register one structurally new LMR candidate. The producer may combine
-nominal depth and searched-move ordinal through a non-saturating monotone
-surface and may admit independently justified earlier or losing-capture scope.
-Typed PV/cut expectation, improving, TT, singular and history evidence gains no
-authority unless included prospectively in the same mechanism contract.
-Checks, evasions, promotions, the singular move, terminal/draw paths and legal
-move membership remain protected; a reduced alpha rise must return to the
-nominal child horizon before publishing score, bound, PV, TT or history.
+Recommended model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
 
-The deterministic filter must use per-depth and per-position distributions so
-one endpoint/outlier cannot decide it. It may refute but never promote. A
-survivor requires one registered 1T game gate; H0, cap or anomaly leaves the
-candidate disabled. Do not tune the current saturated surface again.
+Implementation checkpoint — the candidate is complete and remains default-off.
+`-Dlive-history-staging=true` selects it for the engine, built-in bench and
+search-observation executable. Direct legal generation now exposes exact
+tactical and non-tactical-quiet subsets whose filtered order and union match
+the complete generator across castling, en passant, checks and every promotion
+shape. Ordinary root, checked and singular-exclusion nodes retain eager
+generation. One caller-owned `MoveList` holds the tactical prefix, a validated
+quiet TT move if present, delayed quiets and retained bad tacticals without
+allocation or duplicate emission.
 
-#### 6.5.4 — Null-move verification
+The candidate repeats deterministically with legal PV and restored state. Its
+depth-six bench is `775,451` nodes versus production `799,610`, exactly matching
+the earlier diagnosed prototype and causally confirming live quiet-rank timing.
+The candidate observation passes all twelve fixed cohorts and reports tactical
+generation, quiet-stage entry, delayed quiet generation and existing searched-
+source counts. Across that completed cohort, `79,446` eligible staged nodes
+generated `88,027` tacticals; only `56,539` opened their quiet stage, so
+`22,907` completed nodes avoided quiet generation. Opened stages generated
+`1,579,505` non-tactical quiets. These are diagnostic results, not a strength
+verdict. A sequential five-repeat development-host depth-six check measured
+baseline/candidate median wall time `791/766 ms` and median NPS
+`1,010,884/1,012,338`: the `3.02%` smaller tree produced about `3.16%` lower
+wall time without resolved per-node regression. This is neither idle-host nor
+game evidence. Registered `MAN-S30` on the separate 5950X remains the only
+promotion gate.
 
-After the LMR head freezes, test null verification as a separate candidate.
-The present producer is a legal-position static-eval fail-high from a synthetic
-null probe; its only consumer is a typed lower-bound cutoff after a same-node
-verification. Derive a safe-material policy under which ordinary middlegames
-may accept that fail-high directly, while checks, PV, consecutive nulls,
-pawn-only and zugzwang-prone material, decisive scores and shallow horizons
-retain current exclusions or mandatory verification.
+#### 6.5.2 — Whole-tree attribution
 
-Use focused zugzwang, mate-distance, draw/history, bound/provenance and TT tests
-plus observation of avoided searches. The candidate changes the tree and must
-pass its own registered games. The earlier rejected MAN-S20 dynamic-reduction
-bundle is not authority for this policy and must not be silently re-enabled.
+Rebaseline production MAN-S29 before selecting more search candidates. Use the
+same forty positions, 1T, native ReleaseFast, identical Hash and a fresh process
+per depth for Manta, Rarog and Basilisk. Measure depths four through ten first;
+extend to eleven and twelve only inside a recorded local time cap. Use a
+16/64/256 MiB Hash sweep to separate search policy from TT pressure. Stockfish
+is a search-shape reference under the same corpus, not an implementation target.
 
-#### 6.5.5 — Board and SEE hot paths
+Extend observation only where needed to partition main and qsearch nodes; PVS
+and aspiration retries; LMR probes and full-depth verification; null probes and
+verification; ProbCut; singular/exclusion work; check entries and extension
+chains; generated and searched moves; and TT probe, hit, usable-cutoff, depth
+rejection, collision and replacement yield. Report per-depth and per-position
+distributions so one opening or ending cannot decide the diagnosis.
 
-Optimize only costs identified by 6.5.2. Candidate areas are a no-pinned common
-path in legal generation, reuse of already-derived pin/check facts, elimination
-of repeated move classification and SEE, and transition/checker/repetition
-work shown hot under representative search. PEXT already exists in native BMI2
-builds and is not a missing mechanism.
+This step changes no production mechanism and runs no games. Its output ranks
+the following candidate questions and freezes the operational depth-curve
+baseline. Recommended model: GPT-5.6 Terra High.
 
-Every change must remain allocation-free and preserve the mailbox, piece/color
-bitboards, counts, king squares, all Zobrist key families, rule-50/null fences,
-repetition distance, checker set and factual move delta. Independent full-state
-recomputation, randomized make/unmake, perft and special-move properties precede
-one controlled board and complete-search A/B. Exact chess behavior plus a
-resolved throughput gain accepts; otherwise revert. Group only mechanically
-inseparable changes.
+#### 6.5.3 — Forcing-line selectivity
 
-#### 6.5.6 — HCE hot paths
+Measure the compound cost of unconditional extension at every checked node,
+full-depth treatment of every evasion and checking move, and checking-move
+exemption from shallow pruning. Nominal root depth, legal check evasion,
+existing terminal/draw precedence, mate distance and special-move legality
+remain fixed; only the amount of search allocated to non-root forcing lines
+may change.
 
-Preserve MAN-E19's exact integer score and feature coverage. Begin with the
-measured full-refresh mechanics: compare the current 64-square material/PST/
-phase scan with occupied-piece bitboard traversal. Instrument the sixteen-entry
-direct-mapped pawn cache before changing its size or associativity; accept a
-cache experiment only from hit, collision, footprint and end-to-end evidence.
-The existing shared activity/attack-map pass remains the baseline rather than
-being split back into duplicate slider work.
+First test removing blanket check extension as one independently switched
+candidate. If evidence then justifies it, test late checking-move or evasion LMR
+as a separate candidate using move ordinal, SEE/history and node expectation;
+do not prune legal evasions. Record check-chain length, in-check nodes,
+extensions, reduced checks/evasions, verification re-searches, tactical/mate
+results and the complete depth curve. Each production candidate receives its
+own remote-host 1T SPRT and requires clean H1.
 
-Use evaluator checksum/conformance, color symmetry, trace equality, search
-fingerprint and repeated evaluator plus complete-search throughput. Do not add
-incremental HCE state or a whole-eval cache without a new concentrated profile
-and ownership decision. Exact speed work needs no games; any score change is a
-new evaluation candidate and is outside this step.
+Recommended model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
 
-#### 6.5.7 — Build optimization
+#### 6.5.4 — Aspiration-aware contextual LMR
+
+Replace the saturating minimum-shaped reduction only through one
+dependency-complete candidate. Root aspiration supplies the current window
+width; a non-saturating depth/move surface combines that width with typed node
+expectation, improving direction, TT quality, singular context, move class and
+accepted history. The prospective reduced depth may then consistently inform
+LMP, futility and SEE eligibility. Losing captures and any check/evasion scope
+must be justified by 6.5.3 evidence; promotions and the singular move retain
+explicit protection.
+
+The candidate must retain at least one ordinary child ply where required.
+Every reduced alpha rise returns to an authoritative horizon before publishing
+score, bound, PV, TT or history evidence. Aspiration retries reset partial root
+evidence and only a final exact iteration commits. Per-depth and per-position
+node/re-search distributions diagnose the mechanism but cannot reject it for
+strength solely because the fingerprint moves. One remote-host 1T SPRT decides
+promotion; H1 licenses only the complete dependency cluster.
+
+Recommended model: GPT-6 Astra XHigh; GPT-5.6 Sol Max fallback.
+
+#### 6.5.5 — Forward proof and pruning efficiency
+
+After the LMR head freezes, attribute and test proof mechanisms separately.
+The first null-move question is whether the present same-node verification is
+needed in safe ordinary material: `354` of `355` observed fail-highs survived
+it. Checks, PV, consecutive nulls, pawn-only and zugzwang-prone material,
+decisive scores and shallow horizons retain exclusions or verification unless a
+new contract proves otherwise. Null evidence remains a typed lower-bound proof.
+
+Then measure ProbCut TT reuse, tactical move cap and qsearch-to-main conversion,
+and whether LMP, futility and SEE consume the final prospective depth from
+6.5.4 consistently. Do not reopen the complete rejected MAN-S20 bundle. Each
+new producer/consumer relation is independently switched, tested for legal PV,
+mate/draw, zugzwang, bound/provenance, TT and restoration semantics, and given
+its own remote-host 1T SPRT before promotion.
+
+Recommended model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+
+#### 6.5.6 — TT and qsearch efficiency
+
+Measure TT density, replacement, generation aging, prefetch value and usable
+main/qsearch cutoff yield before changing layout or policy. Hash sweeps must
+distinguish a weak replacement policy from ordinary capacity pressure. Any
+layout-only candidate preserves exact encoded semantics; any changed
+replacement or cutoff behavior is a playing candidate with a new fingerprint.
+
+At non-check qsearch nodes, generate only legal captures and promotions instead
+of generating and ranking every legal quiet that will be discarded. In-check
+qsearch still generates and searches every legal evasion. Preserve tactical
+generation order, SEE/delta decisions, checks, underpromotions, en passant,
+terminal results, TT stores and score provenance. An exact implementation must
+retain the fingerprint; a deterministic mismatch is diagnosed and moved to the
+playing track. Every retained production candidate receives its own remote-host
+1T SPRT after correctness and controlled throughput qualification.
+
+Recommended model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+
+#### 6.5.7 — Exact board, SEE and HCE hot paths
+
+Reprofile only after the accepted search head freezes, because tree changes
+alter hot-path frequency. Candidate board areas are a no-pinned legal-generation
+path, reused pin/check facts, single move classification/SEE, and measured
+transition, checker or repetition work. PEXT already exists in native BMI2
+builds. Preserve every mailbox/bitboard/count/king/key/rule-50/repetition/checker
+and factual move-delta invariant through recomputation, randomized make/unmake,
+perft and special-move tests.
+
+For MAN-E19, compare occupied-piece traversal with the current 64-square
+material/PST/phase scan and instrument pawn-cache hit, collision and footprint
+before changing it. Preserve exact score, trace and symmetry. Do not add
+incremental HCE or a whole-eval cache without a new concentrated profile and
+ownership decision.
+
+Each candidate needs exact fingerprint/PV/results, repeated native board or HCE
+and complete-search throughput, and—under the Phase-6.5 production policy—one
+remote-host 1T SPRT. A mismatch is reclassified rather than hidden. Group only
+mechanically inseparable edits.
+
+Recommended model: GPT-5.6 Terra High.
+
+#### 6.5.8 — Build optimization
 
 After source behavior freezes, define a representative PGO training workload
-from the deterministic search corpus, including opening, tactical, quiet,
-check-evasion and endgame positions. Implement generate/merge/use as a checked
-build pipeline with compiler/version, workload and profile integrity recorded.
-Portable and non-PGO fallbacks remain available and accurately named.
+from the deterministic corpus, including opening, tactical, quiet, check-evasion
+and endgame positions. Implement generate/merge/use as a checked build pipeline
+with compiler/version, workload and profile integrity recorded. Portable and
+non-PGO fallbacks remain available and accurately named.
 
 Repeated clean builds must reproduce fingerprint, PV/results and profile-use
-metadata. Compare candidate and non-PGO binaries on fresh-process board, HCE
-and search workloads. The current sibling measurements put plausible PGO value
-in the low single digits, so absence of a resolved end-to-end gain closes this
-step without adding product complexity.
+metadata. Compare candidate and non-PGO binaries on fresh-process board, HCE and
+complete-search workloads. A retained PGO production artifact also requires its
+own remote-host 1T SPRT; no resolved end-to-end gain closes the step without
+adding product complexity.
 
-#### 6.5.8 — Qualification and close
+Recommended model: GPT-5.6 Terra High.
+
+#### 6.5.9 — Qualification and close
 
 Run the full correctness, ReleaseSafe, ReleaseFast, UCI/process, policy and
-platform gates once after the final implementation freezes. Record final board,
-HCE, depth-eight-to-ten tree, NPS and elapsed-time evidence against immutable
-Manta 1.0.0 conditions. Behavior-neutral changes retain exact one-thread chess
-identity; every retained behavior-changing search candidate must already hold
-its own clean H1.
+platform gates after the final implementation freezes. On the separate
+designated host, verify source/archive identities, Zig/build options, candidate
+and baseline SHA-256, feature ledger, runner/book hashes and setup-only output
+before any SPRT. Run a fresh pilot only when one of those operational boundaries
+changed and needs requalification. The maintainer starts the jobs and returns
+manifest, log, PGN and checkpoint evidence; no result is recorded until
+independent pair and anomaly reconstruction agrees.
 
-If at least one playing change survives, prospectively register one cumulative
-1T match against immutable Manta 1.0.0 to establish the integrated result, not
-component attribution or a precise rating. Close Phase 6.5 only with accepted
-implementations, rejected/parked dispositions and no unowned selector. Phase 7
-then requires its own explicit start approval.
+Repeat the common 1T/Hash depth curve through depth thirteen on the same host for
+Manta, Rarog and Basilisk, with Stockfish retained as a search-shape reference.
+Record nodes, NPS, elapsed time, effective growth and per-position tails against
+immutable Manta 1.0.0. Run `bench 13 1 1` under the prospectively frozen routine
+wall-time limit. These are operational exit gates, not Elo claims.
+
+Every retained production change must already hold its own clean H1. Then run
+one prospectively registered cumulative 1T SPRT against immutable Manta 1.0.0
+to establish the integrated result, not component attribution or a precise
+rating. Close Phase 6.5 only with accepted implementations, rejected/parked or
+unresolved dispositions, complete remote artifacts and no unowned selector.
+Phase 7 requires separate approval.
+
+Recommended model: GPT-5.6 Sol High.
 
 ### Phase 7 — NNUE runway and data contract
 

@@ -1293,6 +1293,198 @@ test "staged ordering puts a legal TT move before killers and quiet history" {
     try std.testing.expectEqual(selected_count, tail_index);
 }
 
+test "picker freezes sibling ranks before descendant history updates" {
+    // SCORE-015/FUNC-005/QUAL-014: recursive child searches update shared
+    // worker-local history. A parent's already-ranked legal siblings must keep
+    // their node-entry order; observing later updates changes the deterministic
+    // search tree even when move membership is identical.
+    var root_state: chess.position.PositionState = .{};
+    var value = try chess.fen.parse(chess.fen.start_position, &root_state);
+    var moves = chess.position.MoveList.init();
+    chess.movegen.generate(.all, &value, &moves);
+    const generated = moves;
+    const boosted = generated.moves[@as(usize, generated.count) - 1];
+    var heuristics: search.ordering.State = .{};
+    var harness: Harness = .{};
+    var frozen = search.ordering.Picker.init(
+        true,
+        &moves,
+        &value,
+        harness.binding(),
+        null,
+        &heuristics,
+        .{},
+        0,
+        null,
+        .{},
+        true,
+        true,
+    );
+
+    heuristics.quiet_history[value.side_to_move.index()][boosted.from().index()][boosted.to().index()] = 1000;
+    const frozen_first = frozen.next().?.chess_move;
+
+    var fresh_moves = generated;
+    var fresh = search.ordering.Picker.init(
+        true,
+        &fresh_moves,
+        &value,
+        harness.binding(),
+        null,
+        &heuristics,
+        .{},
+        0,
+        null,
+        .{},
+        true,
+        true,
+    );
+    const fresh_first = fresh.next().?.chess_move;
+
+    try std.testing.expectEqual(generated.moves[0], frozen_first);
+    try std.testing.expectEqual(boosted, fresh_first);
+}
+
+test "live-history staging ranks delayed quiets after descendant updates" {
+    // Phase 6.5.1b/SCORE-015: a legal quiet TT move proves the node is not
+    // terminal without forcing generation of its quiet siblings. Once that
+    // move has been searched, the delayed stage must observe newer worker-
+    // local history, emit the TT move only once and preserve the full legal
+    // move set without allocation.
+    var root_state: chess.position.PositionState = .{};
+    var value = try chess.fen.parse(chess.fen.start_position, &root_state);
+    var expected = chess.position.MoveList.init();
+    chess.movegen.generate(.all, &value, &expected);
+    const tt_move = try chess.notation.parseLegal(&value, "e2e4");
+    const boosted = try chess.notation.parseLegal(&value, "g1f3");
+    var staged = chess.position.MoveList.init();
+    staged.append(tt_move);
+    var heuristics: search.ordering.State = .{};
+    var harness: Harness = .{};
+    var picker = search.ordering.LiveHistoryPicker.init(
+        true,
+        &staged,
+        &value,
+        harness.binding(),
+        tt_move,
+        &heuristics,
+        .{},
+        0,
+        null,
+        .{},
+        true,
+        true,
+        true,
+    );
+
+    var emitted: [chess.types.move_capacity]chess.move.Move = undefined;
+    var emitted_count: usize = 0;
+    emitted[emitted_count] = picker.next().?.chess_move;
+    emitted_count += 1;
+    try std.testing.expectEqual(tt_move, emitted[0]);
+    try std.testing.expect(picker.next() == null);
+
+    heuristics.quiet_history[value.side_to_move.index()][boosted.from().index()][boosted.to().index()] = 1000;
+    const generated = picker.enterQuiets(
+        true,
+        &value,
+        harness.binding(),
+        tt_move,
+        &heuristics,
+        .{},
+        0,
+        null,
+        .{},
+    ).?;
+    try std.testing.expectEqual(expected.count - 1, generated);
+    emitted[emitted_count] = picker.next().?.chess_move;
+    try std.testing.expectEqual(boosted, emitted[emitted_count]);
+    emitted_count += 1;
+    while (picker.next()) |selection| {
+        emitted[emitted_count] = selection.chess_move;
+        emitted_count += 1;
+    }
+
+    try std.testing.expectEqual(expected.count, emitted_count);
+    for (emitted[0..emitted_count], 0..) |left, index| {
+        var found = false;
+        for (expected.slice()) |right| {
+            if (left.raw() == right.raw()) found = true;
+        }
+        try std.testing.expect(found);
+        for (emitted[index + 1 .. emitted_count]) |right|
+            try std.testing.expect(left.raw() != right.raw());
+    }
+}
+
+test "live-history staged search is deterministic legal and observable" {
+    // FUNC-004/FUNC-005/PERF-006: the candidate may change its tree and PV,
+    // but two cleared 1T runs must agree exactly, publish a sequentially legal
+    // PV, restore the root and populate both delayed-generation stages.
+    const fen_text = chess.fen.start_position;
+    var first_root: chess.position.PositionState = .{};
+    var second_root: chess.position.PositionState = .{};
+    var first_position = try chess.fen.parse(fen_text, &first_root);
+    var second_position = try chess.fen.parse(fen_text, &second_root);
+    var first_harness: Harness = .{};
+    var second_harness: Harness = .{};
+    var first_storage: [4096]search.tt.Cluster = undefined;
+    var second_storage: [4096]search.tt.Cluster = undefined;
+    var first_table = search.tt.Table.init(&first_storage);
+    var second_table = search.tt.Table.init(&second_storage);
+    var first_ordering: search.ordering.State = .{};
+    var second_ordering: search.ordering.State = .{};
+    var first_counters: search.diagnostics.Counters = .{};
+    var second_counters: search.diagnostics.Counters = .{};
+    var first_control: search.types.NeverStop = .{};
+    var second_control: search.types.NeverStop = .{};
+    const candidate = search.types.Features{ .live_history_staging = true };
+
+    const first = search.baseline.runWithFeatures(
+        candidate,
+        &first_position,
+        first_harness.binding(),
+        .{ .depth = 6 },
+        &first_control,
+        &first_harness.thread,
+        &first_table,
+        &first_ordering,
+        &first_counters,
+    );
+    const second = search.baseline.runWithFeatures(
+        candidate,
+        &second_position,
+        second_harness.binding(),
+        .{ .depth = 6 },
+        &second_control,
+        &second_harness.thread,
+        &second_table,
+        &second_ordering,
+        &second_counters,
+    );
+
+    try std.testing.expectEqual(first.nodes, second.nodes);
+    try std.testing.expectEqual(first.evidence, second.evidence);
+    try std.testing.expectEqual(first.best_move.?, second.best_move.?);
+    try std.testing.expectEqualSlices(
+        chess.move.Move,
+        first.completed.?.pv.slice(),
+        second.completed.?.pv.slice(),
+    );
+    try std.testing.expect(first_counters.live_history_staged_nodes != 0);
+    try std.testing.expect(first_counters.live_history_tacticals_generated != 0);
+    try std.testing.expect(first_counters.live_history_quiet_stages != 0);
+    try std.testing.expect(first_counters.live_history_quiets_generated != 0);
+    try std.testing.expectEqual(
+        first_counters.live_history_staged_nodes,
+        second_counters.live_history_staged_nodes,
+    );
+    try expectLegalPv(fen_text, first.completed.?.pv.slice());
+    try expectLegalPv(fen_text, second.completed.?.pv.slice());
+    try std.testing.expect(chess.state.isConsistent(&first_position));
+    try std.testing.expect(chess.state.isConsistent(&second_position));
+}
+
 test "full-depth LMR false positives train reply ordering only" {
     // SCORE-002/QUAL-014: a reduced probe is not training evidence. Only its
     // mandatory full-depth upper-bound re-search may penalize the quiet reply;

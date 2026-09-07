@@ -101,6 +101,7 @@ pub fn run(
         .{
             .correction_history = search_build_options.correction_history,
             .aspiration = search_build_options.stability_aspiration,
+            .live_history_staging = search_build_options.live_history_staging,
         },
         spec,
         clock,
