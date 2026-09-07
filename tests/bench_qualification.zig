@@ -30,8 +30,13 @@ fn runArchived(
     table: *manta.search.tt.Table,
     ordering: *manta.search.ordering.State,
 ) bench.Report {
+    // Every archived total below was recorded before Step 6.5.1b promoted the
+    // live-history staged picker, so faithful reconstruction restores the
+    // MAN-S19-era eager picker alongside the MAN-S19 parameter vector.
+    comptime var archived = features;
+    archived.live_history_staging = false;
     return bench.runWithFeaturesAndParams(
-        features,
+        archived,
         spec,
         clock,
         control,
@@ -91,7 +96,7 @@ test "bench repeats reset shared search state" {
     try std.testing.expectEqual(report.fingerprint_nodes, report.runs[1].nodes);
 }
 
-test "optimized safety and production modes preserve the accepted MAN-S29 fingerprint" {
+test "optimized safety and production modes preserve the accepted MAN-S30 fingerprint" {
     if (builtin.mode == .Debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
@@ -111,9 +116,10 @@ test "optimized safety and production modes preserve the accepted MAN-S29 finger
         &ordering,
     );
     try std.testing.expect(!report.cancelled and !report.failed);
-    // This exact total was frozen only after MAN-S29 accepted H1. It is a
-    // diagnostic tree-shape contract, not the evidence that promoted it.
-    try std.testing.expectEqual(@as(u64, 799_610), report.fingerprint_nodes);
+    // This exact total was frozen only after MAN-S30 accepted H1 and moved
+    // production from `799,610`. It is a diagnostic tree-shape contract, not
+    // the evidence that promoted it.
+    try std.testing.expectEqual(@as(u64, 775_451), report.fingerprint_nodes);
 }
 
 test "archived depth-authority cluster reproduces the MAN-S21 fingerprint" {
@@ -178,11 +184,13 @@ test "default-off candidate heads build and search" {
     }
 }
 
-test "Phase 6.5 live-history candidate builds on production MAN-S29" {
+test "disabling MAN-S30 staging reconstructs the archived MAN-S29 fingerprint" {
     if (builtin.mode == .Debug) return;
-    // Unlike the archived candidates above, MAN-S30 is a prospective change
-    // to the current rounded MAN-S29 parameter head. This exact total proves
-    // that its artifact switch is live; only the remote SPRT decides strength.
+    // MAN-S30 accepted H1 and became production, so the switch now runs the
+    // other way: turning live-history staging off must still rebuild the
+    // superseded eager picker exactly on the unchanged MAN-S29 parameter head.
+    // That keeps the promoted mechanism independently ablatable and preserves
+    // the causal ledger entry for the `799,610` to `775,451` tree change.
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -193,7 +201,7 @@ test "Phase 6.5 live-history candidate builds on production MAN-S29" {
     var control: manta.search.types.NeverStop = .{};
     var clock = IncrementingClock{};
     const report = bench.runWithFeatures(
-        .{ .live_history_staging = true },
+        .{ .live_history_staging = false },
         .{ .depth = bench.default_depth },
         &clock,
         &control,
@@ -202,13 +210,16 @@ test "Phase 6.5 live-history candidate builds on production MAN-S29" {
         &ordering,
     );
     try std.testing.expect(!report.cancelled and !report.failed);
-    try std.testing.expectEqual(@as(u64, 775_451), report.fingerprint_nodes);
+    try std.testing.expectEqual(@as(u64, 799_610), report.fingerprint_nodes);
 }
 
-test "MAN-R02 stability aspiration builds on current production parameters" {
+test "MAN-R02 stability aspiration builds on the MAN-S29 picker it was qualified under" {
     if (builtin.mode == .Debug) return;
     // This exact total proves that the default-off candidate is live and
-    // buildable on MAN-S29, not that fewer nodes are speed or Elo.
+    // buildable on MAN-S29, not that fewer nodes are speed or Elo. Step 6.5.1b
+    // changed the production picker after MAN-R02 was archived, so the switch
+    // stays off here rather than re-recording a rejected candidate's total on
+    // a head it was never measured against.
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -219,7 +230,7 @@ test "MAN-R02 stability aspiration builds on current production parameters" {
     var control: manta.search.types.NeverStop = .{};
     var clock = IncrementingClock{};
     const report = bench.runWithFeatures(
-        .{ .aspiration = true },
+        .{ .aspiration = true, .live_history_staging = false },
         .{ .depth = bench.default_depth },
         &clock,
         &control,

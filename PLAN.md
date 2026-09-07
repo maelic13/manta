@@ -10,8 +10,8 @@ measurement verdicts.
 Manta 1.0.0 is the release baseline. Phases 0–6 are closed, targeted pre-NNUE
 performance Phase 6.5 is current and Phase 7 has not started. The production
 engine combines MAN-E19 classical evaluation, MAN-S29 search parameters and
-MAN-T05 integrated clock parameters. One-thread depth-6 bench is `799,610`
-nodes. The release configuration supports portable 64-bit Windows x86-64,
+MAN-T05 integrated clock parameters, MAN-S30 live-history move ordering.
+One-thread depth-6 bench is `775,451` nodes. The release configuration supports portable 64-bit Windows x86-64,
 Linux x86-64/ARM64 and macOS x86-64/ARM64 artifacts.
 
 No coding agent may start a Phase-6.5 implementation step, Phase 7, a game
@@ -341,6 +341,18 @@ per-node change improves time-controlled play.
 
 #### 6.5.1b — Live-history staged picker
 
+Complete — accepted and promoted. Registered `MAN-S30` crossed its `[1,5]` H1
+boundary after 8,752 games at `+13.19 +/- 7.28` nElo (`+8.93 +/- 4.93` Elo,
+LLR `2.95`, LOS `99.98%`). Live-history staging is now the production default,
+production fingerprint is `775,451`, and `-Dlive-history-staging=false`
+reconstructs the superseded MAN-S29 eager picker for archived diagnostics.
+Four completed time forfeits (three baseline, one candidate, no other fault)
+tripped the bridge's zero-timeout rule; the maintainer accepted the result by
+explicit judgment and `EXPERIMENTS.md` records both the waiver and the PGN
+reconstruction showing host scheduling pressure rather than a clock defect.
+
+The original step definition follows.
+
 Rebuild the lazy generator as an explicitly behavior-changing candidate. The
 producer is authoritative worker-local history updated by completed descendant
 searches; tactical and quiet generation transform it at the time each stage is
@@ -361,8 +373,8 @@ boundaries. Only clean H1 may promote it.
 
 Recommended model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
 
-Implementation checkpoint — the candidate is complete and remains default-off.
-`-Dlive-history-staging=true` selects it for the engine, built-in bench and
+Implementation record — the mechanism is complete and now default-on.
+`-Dlive-history-staging` selects it for the engine, built-in bench and
 search-observation executable. Direct legal generation now exposes exact
 tactical and non-tactical-quiet subsets whose filtered order and union match
 the complete generator across castling, en passant, checks and every promotion
@@ -383,9 +395,9 @@ generated `88,027` tacticals; only `56,539` opened their quiet stage, so
 verdict. A sequential five-repeat development-host depth-six check measured
 baseline/candidate median wall time `791/766 ms` and median NPS
 `1,010,884/1,012,338`: the `3.02%` smaller tree produced about `3.16%` lower
-wall time without resolved per-node regression. This is neither idle-host nor
-game evidence. Registered `MAN-S30` on the separate 5950X remains the only
-promotion gate.
+wall time without resolved per-node regression. This was neither idle-host nor
+game evidence; registered `MAN-S30` on the separate 5950X supplied the
+promotion verdict recorded above.
 
 #### 6.5.2 — Whole-tree attribution
 

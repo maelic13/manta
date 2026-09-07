@@ -49,8 +49,8 @@ pub fn build(b: *std.Build) void {
     const live_history_staging = b.option(
         bool,
         "live-history-staging",
-        "Enable the Step-6.5.1b live-history staged-picker candidate in this build",
-    ) orelse false;
+        "Enable the accepted Step-6.5.1b live-history staged move picker",
+    ) orelse true;
     if (b.option([]const u8, "target", "Cross-compilation is not supported") != null or
         b.option([]const u8, "cpu", "Use -Dprofile instead of raw CPU features") != null)
     {

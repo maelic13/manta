@@ -11,8 +11,9 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   main-authoritative lazy SMP.
 - Phases 0–6 and the Manta 1.0 release baseline are complete. Targeted
   pre-NNUE performance Phase 6.5 is current; Phase 7 has not started.
-- Production is the MAN-E19 HCE, MAN-S29 search fit and MAN-T05 clock fit. The
-  deterministic one-thread depth-6 fingerprint is `799,610` nodes.
+- Production is the MAN-E19 HCE, MAN-S29 search fit, MAN-T05 clock fit and
+  MAN-S30 live-history move ordering. The deterministic one-thread depth-6
+  fingerprint is `775,451` nodes.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
@@ -111,10 +112,10 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 - [x] **6.5.1a — Exact staged move picker:** Rejected only as an exact
   optimization. Preserving the parent-node history snapshot removed the saved
   quiet work; the live-history formulation remains a distinct playing idea.
-- [ ] **6.5.1b — Live-history staged picker:** Implementation and deterministic
-  qualification are complete at candidate fingerprint `775,451`; the switch
-  remains default-off pending the registered remote-host `MAN-S30` 1T SPRT.
-  Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+- [x] **6.5.1b — Live-history staged picker:** `MAN-S30` accepted H1 after
+  8,752 games at `+13.19 +/- 7.28` nElo. Staging is production, the fingerprint
+  moved to `775,451`, and its four completed time forfeits carry a documented
+  maintainer waiver.
 - [ ] **6.5.2 — Whole-tree attribution:** Re-measure the post-MAN-S29 depth
   curve and attribute main, qsearch, proof, re-search, TT and forcing-line work.
   Model: GPT-5.6 Terra High.

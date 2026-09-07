@@ -164,10 +164,16 @@ H1 after 150 scored games at `+305.51 +/- 55.60` nElo without anomaly. The
 short decisive gate establishes a material cumulative gain, not a precise
 rating or component attribution. Step 6.3.3c and Phase 6 are complete. Targeted
 pre-NNUE Phase 6.5 is current. Step 6.5.1a rejected only the behavior-identical
-staged-picker formulation. Step 6.5.1b implementation and deterministic
-qualification are complete at candidate fingerprint `775,451`; it remains
-default-off pending registered remote-host `MAN-S30`. Stop before Phase 7; its
-first step requires separate maintainer approval.
+staged-picker formulation. Step 6.5.1b is complete: `MAN-S30` accepted H1 after
+8,752 games at `+13.19 +/- 7.28` nElo, so live-history staging is production and
+the deterministic one-thread depth-6 fingerprint is now `775,451`. Disabling
+`-Dlive-history-staging` reconstructs the superseded MAN-S29 eager picker at
+`799,610` for archived diagnostics. The run's four completed time forfeits
+(three baseline, one candidate, no other fault) tripped the bridge's
+zero-timeout rule and carry an explicit post-result maintainer waiver, not a
+prospective precedent. Step 6.5.2 whole-tree attribution is current; it changes
+no production mechanism and runs no games. Stop before Phase 7; its first step
+requires separate maintainer approval.
 
 ## Product objective
 

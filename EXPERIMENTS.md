@@ -36,7 +36,8 @@ run directories.
 | One-thread search | MAN-S29 complete rounded search fit | Accepted H1 over MAN-S19 after 4,596 games at `+22.49 +/- 10.04` nElo; ADR-0063 |
 | Clock policy | MAN-T05 complete rounded time fit | H1 after 4,188 games at `+24.48 +/- 10.52` nElo, accepted by explicit maintainer judgment despite the wrapper's prospective zero-timeout rejection; candidate had one completed time forfeit and baseline five |
 | SMP | MAN-R03 main-authoritative lazy SMP | 4T versus 1T accepted H1 after 194 games at `+187.72 +/- 48.89` nElo; ADR-0064 |
-| Deterministic identity | One-thread depth-6 bench | `799,610` nodes |
+| Move ordering | MAN-S30 live-history staged picker | Accepted H1 over MAN-S29 after 8,752 games at `+13.19 +/- 7.28` nElo; ADR-0035 |
+| Deterministic identity | One-thread depth-6 bench | `775,451` nodes |
 
 These measurements establish promotion decisions under their registered
 conditions. Small decisive samples, especially cumulative and 4T-versus-1T
@@ -65,6 +66,7 @@ Raw cumulative evidence is retained under
 | `MAN-S29` | Complete ten-coordinate search SPSA bake |
 | `MAN-R03` | Main-authoritative lazy SMP pool |
 | `MAN-T05` | Complete six-coordinate integrated time-management fit |
+| `MAN-S30` | Live-history staged move picker |
 
 Acceptance of a bundle does not establish that every included term helped.
 Frozen baselines exist only for reconstruction and do not remain runtime
@@ -89,31 +91,50 @@ because clock safety is part of that fit. Crashes, disconnects, illegal moves,
 affinity faults, incomplete results and nonzero exits remain fatal. Other SPSA
 groups retain strict timeout handling.
 
-## Registered pending gate
+## Phase 6.5 search evidence
 
-| ID | Candidate and hypothesis | Prospective gate | Status |
+| ID | Candidate and hypothesis | Registered gate | Result |
 |---|---|---|---|
-| `MAN-S30` | Phase-6.5.1b live-history staged picker against production MAN-S29. Delaying non-tactical quiet generation and consuming descendant-completed worker-local history will reduce abandoned generation and improve time-controlled play without changing chess or evidence authority. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `1445075129` | Implementation qualified at fingerprint `775,451`; default-off and awaiting clean remote artifacts and direct SPRT |
+| `MAN-S30` | Phase-6.5.1b live-history staged picker against production MAN-S29. Delaying non-tactical quiet generation and consuming descendant-completed worker-local history will reduce abandoned generation and improve time-controlled play without changing chess or evidence authority. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `1445075129` | Accepted H1 after 8,752 games at `+13.19 +/- 7.28` nElo (`+8.93 +/- 4.93` Elo, LLR `2.95`); promoted to production |
 
-`MAN-S30` runs only on the separate designated Ryzen 9 5950X. Candidate and
-baseline shall be clean native ReleaseFast, non-PGO Zig 0.16.0 builds from the
-same frozen source identity; candidate uses only
-`-Dlive-history-staging=true`. The candidate fingerprint must be `775,451` and
-the baseline `799,610` at depth six before admission. Record both binary
-SHA-256s and schema-7 sidecars before the SPRT. This internal-search-only change
-retains the already qualified engine/protocol, clock, runner, Ryzen host,
-placement, book and adjudication boundaries; retained Manta, Rarog and Basilisk
-calibration supplies the rate and capacity evidence, so no fresh pilot is
-required. Any timeout, crash, disconnect, illegal move, incomplete result,
-nonzero exit or placement anomaly invalidates the playing run.
+`MAN-S30` ran on the separate designated Ryzen 9 5950X from candidate
+fingerprint `775,451` against baseline `799,610`, both clean native ReleaseFast
+non-PGO Zig 0.16.0 builds of `72732d6` differing only in
+`-Dlive-history-staging`. The run crossed the H1 boundary in `01:25:42`:
+`2,308` wins, `2,083` losses and `4,361` draws for `4,488.5` points (`51.29%`),
+`Ptnml(0-2) = [210, 1020, 1731, 1165, 250]`, pairs ratio `1.15`, LOS `99.98%`.
+Artifacts are in `zig-out/fastchess/MAN-S30-sprt-20260907_212733`. The measured
+interval is a rating estimate under these registered conditions only, and the
+accepted mechanism is the whole staged picker rather than any single stage.
 
-The registered SPRT has a normal planning range of 45–90 minutes, a 2.9-hour
-worst-case estimate, a 3.5-hour operational stop and a 100-MiB storage reserve.
-The bridge has no pair-atomic resume; interruption restarts from zero with the
-same seed and command. H1 promotes only the complete candidate; H0 rejects it,
-and cap exhaustion is unresolved and cannot promote. Return the dry-run output,
-both sidecars, run manifest, log, PGN and checkpoint/LLR state for independent
-reconciliation.
+The bridge nevertheless rejected the run under its registered zero-timeout rule:
+four completed games ended in time forfeit, three lost by baseline MAN-S29 and
+one by the candidate, with zero crashes, disconnects, illegal moves or affinity
+faults. The maintainer accepted the result by explicit judgment. Independent
+reconstruction of the four games from the PGN move times supports that
+judgment and finds no clock defect:
+
+- Every forfeit occurred late in a long game in which **both** engines had
+  already spent their base clock down to tens of milliseconds, which is the
+  expected terminal state of sudden death plus a 30 ms increment. Across the
+  whole run about `22%` of game sides dip below 20 ms of remaining time at some
+  point, at nearly identical rates in the two arms.
+- No move in any forfeit game took longer than `0.35 s`, and the largest single
+  move in the entire run was `0.505 s`. There is no overspending spike; the
+  engine keeps two Move Overheads (`20 ms`) unspent and the controller allows a
+  further `20 ms` margin, so a forfeit needs an external stall beyond roughly
+  `40 ms`.
+- Four failures across roughly `400,000` played moves is about one in
+  `100,000`, is spread over both arms and is consistent with host scheduling
+  pressure at concurrency 14 rather than an allocation error.
+- The four games contribute a net two-game advantage to the candidate, against
+  its `225`-game win-loss lead. They cannot explain the verdict.
+
+This remains a post-result evidence waiver on the same footing as `MAN-T05`,
+not a prospective precedent. No time-management parameter, `Move Overhead`
+value or reserve was changed in response; any such change would be a playing
+candidate needing its own gate. The operational lesson is that the game host
+must stay otherwise idle for the registered rule to hold.
 
 ## Rejected or parked hypotheses
 

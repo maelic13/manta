@@ -48,8 +48,9 @@
     -StabilityAspiration enables the default-off Step-6.0.3 stability-gated
     aspiration candidate. It changes no UCI surface.
 
-    -LiveHistoryStaging enables the default-off Step-6.5.1b staged-picker
-    candidate. It changes no UCI surface.
+    The accepted Step-6.5.1b live-history staged picker is the production
+    default. -LiveHistoryStaging:$false reconstructs the superseded MAN-S29
+    eager picker for archived diagnostics. It changes no UCI surface.
 
     By default the build is smoke-tested before the manifest is written: the
     freshly built binary runs `bench` and must report a positive node count, so
@@ -93,7 +94,8 @@
     Build the Step-6.0.3 stability-gated aspiration candidate arm.
 
 .PARAMETER LiveHistoryStaging
-    Build the Step-6.5.1b live-history staged-picker candidate arm.
+    Select the Step-6.5.1b live-history staged picker explicitly. It defaults
+    on; pass -LiveHistoryStaging:$false only for an archived reconstruction.
 
 .PARAMETER BenchDepth
     Depth for the verification bench. Default 6 (the manta-search-bench-v1
@@ -142,6 +144,11 @@ $ErrorActionPreference = "Stop"
 
 $integratedTimeEnabled = if ($PSBoundParameters.ContainsKey("IntegratedTime")) {
     [bool]$IntegratedTime
+} else {
+    $true
+}
+$liveHistoryStagingEnabled = if ($PSBoundParameters.ContainsKey("LiveHistoryStaging")) {
+    [bool]$LiveHistoryStaging
 } else {
     $true
 }
@@ -260,8 +267,9 @@ try {
     $integratedTimeText = $integratedTimeEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dintegrated-time=$integratedTimeText"
     if ($StabilityAspiration) { $buildArgs += "-Dstability-aspiration=true" }
-    if ($LiveHistoryStaging) { $buildArgs += "-Dlive-history-staging=true" }
-    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($LiveHistoryStaging) { '-live-history-staging' } else { '' })"
+    $liveHistoryStagingText = $liveHistoryStagingEnabled.ToString().ToLowerInvariant()
+    $buildArgs += "-Dlive-history-staging=$liveHistoryStagingText"
+    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })"
 
     Write-Host ""
     Write-Host "Building Manta ($flavor) - suffix: $Suffix"
@@ -294,7 +302,7 @@ try {
         -RootConfidenceTime ([bool]$RootConfidenceTime) `
         -IntegratedTime $integratedTimeEnabled `
         -StabilityAspiration ([bool]$StabilityAspiration) `
-        -LiveHistoryStaging ([bool]$LiveHistoryStaging) -SkipBench:$BuildOnly
+        -LiveHistoryStaging $liveHistoryStagingEnabled -SkipBench:$BuildOnly
     Write-Host ""
     Write-Host "Done: $dest"
     Write-Host ""

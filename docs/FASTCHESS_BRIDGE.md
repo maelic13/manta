@@ -58,24 +58,27 @@ the maintainer inspects or launches it. `SprtElo0` and `SprtElo1` default to
 `3` and `10`; a different prospectively registered gate must supply both
 explicitly.
 
-## Pending MAN-S30 gate
+## Completed MAN-S30 gate
 
-Phase 6.5.1b is implemented behind the default-off live-history staged-picker
-switch. On the separate clean 5950X checkout, build both sides from the same
-frozen revision with Zig 0.16.0:
+Phase 6.5.1b ran on the separate 5950X from `72732d6` with Zig 0.16.0. Both
+sides were built from one frozen revision and differed only in the staged-picker
+switch. Live-history staging has since become the production default, so the
+arms would now be built the other way round:
 
 ```powershell
-& .\tools\build_test.ps1 -Suffix MAN-S30-candidate -LiveHistoryStaging
-& .\tools\build_test.ps1 -Suffix MAN-S30-baseline
+& .\tools\build_test.ps1 -Suffix MAN-S30-candidate
+& .\tools\build_test.ps1 -Suffix MAN-S30-baseline -LiveHistoryStaging:$false
 ```
 
-The schema-7 sidecars must report native ReleaseFast, non-PGO, integrated time
+The schema-7 sidecars reported native ReleaseFast, non-PGO, integrated time
 enabled, candidate `live_history_staging: true`, baseline `false`, candidate
 fingerprint `775451`, baseline `799610`, clean source and distinct binary
-SHA-256s. This is an internal-search-only candidate: engine protocol, clock
-policy, runner, Ryzen host, placement, book and adjudication are unchanged and
-already qualified by retained Manta, Rarog and Basilisk evidence, so no fresh
-pilot is required. Dry-run and then launch the exact registered SPRT shape:
+SHA-256s `62C1391241D024A7A3F1BA606B2B1EF8E68FFF445C1C364AE4F99081004B8C35`
+and `7D498E5102DE43FD322FEE1B1B3BE4FFA3025244E937E94E3D6713C37DEA8C2A`. This
+was an internal-search-only candidate: engine protocol, clock policy, runner,
+Ryzen host, placement, book and adjudication were unchanged and already
+qualified by retained Manta, Rarog and Basilisk evidence, so no fresh pilot was
+required. The registered launch shape was:
 
 ```powershell
 & .\tools\step_5_1_fastchess.ps1 -Job sprt -DryRun `
@@ -86,9 +89,15 @@ pilot is required. Dry-run and then launch the exact registered SPRT shape:
   -MaxGames 16000
 ```
 
-Any timeout, crash, disconnect, illegal move, incomplete result, nonzero exit or
-affinity anomaly invalidates the run. The coding agent does not remove
-`-DryRun` or start the remote job.
+The run accepted H1 after 8,752 games in `01:25:42` at `+13.19 +/- 7.28` nElo;
+`EXPERIMENTS.md` records the verdict and artifacts are in
+`zig-out/fastchess/MAN-S30-sprt-20260907_212733`. Four completed games ended in
+time forfeit — three lost by the baseline, one by the candidate, with no crash,
+disconnect, illegal move, incomplete result, nonzero exit or affinity anomaly —
+so the launcher's zero-timeout rule rejected an otherwise clean run and the
+maintainer accepted it by explicit judgment. The rule is unchanged: it still
+invalidates a run, and only the maintainer may waive one after the fact. The
+coding agent does not remove `-DryRun` or start a remote job.
 
 ## Archived MAN-R02 gate
 

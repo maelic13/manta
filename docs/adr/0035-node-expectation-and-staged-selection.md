@@ -95,9 +95,20 @@ fixed observation cohorts. The cohort records `79,446` staged nodes and
 `56,539` quiet-stage entries: `22,907` completed nodes cut off without
 generating quiets. A five-repeat development-host depth-six diagnostic measured
 baseline/candidate median wall time `791/766 ms` and median NPS
-`1,010,884/1,012,338`. Those results establish correctness and a live candidate,
-not strength or authoritative speed. Production remains `799,610`; only
-registered remote 1T `MAN-S30` H1 may promote the candidate.
+`1,010,884/1,012,338`. Those results established correctness and a live
+candidate, not strength or authoritative speed.
+
+Registered remote 1T `MAN-S30` then accepted H1 after 8,752 games at
+`+13.19 +/- 7.28` nElo, so live-history staging is accepted and default-on and
+the production depth-six fingerprint is `775,451`. The promotion licenses the
+staged picker as one mechanism; it does not attribute the gain to any single
+stage, and the smaller tree remains a diagnostic rather than the evidence.
+Turning `live_history_staging` off still reconstructs the superseded eager
+picker at `799,610` for archived diagnostics, so every pre-6.5.1b recorded
+fingerprint keeps a faithful reconstruction path. `EXPERIMENTS.md` records the
+run's four completed time forfeits, the maintainer's explicit acceptance and
+the reconstruction that attributes them to host scheduling pressure rather
+than to clock policy.
 
 ## Traceability
 

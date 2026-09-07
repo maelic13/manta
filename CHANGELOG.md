@@ -6,6 +6,13 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Ordinary interior search nodes now generate captures and promotions first and
+  delay non-tactical quiet generation until no transposition or good tactical
+  move remains, ranking those quiets from history that descendant searches have
+  already updated. Accepted after an 8,752-game one-thread match.
+
 ## [1.0.0] - 2026-09-04
 
 ### Added
