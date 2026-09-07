@@ -171,8 +171,19 @@ the deterministic one-thread depth-6 fingerprint is now `775,451`. Disabling
 `799,610` for archived diagnostics. The run's four completed time forfeits
 (three baseline, one candidate, no other fault) tripped the bridge's
 zero-timeout rule and carry an explicit post-result maintainer waiver, not a
-prospective precedent. Step 6.5.2 whole-tree attribution is current; it changes
-no production mechanism and runs no games. Stop before Phase 7; its first step
+prospective precedent. Step 6.5.2 whole-tree attribution is complete and recorded in
+`docs/SEARCH_ATTRIBUTION.md`: it changed no production mechanism and ran no
+games, and the observer gained an exact whole-tree charge partition,
+transposition lookup/store outcome partitions and chain histograms behind the
+new `zig build search-attribution` sweep. Branching over depths four to twelve
+is `2.412` against sibling `1.750`/`1.873`; two proven-mate positions are
+`47.5%` of the depth-ten corpus because mate-distance pruning is missing, so
+the ordinary-position gap is nearer `5x` than the Step-6.5.0 aggregate;
+LMR reaches `3.3%` of searched main moves and re-searches `0.71%`; a
+16/64/256 MiB sweep moves the tree `0.70%` and first-move cutoffs reach
+`92.5%`, retiring table pressure and move ordering as explanations.
+Mate-distance pruning is now Step 6.5.5's highest-priority candidate and needs
+its own registered 1T gate. Step 6.5.3 is next. Stop before Phase 7; its first step
 requires separate maintainer approval.
 
 ## Product objective

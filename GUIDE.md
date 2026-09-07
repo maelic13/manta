@@ -116,17 +116,20 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   8,752 games at `+13.19 +/- 7.28` nElo. Staging is production, the fingerprint
   moved to `775,451`, and its four completed time forfeits carry a documented
   maintainer waiver.
-- [ ] **6.5.2 — Whole-tree attribution:** Re-measure the post-MAN-S29 depth
-  curve and attribute main, qsearch, proof, re-search, TT and forcing-line work.
-  Model: GPT-5.6 Terra High.
+- [x] **6.5.2 — Whole-tree attribution:** Rebaselined in
+  `docs/SEARCH_ATTRIBUTION.md`. Branching is `2.412` against sibling `1.750` and
+  `1.873`; two proven-mate positions are `47.5%` of the depth-ten corpus because
+  mate-distance pruning is missing; LMR reaches `3.3%` of searched main moves
+  and re-searches `0.71%`; the 16/64/256 MiB sweep moves the tree `0.70%`.
 - [ ] **6.5.3 — Forcing-line selectivity:** Test blanket check extension,
   checking-move protection and evasion reductions as separately gated playing
   candidates. Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
 - [ ] **6.5.4 — Aspiration-aware contextual LMR:** Build a dependency-complete,
   non-saturating reduction policy and give it one remote-host SPRT. Model:
   GPT-6 Astra XHigh; GPT-5.6 Sol Max fallback.
-- [ ] **6.5.5 — Forward proof and pruning efficiency:** Diagnose and separately
-  gate null verification, ProbCut and prospective-depth LMP/futility/SEE work.
+- [ ] **6.5.5 — Forward proof and pruning efficiency:** Gate mate-distance
+  pruning first, then the singular exclusion horizon, null verification, ProbCut
+  and prospective-depth LMP/futility/SEE work, each separately.
   Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
 - [ ] **6.5.6 — TT and qsearch efficiency:** Measure replacement/cutoff yield
   and remove unnecessary non-check qsearch move generation before considering

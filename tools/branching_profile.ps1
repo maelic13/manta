@@ -111,7 +111,7 @@ try {
     Write-Host $header
     Write-Host ("-" * $header.Length)
 
-    $rows = @(); $previous = 0
+    $rows = @(); $positionRows = @(); $previous = 0
     foreach ($depth in $MinDepth..$MaxDepth) {
         # Fresh process per depth: see the note in the description.
         Start-Engine
@@ -120,6 +120,7 @@ try {
         Send "setoption name Threads value $Threads"
         Send "isready"; [void](WaitFor '^readyok' 30000)
         $total = [int64]0
+        $positionIndex = 0
         $started = Get-Date
         foreach ($fen in $fens) {
             # A fresh game per position keeps one position's table and history
@@ -134,6 +135,10 @@ try {
                 if ($line -match '^info .*\bnodes\s+(\d+)') { $nodes = [int64]$Matches[1] }
             }
             if ($nodes -le 0) { throw "no node count for depth $depth on: $fen" }
+            # Per-position rows exist so one opening or ending cannot decide a
+            # diagnosis that the aggregate would hide.
+            $positionRows += [pscustomobject]@{ depth = $depth; position = $positionIndex; nodes = $nodes }
+            $positionIndex += 1
             $total += $nodes
         }
         $elapsed = [int64]((Get-Date) - $started).TotalMilliseconds
@@ -154,7 +159,7 @@ try {
     if ($OutFile) {
         [pscustomobject]@{
             engine = $psi.FileName; positions = $fens.Count; hash_mb = $Hash
-            threads = $Threads; rows = $rows
+            threads = $Threads; rows = $rows; position_rows = $positionRows
         } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutFile -Encoding utf8
         Write-Host "report -> $OutFile"
     }

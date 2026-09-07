@@ -819,6 +819,16 @@ remote-host `MAN-S30` promoted to production after accepting H1 at
 `+13.19 +/- 7.28` nElo. Disabling the switch reconstructs the superseded eager
 picker at `799,610`.
 
+Step 6.5.2 extends that observer without changing any search decision. Every
+visited node is charged to the innermost speculative context on its path, which
+partitions the tree exactly, and to each enclosing context, which measures what
+a mechanism's subtrees actually cost. Exclusion search re-enters its own ply, so
+it saves and restores the observer's per-ply path facts exactly as it already
+saves the ply context. Transposition lookups and stores gain exact outcome
+partitions and in-check and extension runs gain chain histograms.
+`tt.Table.store` returns which replacement branch it took; the value is
+diagnostic and cannot change a stored record.
+
 Accepted ADR-0036 adds one independently ablatable dynamic base-LMR consumer.
 Eligibility remains the accepted late quiet, non-checking, non-singular scope.
 Only nominal depth and searched legal-move ordinal determine magnitude through

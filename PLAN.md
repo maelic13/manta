@@ -401,6 +401,34 @@ promotion verdict recorded above.
 
 #### 6.5.2 — Whole-tree attribution
 
+Complete. `docs/SEARCH_ATTRIBUTION.md` holds the rebaselined depth curve,
+per-position distribution and mechanism attribution; no production mechanism
+changed and no games ran. The observer gained an exact whole-tree charge
+partition, an inclusive per-mechanism subtree cost, transposition lookup and
+store outcome partitions and check/extension chain histograms, and
+`zig build search-attribution` sweeps the forty-position corpus across depths
+and table sizes.
+
+Four results reorder the remaining phase:
+
+- Two proven-mate positions are `47.5%` of the depth-ten corpus because Manta
+  has no mate-distance pruning. Removing them moves the corpus ratio against
+  Rarog from `12.3x` to `6.5x`, so the Step-6.5.0 aggregate overstated the
+  ordinary-position gap; the per-position median is `5.4x`.
+- Branching over depths four to twelve is `2.412` against `1.750` and `1.873`
+  for the siblings, so tree efficiency remains the first-class deficit.
+- Late move reduction reaches `3.3%` of searched main moves and re-searches
+  `0.71%` of those, while shallow pruning discards `57%` of candidates outright.
+  Reduction is far from the information-loss boundary.
+- A 16/64/256 MiB sweep changes Manta's depth-ten tree by `0.70%`, and first
+  move cutoffs reach `92.5%`. Table pressure and move ordering are both retired
+  as explanations.
+
+Mate-distance pruning is added to Step 6.5.5 as its highest-priority candidate.
+It is a search change with its own registered 1T gate, not a cleanup.
+
+The original step definition follows.
+
 Rebaseline production MAN-S29 before selecting more search candidates. Use the
 same forty positions, 1T, native ReleaseFast, identical Hash and a fresh process
 per depth for Manta, Rarog and Basilisk. Measure depths four through ten first;
@@ -418,6 +446,9 @@ distributions so one opening or ending cannot decide the diagnosis.
 This step changes no production mechanism and runs no games. Its output ranks
 the following candidate questions and freezes the operational depth-curve
 baseline. Recommended model: GPT-5.6 Terra High.
+
+The subject is now production MAN-S30 rather than MAN-S29, because MAN-S30 was
+promoted before this measurement ran.
 
 #### 6.5.3 — Forcing-line selectivity
 
@@ -462,11 +493,31 @@ Recommended model: GPT-6 Astra XHigh; GPT-5.6 Sol Max fallback.
 #### 6.5.5 — Forward proof and pruning efficiency
 
 After the LMR head freezes, attribute and test proof mechanisms separately.
-The first null-move question is whether the present same-node verification is
-needed in safe ordinary material: `354` of `355` observed fail-highs survived
-it. Checks, PV, consecutive nulls, pawn-only and zugzwang-prone material,
-decisive scores and shallow horizons retain exclusions or verification unless a
-new contract proves otherwise. Null evidence remains a typed lower-bound proof.
+
+Step 6.5.2 promoted **mate distance pruning** to the head of this step. Manta
+clamps no search window against the mate band, so a proven mate neither stops
+its own iteration nor collapses the sibling subtrees that cannot beat it, and
+two proven-mate positions consume `47.5%` of the depth-ten corpus. Clamp alpha
+and beta against `matedIn(ply)` and `mateIn(ply + 1)` at node entry and let
+iterative deepening stop when the remaining horizon cannot improve a found
+mate. Legal PV, mate-distance normalization through the transposition table,
+terminal and draw precedence and root reporting all remain fixed. This changes
+the tree and the fingerprint, so it is a playing candidate with its own
+registered remote-host 1T SPRT.
+
+The exclusion horizon is the second bounded question: singular verification
+searches at `depth - 2` convert `9.5%` of `3,009` attempts into extensions at
+`5.1%` of the depth-ten tree, so a shallower horizon may keep the extensions
+and drop most of the cost.
+
+The third is whether the present same-node null verification is needed in safe
+ordinary material: Step 6.5.2 measured `99.91%` of `37,085` depth-ten
+verifications confirming their fail-high, at about `1.1%` of the tree. Either
+the verification buys almost nothing or the null reduction is too conservative
+for it to catch anything; the readings are distinguishable. Checks, PV,
+consecutive nulls, pawn-only and zugzwang-prone material, decisive scores and
+shallow horizons retain exclusions or verification unless a new contract proves
+otherwise. Null evidence remains a typed lower-bound proof.
 
 Then measure ProbCut TT reuse, tactical move cap and qsearch-to-main conversion,
 and whether LMP, futility and SEE consume the final prospective depth from

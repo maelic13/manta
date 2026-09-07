@@ -464,6 +464,43 @@ pub fn build(b: *std.Build) void {
     );
     eval_residual_step.dependOn(&run_eval_residual.step);
 
+    // Step-6.5.2 whole-tree attribution sweep. It shares the observer with
+    // `search-observe` but sweeps depth and table size instead of freezing
+    // them, so it is a separate artifact rather than a mode of the fixed suite.
+    const search_attribution = b.addExecutable(.{
+        .name = "manta-search-attribution",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/search_attribution.zig"),
+            .target = target,
+            .optimize = optimize,
+            .omit_frame_pointer = omit_frame_pointer,
+            .imports = &.{
+                .{ .name = "manta", .module = manta },
+                .{ .name = "search_build_options", .module = search_build_options_module },
+            },
+        }),
+    });
+    const run_search_attribution = b.addRunArtifact(search_attribution);
+    if (b.args) |forwarded| run_search_attribution.addArgs(forwarded);
+    const search_attribution_step = b.step(
+        "search-attribution",
+        "Sweep the bench corpus and report whole-tree search attribution",
+    );
+    search_attribution_step.dependOn(&run_search_attribution.step);
+
+    const search_attribution_tests = b.addTest(.{
+        .name = "search-attribution-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/search_attribution.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "manta", .module = manta },
+                .{ .name = "search_build_options", .module = search_build_options_module },
+            },
+        }),
+    });
+
     const eval_residual_tests = b.addTest(.{
         .name = "evaluation-residual-tests",
         .root_module = b.createModule(.{
@@ -541,6 +578,8 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&eval_bench_tests.step);
     check_step.dependOn(&search_observe.step);
     check_step.dependOn(&search_observe_tests.step);
+    check_step.dependOn(&search_attribution.step);
+    check_step.dependOn(&search_attribution_tests.step);
     check_step.dependOn(&eval_residual.step);
     check_step.dependOn(&eval_residual_tests.step);
     check_step.dependOn(&hce_fit.step);
@@ -566,6 +605,7 @@ pub fn build(b: *std.Build) void {
         board_bench_tests,
         eval_bench_tests,
         search_observe_tests,
+        search_attribution_tests,
         eval_residual_tests,
         hce_fit_tests,
     };

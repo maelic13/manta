@@ -102,6 +102,7 @@ const allowed_reference_files = [_][]const u8{
     "docs/adr/0042-extension-depth-authority-candidate.md",
     "docs/FASTCHESS_BRIDGE.md",
     "docs/SEARCH_REFERENCE.md",
+    "docs/SEARCH_ATTRIBUTION.md",
     "tools/build_test.ps1",
     "tools/datagen.ps1",
     "tools/harness_common.ps1",
