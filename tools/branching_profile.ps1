@@ -1,168 +1,284 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Step-5.4.0 cross-engine nodes-to-depth and branching-factor profile.
+    Cross-engine nodes-to-depth, elapsed-time and branching-factor profile.
 
 .DESCRIPTION
-    Drives any UCI engine with `go depth N` over one fixed position set and
-    reports the total nodes each depth costs, plus the ratio between consecutive
-    depths. That ratio is the branching factor that decides how deep a node
-    budget reaches, unlike a single-depth `nodes^(1/depth)` estimate which folds
-    in the fixed cost of the first plies.
+    Drives one UCI engine over a fixed FEN corpus with a fresh process per
+    depth and a fresh game per position. The JSON report binds executable and
+    corpus hashes, records monotonic per-position wall time, and reports full
+    and ordinary-position aggregates. Position, depth and whole-run deadlines
+    are enforced independently; an incomplete search is never reported as fast.
 
-    This exists because Manta's own `bench` pins a 16 MiB transposition table at
-    comptime so its fingerprint stays deterministic, which is correct for a
-    fingerprint and useless for asking whether a branching measurement was
-    distorted by table pressure. Driving plain UCI makes Hash a variable.
-
-    Each depth runs in a FRESH engine process. Manta does not need this: a
-    direct check shows identical node counts for a position whether searched
-    cold, after shallower searches of the same position, or after a search of a
-    different one, because `ucinewgame` clears both the transposition table and
-    the ordering state. It is kept because this tool drives arbitrary engines and
-    not all of them guarantee that, and because an independent process per depth
-    makes the guarantee unnecessary to verify per engine.
-
-    HASH SIZE IS PART OF THE MEASUREMENT. Manta scores 171,653,746 nodes at
-    depth twelve with 16 MiB and 159,169,542 with 64 MiB, a difference of nearly
-    eight percent. Never compare figures taken at different sizes: every row of a
-    comparison must be run at one size, and the size belongs in the report.
-
-    Because every engine runs the same positions, the same depths and the same
-    hash, the ratio column is directly comparable across engines. Absolute node
-    counts are not: engines differ in what they count as a node.
-
-.PARAMETER Engine
-    Path to a UCI engine executable.
-
-.PARAMETER Positions
-    EPD/FEN file, one position per line. Defaults to Manta's bench corpus.
+.PARAMETER OrdinaryExcludedPositions
+    Zero-based position indices excluded only from the ordinary subset. The
+    full aggregate always retains every selected position.
 
 .EXAMPLE
-    pwsh -NoProfile -File .\tools\branching_profile.ps1 -Engine .\zig-out\bin\manta.exe -MaxDepth 9 -Hash 256
+    pwsh -NoProfile -File .\tools\branching_profile.ps1 -Engine .\zig-out\bin\manta.exe -MinDepth 4 -MaxDepth 13 -Hash 64 -OutFile .\zig-out\manta-d4-13.json
 #>
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Engine,
     [string]$Positions = "",
-    [int]$MinDepth = 4,
-    [int]$MaxDepth = 9,
-    [int]$Hash = 16,
-    [int]$Threads = 1,
-    [int]$PositionLimit = 0,
+    [ValidateRange(1, 256)][int]$MinDepth = 4,
+    [ValidateRange(1, 256)][int]$MaxDepth = 9,
+    [ValidateRange(1, 1048576)][int]$Hash = 16,
+    [ValidateRange(1, 1024)][int]$Threads = 1,
+    [ValidateRange(0, 1000000)][int]$PositionLimit = 0,
+    [int[]]$OrdinaryExcludedPositions = @(6, 30),
     [string]$OutFile = "",
-    [int]$TimeoutMs = 1800000
+    [Alias("TimeoutMs")][ValidateRange(1, 2147483647)][int]$PositionTimeoutMs = 60000,
+    [ValidateRange(1, 2147483647)][int]$DepthTimeoutMs = 300000,
+    [ValidateRange(1, 2147483647)][int]$RunTimeoutMs = 900000,
+    [string]$SourceRevision = "",
+    [string]$BuildManifest = ""
 )
 
 $ErrorActionPreference = "Stop"
+if ($MinDepth -gt $MaxDepth) { throw "MinDepth must not exceed MaxDepth" }
 $root = Split-Path -Parent $PSScriptRoot
 if (-not $Positions) { $Positions = Join-Path $root "tools\bench_positions.epd" }
 foreach ($required in @($Engine, $Positions)) {
-    if (-not (Test-Path -LiteralPath $required)) { throw "missing: $required" }
+    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "missing: $required" }
 }
-$fens = @(Get-Content -LiteralPath $Positions | Where-Object { $_.Trim() })
+if ($BuildManifest -and -not (Test-Path -LiteralPath $BuildManifest -PathType Leaf)) {
+    throw "missing build manifest: $BuildManifest"
+}
+
+$allFens = @(Get-Content -LiteralPath $Positions | Where-Object { $_.Trim() })
+$fens = $allFens
 if ($PositionLimit -gt 0 -and $fens.Count -gt $PositionLimit) {
     $fens = $fens[0..($PositionLimit - 1)]
 }
+if ($fens.Count -eq 0) { throw "position corpus is empty" }
+foreach ($index in $OrdinaryExcludedPositions) {
+    if ($index -lt 0) { throw "ordinary excluded position indices must be non-negative" }
+}
 
 $enginePath = (Resolve-Path -LiteralPath $Engine).Path
+$positionsPath = (Resolve-Path -LiteralPath $Positions).Path
+$manifestPath = if ($BuildManifest) { (Resolve-Path -LiteralPath $BuildManifest).Path } else { $null }
+$engineHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $enginePath).Hash
+$positionsHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $positionsPath).Hash
+$manifestHash = if ($manifestPath) { (Get-FileHash -Algorithm SHA256 -LiteralPath $manifestPath).Hash } else { $null }
 $script:proc = $null
+$rows = @()
+$positionRows = @()
+$engineName = $null
+$runWatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 function Start-Engine {
     $psi = [System.Diagnostics.ProcessStartInfo]::new()
-    $psi.FileName               = $enginePath
-    $psi.WorkingDirectory       = (Split-Path -Parent $enginePath)
-    $psi.RedirectStandardInput  = $true
+    $psi.FileName = $enginePath
+    $psi.WorkingDirectory = Split-Path -Parent $enginePath
+    $psi.RedirectStandardInput = $true
     $psi.RedirectStandardOutput = $true
-    $psi.RedirectStandardError  = $true
-    $psi.UseShellExecute        = $false
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
     $script:proc = [System.Diagnostics.Process]::Start($psi)
 }
+
 function Stop-Engine {
     if ($null -eq $script:proc) { return }
     if (-not $script:proc.HasExited) {
         try { $script:proc.StandardInput.WriteLine("quit") } catch {}
-        $script:proc.WaitForExit(5000) | Out-Null
+        [void]$script:proc.WaitForExit(5000)
     }
     if (-not $script:proc.HasExited) { $script:proc.Kill($true) }
     $script:proc.Dispose()
     $script:proc = $null
 }
 
-function Send([string]$text) { $script:proc.StandardInput.WriteLine($text) }
-function WaitFor([string]$pattern, [int]$ms) {
-    $deadline = [datetime]::UtcNow.AddMilliseconds($ms)
-    $seen = New-Object System.Collections.Generic.List[string]
-    while ([datetime]::UtcNow -lt $deadline) {
-        $line = $script:proc.StandardOutput.ReadLine()
-        if ($null -eq $line) { throw "engine closed stdout early" }
+function Send([string]$text) {
+    $script:proc.StandardInput.WriteLine($text)
+    $script:proc.StandardInput.Flush()
+}
+
+function Remaining-Milliseconds(
+    [System.Diagnostics.Stopwatch]$watch,
+    [int]$limit,
+    [string]$scope
+) {
+    $remaining = [int64]$limit - $watch.ElapsedMilliseconds
+    if ($remaining -le 0) { throw "$scope timeout after $limit ms" }
+    return [int][math]::Min($remaining, [int]::MaxValue)
+}
+
+function Bounded-Wait([string]$pattern, [int]$maximumMs, [string]$scope) {
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $seen = [System.Collections.Generic.List[string]]::new()
+    while ($true) {
+        $remaining = [int64]$maximumMs - $watch.ElapsedMilliseconds
+        if ($remaining -le 0) { throw "$scope timeout waiting for /$pattern/ after $maximumMs ms" }
+        $readTask = $script:proc.StandardOutput.ReadLineAsync()
+        if (-not $readTask.Wait([int][math]::Min($remaining, [int]::MaxValue))) {
+            throw "$scope timeout waiting for /$pattern/ after $maximumMs ms"
+        }
+        $line = $readTask.Result
+        if ($null -eq $line) {
+            $stderr = $script:proc.StandardError.ReadToEnd()
+            throw "engine closed stdout early in $scope; stderr: $stderr"
+        }
         $seen.Add($line)
         if ($line -match $pattern) { return $seen }
     }
-    throw "timed out waiting for /$pattern/"
+}
+
+function Minimum-Timeout([int[]]$values) {
+    return ($values | Measure-Object -Minimum).Minimum
+}
+
+function Report-Object([string]$status, [string]$failure) {
+    return [pscustomobject]@{
+        schema = "manta-branching-profile-v2"
+        status = $status
+        failure = if ($failure) { $failure } else { $null }
+        engine = [pscustomobject]@{
+            path = $enginePath
+            sha256 = $engineHash
+            reported_name = $engineName
+            source_revision = if ($SourceRevision) { $SourceRevision } else { $null }
+            build_manifest = $manifestPath
+            build_manifest_sha256 = $manifestHash
+        }
+        corpus = [pscustomobject]@{
+            path = $positionsPath
+            sha256 = $positionsHash
+            available_positions = $allFens.Count
+            selected_positions = $fens.Count
+            ordinary_excluded_zero_based = @($OrdinaryExcludedPositions)
+        }
+        hash_mb = $Hash
+        threads = $Threads
+        min_depth = $MinDepth
+        max_depth = $MaxDepth
+        timeouts_ms = [pscustomobject]@{
+            position = $PositionTimeoutMs
+            depth = $DepthTimeoutMs
+            run = $RunTimeoutMs
+        }
+        reset_policy = "fresh process per depth; ucinewgame plus isready per position"
+        timing_scope = "per-position monotonic wall time from ucinewgame send through bestmove receipt"
+        run_wall_ms = $runWatch.ElapsedMilliseconds
+        rows = @($rows)
+        position_rows = @($positionRows)
+    }
+}
+
+function Write-Report([string]$status, [string]$failure) {
+    if (-not $OutFile) { return }
+    $reportPath = [System.IO.Path]::GetFullPath($OutFile)
+    $parent = Split-Path -Parent $reportPath
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+        [void](New-Item -ItemType Directory -Path $parent)
+    }
+    Report-Object $status $failure |
+        ConvertTo-Json -Depth 8 |
+        Set-Content -LiteralPath $reportPath -Encoding utf8
+    Write-Host "report -> $reportPath"
 }
 
 try {
-    Write-Host "Engine:    $Engine"
-    Write-Host "Positions: $($fens.Count) from $(Split-Path -Leaf $Positions)"
-    Write-Host "Hash:      $Hash MiB   Threads: $Threads`n"
-    $header = "{0,5} {1,16} {2,10} {3,12}" -f "depth", "nodes", "ratio", "time_ms"
+    Write-Host "Engine:    $enginePath"
+    Write-Host "SHA-256:   $engineHash"
+    Write-Host "Positions: $($fens.Count) from $(Split-Path -Leaf $positionsPath) ($positionsHash)"
+    Write-Host "Hash:      $Hash MiB   Threads: $Threads"
+    Write-Host "Timeouts:  position=$PositionTimeoutMs depth=$DepthTimeoutMs run=$RunTimeoutMs ms`n"
+    $header = "{0,5} {1,16} {2,10} {3,14} {4,14}" -f "depth", "nodes", "ratio", "full_time_ms", "ordinary_ms"
     Write-Host $header
     Write-Host ("-" * $header.Length)
 
-    $rows = @(); $positionRows = @(); $previous = 0
+    $previous = 0
     foreach ($depth in $MinDepth..$MaxDepth) {
-        # Fresh process per depth: see the note in the description.
+        [void](Remaining-Milliseconds $runWatch $RunTimeoutMs "whole run")
+        $depthWatch = [System.Diagnostics.Stopwatch]::StartNew()
         Start-Engine
-        Send "uci";     [void](WaitFor '^uciok' 30000)
+        Send "uci"
+        $uciLines = Bounded-Wait '^uciok' (Minimum-Timeout @(
+            (Remaining-Milliseconds $depthWatch $DepthTimeoutMs "depth $depth"),
+            (Remaining-Milliseconds $runWatch $RunTimeoutMs "whole run"),
+            30000
+        )) "depth $depth UCI handshake"
+        if (-not $engineName) {
+            $nameLine = $uciLines | Where-Object { $_ -match '^id name\s+(.+)$' } | Select-Object -Last 1
+            if ($nameLine -and $nameLine -match '^id name\s+(.+)$') { $engineName = $Matches[1] }
+        }
         Send "setoption name Hash value $Hash"
         Send "setoption name Threads value $Threads"
-        Send "isready"; [void](WaitFor '^readyok' 30000)
-        $total = [int64]0
-        $positionIndex = 0
-        $started = Get-Date
-        foreach ($fen in $fens) {
-            # A fresh game per position keeps one position's table and history
-            # from paying for the next one's search.
+        Send "isready"
+        [void](Bounded-Wait '^readyok' (Minimum-Timeout @(
+            (Remaining-Milliseconds $depthWatch $DepthTimeoutMs "depth $depth"),
+            (Remaining-Milliseconds $runWatch $RunTimeoutMs "whole run"),
+            30000
+        )) "depth $depth setup")
+
+        $totalNodes = [int64]0
+        $ordinaryNodes = [int64]0
+        $fullTime = [int64]0
+        $ordinaryTime = [int64]0
+        for ($positionIndex = 0; $positionIndex -lt $fens.Count; $positionIndex++) {
+            $fen = $fens[$positionIndex]
+            $positionWatch = [System.Diagnostics.Stopwatch]::StartNew()
             Send "ucinewgame"
-            Send "isready"; [void](WaitFor '^readyok' 60000)
+            Send "isready"
+            [void](Bounded-Wait '^readyok' (Minimum-Timeout @(
+                (Remaining-Milliseconds $positionWatch $PositionTimeoutMs "depth $depth position $positionIndex"),
+                (Remaining-Milliseconds $depthWatch $DepthTimeoutMs "depth $depth"),
+                (Remaining-Milliseconds $runWatch $RunTimeoutMs "whole run")
+            )) "depth $depth position $positionIndex reset")
             Send "position fen $fen"
             Send "go depth $depth"
-            $lines = WaitFor '^bestmove' $TimeoutMs
-            $nodes = 0
+            $lines = Bounded-Wait '^bestmove' (Minimum-Timeout @(
+                (Remaining-Milliseconds $positionWatch $PositionTimeoutMs "depth $depth position $positionIndex"),
+                (Remaining-Milliseconds $depthWatch $DepthTimeoutMs "depth $depth"),
+                (Remaining-Milliseconds $runWatch $RunTimeoutMs "whole run")
+            )) "depth $depth position $positionIndex search"
+            $positionWatch.Stop()
+
+            $nodes = [int64]0
+            $uciTime = [int64]0
             foreach ($line in $lines) {
                 if ($line -match '^info .*\bnodes\s+(\d+)') { $nodes = [int64]$Matches[1] }
+                if ($line -match '^info .*\btime\s+(\d+)') { $uciTime = [int64]$Matches[1] }
             }
-            if ($nodes -le 0) { throw "no node count for depth $depth on: $fen" }
-            # Per-position rows exist so one opening or ending cannot decide a
-            # diagnosis that the aggregate would hide.
-            $positionRows += [pscustomobject]@{ depth = $depth; position = $positionIndex; nodes = $nodes }
-            $positionIndex += 1
-            $total += $nodes
+            if ($nodes -le 0) { throw "no node count for depth $depth position $positionIndex" }
+            $isOrdinary = $OrdinaryExcludedPositions -notcontains $positionIndex
+            $elapsed = [int64]$positionWatch.ElapsedMilliseconds
+            $positionRows += [pscustomobject]@{
+                depth = $depth; position = $positionIndex; ordinary = $isOrdinary
+                nodes = $nodes; time_ms = $elapsed; uci_time_ms = $uciTime
+            }
+            $totalNodes += $nodes
+            $fullTime += $elapsed
+            if ($isOrdinary) { $ordinaryNodes += $nodes; $ordinaryTime += $elapsed }
         }
-        $elapsed = [int64]((Get-Date) - $started).TotalMilliseconds
         Stop-Engine
-        $ratio = if ($previous -gt 0) { [math]::Round($total / $previous, 3) } else { [double]::NaN }
-        $rows += [pscustomobject]@{ depth = $depth; nodes = $total; ratio = $ratio; time_ms = $elapsed }
-        Write-Host ("{0,5} {1,16:N0} {2,10} {3,12:N0}" -f `
-            $depth, $total, $(if ([double]::IsNaN($ratio)) { "-" } else { $ratio }), $elapsed)
-        $previous = $total
+        $depthWatch.Stop()
+        $ratio = if ($previous -gt 0) { [math]::Round($totalNodes / $previous, 3) } else { [double]::NaN }
+        $rows += [pscustomobject]@{
+            depth = $depth; nodes = $totalNodes; ratio = $ratio; time_ms = $fullTime
+            ordinary_nodes = $ordinaryNodes; ordinary_time_ms = $ordinaryTime
+            depth_wall_ms = [int64]$depthWatch.ElapsedMilliseconds
+        }
+        Write-Host ("{0,5} {1,16:N0} {2,10} {3,14:N0} {4,14:N0}" -f `
+            $depth, $totalNodes, $(if ([double]::IsNaN($ratio)) { "-" } else { $ratio }), $fullTime, $ordinaryTime)
+        $previous = $totalNodes
     }
 
-    $withRatio = $rows | Where-Object { -not [double]::IsNaN($_.ratio) }
-    if ($withRatio) {
+    $withRatio = @($rows | Where-Object { -not [double]::IsNaN($_.ratio) })
+    if ($withRatio.Count -gt 0) {
         $logs = $withRatio | ForEach-Object { [math]::Log($_.ratio) }
         $geometric = [math]::Round([math]::Exp(($logs | Measure-Object -Sum).Sum / $logs.Count), 3)
         Write-Host "`ngeometric mean branching factor over $($withRatio.Count) plies: $geometric"
     }
-    if ($OutFile) {
-        [pscustomobject]@{
-            engine = $psi.FileName; positions = $fens.Count; hash_mb = $Hash
-            threads = $Threads; rows = $rows; position_rows = $positionRows
-        } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutFile -Encoding utf8
-        Write-Host "report -> $OutFile"
-    }
+    Write-Report "complete" $null
+} catch {
+    $failureMessage = $_.Exception.Message
+    Write-Report "incomplete" $failureMessage
+    throw
 } finally {
     Stop-Engine
+    $runWatch.Stop()
 }

@@ -5,9 +5,9 @@
 Rejected. `MAN-S31` ran its registered gate and the maintainer stopped it by
 judgment at 7,958 games and `-3.08 +/- 7.63` nElo, LLR `-1.60` of `-2.94`, with
 no anomaly. Production remains MAN-S30 at `775,451` nodes and the switch stays
-archived with blanket extension on. The mechanism is not refuted; its isolated
-formulation is. Step 6.5.3 closed and moved the remaining checking-move and
-evasion scope into Step 6.5.4.
+archived with blanket extension on. The isolated formulation is unpromoted,
+not statistically refuted. Step 6.5.3 is closed; ADR-0068 supersedes follow-on
+sequencing and assigns a distinct policy review to reworked Steps 6.5.8–6.5.10.
 
 ## Mechanism and boundary
 
@@ -153,7 +153,8 @@ from `16,420,591` to `6,450,317`; LMR probes/re-searches change from
 are unchanged. Whole-tree charge accounting passes throughout the sweep.
 The saved downstream horizon work exceeds the directly extended-node share;
 that share was never a bound on total counterfactual savings. Missing
-mate-distance pruning remains Step 6.5.5 work.
+mate-distance pruning was separate historical Step 6.5.5 work; ADR-0068 now
+assigns its full contract to the integrated search design.
 
 Frozen local artifacts (native ReleaseFast, Zig 0.16.0, no PGO):
 
@@ -185,38 +186,21 @@ below. Step 6.5.3 is closed.
 `SCORE-003`, `SCORE-004`, `SCORE-010`, `SCORE-011`, `SCORE-016`, `FUNC-004`
 through `FUNC-006`, `PERF-006`, `QUAL-013` through `QUAL-016`; PLAN Step 6.5.3.
 
-## Outcome and diagnosis (2026-09-08)
+## Outcome and corrected interpretation (2026-09-08)
 
 The gate produced `2,049` wins, `2,098` losses and `3,811` draws across 7,958
 games for `49.69%`, pentanomial `[242, 993, 1538, 984, 222]`, pairs ratio
-`0.98`. The trajectory toward H0 was monotone from about 4,000 games; the
-maintainer stopped rather than spend the remaining hours. Nothing in the run
-was anomalous, so the verdict is the strength result itself.
+`0.98`. The maintainer rejected the candidate by judgment at
+`-3.08 +/- 7.63` nElo, LLR `-1.60`, without anomaly. Neither boundary was
+crossed; an adverse trajectory did not settle a formal SPRT verdict.
 
-The candidate cut the depth-ten tree by `56.53%`, and still by `35.34%` with
-the two mate-heavy corpus positions excluded, at a strength interval that
-contains zero. Half the tree bought nothing. That is only paradoxical if the
-extension is read in isolation.
+The 56.53% depth-ten node saving (35.34% excluding the mate-heavy positions)
+changed forcing-line coverage. The game interval establishes neither a loss
+nor equivalence. The former explanation that other checking-move exemptions
+caused the result, and that removing them together would repair it, is
+withdrawn as an untested hypothesis.
 
-A structural comparison against the pinned modern search reference, recorded as
-Finding 4 in `docs/SEARCH_COVERAGE.md`, supplies the missing relation. There,
-the "gives check" fact never touches depth and never touches the reduction:
-checking moves are ordinary moves, reduced like any other and still subject to
-static-exchange pruning. Manta grants checking
-moves three compounding privileges instead — the blanket extension this ADR
-removed, plus exemption from every late-move reduction and exemption from every
-shallow prune cause. `MAN-S31` withdrew one privilege and kept two, so a
-checking move lost its extra ply while remaining unreducible and unprunable.
-The forcing lines became shallower without becoming cheaper per node, and the
-depth the engine regained elsewhere was worth about what the extension had been
-buying.
-
-This is the intermediate state that a dependency-complete candidate exists to
-avoid. The correct experiment removes the extension while the same candidate
-makes checking moves reducible and prunable, which requires the reduction
-surface Step 6.5.4 builds. The switch is retained so that candidate can carry
-this component with its own ablation.
-
-Two candidates now support a more general caution for the phase: `MAN-S30` cut
-the tree `3%` and gained `+13.19` nElo, `MAN-S31` cut it by a third to a half
-and lost. Node reduction at a fixed time control is not a proxy for strength.
+ADR-0068 supersedes follow-on sequencing. The archived switch may inform a
+new shared-depth policy in PLAN 6.5.10 only after its design contract in 6.5.8.
+No standalone retry or automatic extension removal is authorized. Node savings
+are not a proxy for strength.

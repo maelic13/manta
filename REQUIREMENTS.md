@@ -160,6 +160,14 @@ command/state/output transcript matrix before chess behaviour is implemented:
 
 ## 6. Performance and determinism
 
+Phase 6.5 has two independent operational acceptance contracts, frozen in
+PLAN and ADR-0068: six-cell board throughput against the designated comparison
+engine, and common-corpus depth-13 elapsed time plus a separately bounded
+routine bench. Neither may substitute for the other or for PERF-010 strength
+qualification. Freeze comparison identities, denominators, tolerances and
+limits before measurement; missed targets remain open unless the maintainer
+explicitly revises the objective. These planning targets do not authorize jobs.
+
 | ID | Requirement | Owner | Verification |
 |---|---|---:|---|
 | `PERF-001` | The portable scalar implementation shall be the semantic oracle. Every optimized backend shall match its results exactly over conformance corpora and randomized legal sequences. | 2, 8, 10 | Backend differential tests |

@@ -171,31 +171,32 @@ the deterministic one-thread depth-6 fingerprint is now `775,451`. Disabling
 `799,610` for archived diagnostics. The run's four completed time forfeits
 (three baseline, one candidate, no other fault) tripped the bridge's
 zero-timeout rule and carry an explicit post-result maintainer waiver, not a
-prospective precedent. Step 6.5.2 whole-tree attribution is complete and recorded in
-`docs/SEARCH_ATTRIBUTION.md`: it changed no production mechanism and ran no
-games, and the observer gained an exact whole-tree charge partition,
-transposition lookup/store outcome partitions and chain histograms behind the
-new `zig build search-attribution` sweep. Branching over depths four to twelve
-is `2.412` against sibling `1.750`/`1.873`; two proven-mate positions are
-`47.5%` of the depth-ten corpus because mate-distance pruning is missing, so
-the ordinary-position gap is nearer `5x` than the Step-6.5.0 aggregate;
-LMR reaches `3.3%` of searched main moves and re-searches `0.71%`; a
-16/64/256 MiB sweep moves the tree `0.70%` and first-move cutoffs reach
-`92.5%`, retiring table pressure and move ordering as explanations.
-Step 6.5.3 is closed. Its `MAN-S31` candidate removed non-root blanket check
-extension and cut the depth-ten tree 56.53%, or 35.34% excluding the two
-mate-heavy positions, but the maintainer rejected it by judgment at 7,958 games
-and `-3.08 +/- 7.63` nElo with no anomaly. A structural comparison against the
-pinned Stockfish search reference, recorded in `docs/SEARCH_COVERAGE.md`,
-explains the result: Manta grants checking moves a blanket extension, exemption
-from every reduction and exemption from every shallow prune, the reference
-grants none of the three, and MAN-S31 withdrew one of them. The remaining
-checking-move and evasion scope transferred to Step 6.5.4, which owns the
-reduction surface. Two candidates now agree that node reduction at a fixed time
-control does not convert to strength by itself. Step 6.5.5's head-independent
-half — mate distance pruning, then the coupled null reduction/verification pair
-— is authorized before Step 6.5.4. Production remains MAN-S30 at `775,451`.
-Stop before Phase 7; its first step requires separate maintainer approval.
+prospective precedent. Step 6.5.2 whole-tree attribution and Step 6.5.3 are
+closed. MAN-S31 was rejected by maintainer judgment at 7,958 games,
+`-3.08 +/- 7.63` nElo, not formal H0. MAN-S32 remains parked default-off.
+The maintainer stopped MAN-S33; the supplied 6,640-game snapshot is
+`+1.24 +/- 8.36` nElo, LLR `-0.39`: inconclusive, unpromoted, no automatic
+retry. Final artifact reconciliation is not permission for new games.
+Production remains MAN-S30 at `775,451`.
+
+ADR-0068 and the reworked PLAN supersede the old open Phase-6.5 sequence.
+Step 6.5.4 is prepared but not complete: PLAN records frozen limits/identities,
+bounded tickets and completed profiler/SEE setup tooling. The ten-capture
+threshold-zero comparison passes; source-bound designated-host board/search
+baselines remain. Do not start 6.5.5 before its gate closes. Steps 6.5.5–6.5.7 improve
+the board backbone and exact
+qsearch cost; 6.5.8–6.5.12 derive a coordinated modern search; 6.5.13 addresses
+measured residual cost; 6.5.14 is an optional fit decision; 6.5.15 separately
+qualifies board parity, depth-13 elapsed time and strength. Modern Stockfish's
+pinned search structure and feature relationships may be reimplemented as
+original Zig with Manta-owned contracts and scales. Reference constants, NNUE
+confidence assumptions and trace matching are not targets.
+Do not infer safe pruning headroom from a low re-search rate, unique work from
+overlapping inclusive counters, or game strength from fixed-depth node savings.
+Do not revive rejected umbrellas merely because the reference has them.
+Every implemented consumer must share the accepted evidence/depth contract.
+No automatic games, pilots, PGO, SPSA or Phase-7 implementation. Stop before
+Phase 7; its first step requires separate maintainer approval.
 
 ## Product objective
 

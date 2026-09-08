@@ -1,10 +1,15 @@
 # Whole-tree search attribution
 
+Interpretation corrected on 2026-09-08 under ADR-0068. Measurements below
+remain historical observations; PLAN's reworked Phase 6.5 owns current
+priorities. Inclusive cost, conversion rates and extension frequency are not
+counterfactual savings or strength evidence.
+
 Step-6.5.2 rebaseline of the production search after `MAN-S30`. It answers one
 question: **where does Manta's tree actually go, and which mechanism owns the
 gap against the sibling engines.** Nothing here is a strength verdict. Node
-totals, shares and branching ratios rank candidate questions for Steps 6.5.3
-through 6.5.7; each of those candidates still needs its own registered game
+totals, shares and branching ratios informed the historical priority list.
+The reworked PLAN owns current tickets; retained candidates still need a game
 gate.
 
 The Step-6.5.0 audit measured the gap in aggregate. This step measures it per
@@ -113,15 +118,16 @@ depth cannot improve a found mate. Position 6 spends `8.2M` nodes on the
 thirty-nine root moves that cannot beat a mate in one; Rarog answers the same
 question in `36` nodes.
 
-This is the largest identified single sink in the corpus and the cheapest to
-describe: a mate found at ply `p` cannot be improved by anything deeper, and
-the score band that says so is already frozen by `SCORE-004` and `SCORE-005`.
+This is a concentrated mate-tree sink. Ply-dependent mate bounds can exclude
+branches unable to improve the incumbent. Finding some mate alone is not proof
+that no shorter mate exists; root early completion needs its own proven bound.
+The score band is frozen by `SCORE-004` and `SCORE-005`.
 It is nevertheless a search change — the tree, the fingerprint and possibly the
 reported mate line all move — so it is a playing candidate needing its own 1T
-SPRT, not a cleanup. It is a candidate for Step 6.5.5, ahead of the pruning work
-that step currently names.
+SPRT, not a cleanup. The complete contract now belongs to the reworked
+Step 6.5.10, after its design in 6.5.8.
 
-### 2. Late move reduction barely fires, and never fails
+### 2. Late move reduction reaches a narrow population
 
 | depth | main moves searched | LMR probes | probe share | re-search rate |
 |---:|---:|---:|---:|---:|
@@ -130,18 +136,17 @@ that step currently names.
 | 10 | 16,420,591 | 546,443 | 3.33% | **0.71%** |
 
 Reduction is restricted to quiet, non-checking, non-check-evasion moves from
-move index three at depth four or more, and its magnitude is
-`1 + min((depth - 3) / 3, log2(index + 1) - 2)` plies. The result is that
-`96.7%` of searched main moves get full depth, and of the few that are reduced,
-`99.3%` are accepted without verification.
+move index three at depth four or more. Its depth/move-band minimum is scaled
+by the accepted extra factor 116, rounded and capped by remaining depth.
+`96.7%` of searched main moves do not take this LMR path; of those that do,
+`99.3%` do not trigger a full-depth verification. Other depth mechanisms still
+exist, so absence of an LMR probe is not proof of unreduced nominal coverage.
 
-A re-search rate near zero is not a sign of safety. It says the reductions
-carry so little information loss that the verification path almost never
-triggers — the policy is nowhere near the boundary where reducing starts
-costing chess. This is the strongest available evidence for Step 6.5.4 and it
-gives that step a specific hypothesis: widen eligibility and increase
-magnitude until the re-search rate is a meaningful fraction, then let games
-decide where the boundary is.
+A low re-search rate is not a measure of safety or information loss. A missed
+refutation can fail low without triggering verification. Depth, move and
+prior-pruning eligibility condition this population. Reworked 6.5.10 derives a
+shared selective-depth policy and tests its chess outcomes; it must not tune
+aggression to an arbitrary target re-search rate.
 
 The complementary fact is that Manta is not gentle overall: `57%` of legal main
 candidates at depth ten are pruned outright, `15.8M` of them by late-move count
@@ -172,11 +177,11 @@ because their cost is full-width root work, which is why the third column
 matters.
 
 Nothing here says a mechanism is wasteful by itself — a probe that produces a
-cutoff has earned its subtree. The column that ranks work is re-search: LMR
-re-search and PV re-search together own `47%` of the ordinary-position tree
-inclusively, which is where verification cost concentrates.
+cutoff has earned its subtree. The ordinary-position inclusive LMR and PV re-search shares are 17.7% and
+29.6%. They overlap, so their sum is not a 47% unique-work share. Use exclusive
+charges or an explicitly measured union to quantify distinct work.
 
-### 4. Null verification is almost always redundant
+### 4. Null verification rarely changes the probe answer
 
 | depth | attempts | fail-highs verified | verifications confirmed |
 |---:|---:|---:|---:|
@@ -185,10 +190,10 @@ inclusively, which is where verification cost concentrates.
 | 10 | 63,875 | 37,085 | **99.91%** |
 
 Mandatory verification costs about `1.1%` of the tree and changes the answer
-`34` times out of `37,085` at depth ten. This is a bounded Step-6.5.5 question:
-either the verification is buying almost nothing, or the null reduction is too
-conservative for it to have anything to catch. The two readings are
-distinguishable and both are cheap to test.
+`34` times out of `37,085` at depth ten. This does not establish redundancy: rare zugzwang-sensitive disagreements may
+matter. The real-move verification is distinct from the null probe. Reworked
+Step 6.5.11 must derive both probe depth and verification safety; the counter
+measures nodes, not CPU time or the value of avoided errors.
 
 Null move itself is healthy: it cuts on `58%` of attempts at depth ten, rising
 monotonically from `22.5%` at depth five.
@@ -207,10 +212,10 @@ Depth-ten total nodes across the hash sweep:
 Sixteen times the table changes Manta's tree by well under one percent. The
 store outcomes explain why: current-generation evictions at depth ten fall from
 `4,007,158` to `9,594` across the sweep while the tree does not move. The gap is search
-policy, not table size, and any future comparison may safely be run at one
-size. This retires the caution in `branching_profile.ps1` that a hash change
-was worth eight percent; that figure came from a different measurement in which
-positions shared one table.
+policy is not explained by capacity pressure on this fresh-position workload.
+This does not settle layout/probe CPU cost or replacement behavior with warm
+game history. The earlier eight-percent observation used a shared table across
+positions; do not extrapolate either reset policy to every future comparison.
 
 Table yield at depth ten, 64 MiB, `26.8M` lookups: `75.6%` miss, `9.1%`
 rejected for insufficient depth, `1.5%` rejected on bound, `13.9%` usable. No
@@ -222,9 +227,9 @@ and `4.1%` evicted a current-generation entry.
 
 First-move cutoff share rises with depth and reaches `92.5%` at depth ten, up
 from the `86.45%` recorded at Step 5.4.0. The transposition move, when
-available, is the best move `83.5%` of the time. Ordering is doing its job; the
-tree is wide despite it, which is the same conclusion `SEARCH_COVERAGE.md`
-reached and which the reduction evidence above now explains.
+available, is the best move `83.5%` of the time. This weakens a gross cut-node
+misordering explanation. It does not evaluate fail-low/PV nodes, omitted moves,
+generation cost or the usefulness of ordering evidence to new depth consumers.
 
 ### 7. Generation waste persists
 
@@ -232,7 +237,7 @@ Depth ten generates `18.5` moves for every move it searches, and `57%` of
 candidates are discarded by shallow pruning after they were generated. The
 Step-6.5.1b staged picker removed the abandoned quiet tail at nodes that cut
 early; the remaining waste is dominated by nodes that do generate their quiets
-and then prune most of them by count. This is a Step-6.5.6/6.5.7 cost question,
+and then prune most of them by count. This is a reworked 6.5.5–6.5.7 cost question,
 not a tree-size question — the pruned moves cost generation and ranking, not
 subtrees.
 
@@ -243,35 +248,31 @@ essentially every extension is the blanket check extension (`1,714,018` of
 `1,714,250`). Consecutive in-check runs and consecutive extension runs both cap
 at five plies across the corpus, with the overwhelming majority of length one.
 
-Step 6.5.3 should therefore expect a bounded prize. Removing blanket check
-extension cannot recover more than the `6.4%` of nodes it creates plus whatever
-the deeper horizon costs indirectly, and the chains are too short for runaway
-check sequences to be the explanation for anything.
+These frequencies do not bound the descendant work caused by extensions.
+The later S31 ablation changed much more of the tree, but also changed tactical
+coverage; neither extension frequency nor short chains prove dispensable work.
 
-### 9. Singular exclusion is affordable but rarely productive
+### 9. Singular exclusion cost and extension conversion
 
 At depth ten, `3,009` exclusion searches produce `285` extensions — a `9.5%`
 conversion — and cost `5.1%` of the tree inclusively. The exclusion search runs
 at `depth - 2`, only two plies shallower than the node that launched it, which
-is why so few searches cost so much. Whether a shallower exclusion horizon
-keeps the same `285` extensions is a self-contained Step-6.5.5 question.
+is why so few searches cost so much. Similar aggregate extension counts do not establish identical singular
+choices or useful tactical coverage. MAN-S33 later changed this horizon and
+was stopped inconclusive; only a distinct accepted-context proposal may reopen it.
 
 ## What this step decides
 
-It decides ordering, not mechanisms. In priority order:
+The measurements identify questions, not a guaranteed optimization order.
+Mate-distance work explains a concentrated tail; LMR eligibility and depth
+deserve review; proof searches need cost-versus-decision-quality assessment;
+generation and per-node cost remain an independent delivery objective.
 
-1. **Mate distance pruning** (new, for Step 6.5.5) — largest measured sink,
-   smallest mechanism, clear chess semantics.
-2. **Reduction breadth and magnitude** (Step 6.5.4) — the `0.71%` re-search
-   rate is the specific defect, not a vague "prune harder".
-3. **Null verification necessity and exclusion horizon** (Step 6.5.5) — two
-   bounded questions with `99.9%` and `9.5%` conversion evidence behind them.
-4. **Blanket check extension** (Step 6.5.3) — still worth testing, but the
-   measured ceiling is `6.4%` of nodes, so it should not outrank the above.
-5. **Generation and per-node cost** (Steps 6.5.6, 6.5.7) — real, but it is a
-   throughput problem and the tree is the first-class deficit.
-
-Hash sizing is retired as a variable. Move ordering is retired as a suspect.
+Low re-search frequency is not a defect by itself. A node's extension flag
+does not bound all descendant work attributable to that extension. The hash
+sweep does not retire TT layout/replacement cost, and first-move cutoffs do not
+retire ordering quality. PLAN 6.5.4–6.5.15 and ADR-0068 replace the former
+priority list with board-backbone work followed by a shared search-depth policy.
 
 ## Artifacts
 

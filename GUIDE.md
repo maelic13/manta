@@ -15,6 +15,8 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 - Production is the MAN-E19 HCE, MAN-S29 search fit, MAN-T05 clock fit and
   MAN-S30 live-history move ordering. The deterministic one-thread depth-6
   fingerprint is `775,451` nodes.
+- Step 6.5.4 is prepared but open: profiler/SEE setup tooling is complete and
+  the frozen ten-capture comparison passes; qualified host baselines remain.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
@@ -106,51 +108,51 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 
 ## Open roadmap
 
-### Phase 6.5 — Pre-NNUE search and hot-path performance
+### Phase 6.5 — Board backbone and integrated search maturity
 
-- [x] **6.5.0 — Comparable performance audit:** Confirmed identical board and
-  search corpora and separated tree-size, per-node, board and HCE costs.
-- [x] **6.5.1a — Exact staged move picker:** Rejected only as an exact
-  optimization. Preserving the parent-node history snapshot removed the saved
-  quiet work; the live-history formulation remains a distinct playing idea.
-- [x] **6.5.1b — Live-history staged picker:** `MAN-S30` accepted H1 after
-  8,752 games at `+13.19 +/- 7.28` nElo. Staging is production, the fingerprint
-  moved to `775,451`, and its four completed time forfeits carry a documented
-  maintainer waiver.
-- [x] **6.5.2 — Whole-tree attribution:** Rebaselined in
-  `docs/SEARCH_ATTRIBUTION.md`. Branching is `2.412` against sibling `1.750` and
-  `1.873`; two proven-mate positions are `47.5%` of the depth-ten corpus because
-  mate-distance pruning is missing; LMR reaches `3.3%` of searched main moves
-  and re-searches `0.71%`; the 16/64/256 MiB sweep moves the tree `0.70%`.
-- [x] **6.5.3 — Forcing-line selectivity:** Closed. MAN-S31 removed non-root
-  blanket check extension, cut the depth-ten tree 56.53% (35.34% excluding the
-  mate positions) and was rejected by judgment at 7,958 games and
-  `-3.08 +/- 7.63` nElo. Manta gives checks three compounding privileges and
-  MAN-S31 withdrew one; the remaining checking-move and evasion scope transfers
-  to 6.5.4.
-- [ ] **6.5.4 — Aspiration-aware contextual LMR:** Build a dependency-complete,
-  non-saturating reduction policy that also carries the transferred check and
-  evasion scope, computes the prospective reduction before shallow pruning
-  consumes it, and gets one remote-host SPRT. Model: GPT-6 Astra XHigh;
-  GPT-5.6 Sol Max fallback.
-- [ ] **6.5.5 — Forward proof and pruning efficiency:** Head-independent half
-  authorized before 6.5.4. MAN-S32 mate-distance pruning is implemented and
-  parked default-off for a later below-resolution bundle. MAN-S33 singular-
-  exclusion horizon is implemented, locally qualified and prospectively
-  registered as the current standalone candidate; the coupled null-move
-  reduction/verification candidate follows its verdict. After 6.5.4, test
-  prospective-depth LMP/futility/SEE and ProbCut separately. Model: GPT-6 Astra
-  High; GPT-5.6 Sol XHigh fallback.
-- [ ] **6.5.6 — TT and qsearch efficiency:** Measure replacement/cutoff yield
-  and remove unnecessary non-check qsearch move generation before considering
-  broader TT changes. Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
-- [ ] **6.5.7 — Exact hot paths:** Reprofile the accepted search head, then
-  optimize measured board, SEE and HCE costs. Model: GPT-5.6 Terra High.
-- [ ] **6.5.8 — Build optimization:** Add PGO only if a representative training
-  workload produces a reproducible gain. Model: GPT-5.6 Terra High.
-- [ ] **6.5.9 — Qualification and close:** Require the common depth curve and a
-  routinely runnable `bench 13`, per-candidate remote-host H1 evidence and one
-  cumulative SPRT. Model: GPT-5.6 Sol High.
+Two separate goals: rival Basilisk across the six board benchmark cells, and
+reach depth 13 in comparable time with a mature, coordinated search. PLAN owns
+the exact targets, implementation tickets, model assignments and gates.
+Fewer nodes and higher NPS are separate diagnostics; registered games still
+decide promotion. Modern Stockfish supplies search structure and feature
+relationships, reimplemented in original Zig for Manta's contracts.
+
+- [x] **6.5.0 — Comparable performance audit:** Board and search deficits measured.
+- [x] **6.5.1a — Exact staged move picker:** Exact formulation rejected.
+- [x] **6.5.1b — Live-history staged picker:** MAN-S30 accepted; production
+  fingerprint `775,451`.
+- [x] **6.5.2 — Whole-tree attribution:** Work measured; causal overclaims
+  corrected. Low re-search frequency alone does not prove safe pruning headroom.
+- [x] **6.5.3 — Forcing-line selectivity:** MAN-S31 rejected by judgment, not
+  formal H0. Historical MAN-S32 remains parked; MAN-S33 stopped inconclusive
+  and unpromoted. No automatic retries.
+- [ ] **6.5.4 — Freeze the two targets and implementation contracts:** Bind
+  comparable baselines, target limits and bounded board tickets. Contracts and
+  tickets/tooling prepared; source-bound host timing data still needed.
+- [ ] **6.5.5 — Legal generation and attack/check backbone:** Faster exact
+  generation, pin/check facts and native attack paths.
+- [ ] **6.5.6 — State transitions, SEE and board parity checkpoint:** Faster
+  exact make/unmake and SEE; meet the six-cell board target.
+- [ ] **6.5.7 — Qsearch work proportional to tactical search:** Avoid discarded
+  quiet work while preserving stalemate, evasions and exact search behavior.
+- [ ] **6.5.8 — Modern search design and one evidence/depth contract:** Specify
+  the coordinated ordering, pruning, extension and verification pipeline.
+- [ ] **6.5.9 — Shared ordering and outcome-evidence substrate:** One reliable
+  history/TT/move-evidence model for ordering and selective search.
+- [ ] **6.5.10 — Integrated ordering, aspiration and selective depth:** Connect
+  mate bounds, root windows, contextual LMR, shallow pruning and forcing depth.
+- [ ] **6.5.11 — Forward proofs matched to the accepted depth policy:** Derive
+  repetition bounds, null/verification, ProbCut and singular/razoring policies
+  on the accepted head.
+- [ ] **6.5.12 — Evaluation reliability feeding search, only where justified:**
+  Corrected/static evidence and its consumers; no automatic rejected-feature retry.
+- [ ] **6.5.13 — Residual full-search cost and build optimization:** Address
+  measured remaining HCE/TT/hot-path cost; PGO is optional, not a mandatory project.
+- [ ] **6.5.14 — Conditional fit of the interacting accepted search:** Tune only
+  frozen, live consumers when justified and separately approved; otherwise defer.
+- [ ] **6.5.15 — Separate board/search targets and integrated closeout:** Pass
+  board target, comparable depth-13/routine-bench time and cumulative strength
+  separately. Missed targets keep the deficit open; Phase 7 needs approval.
 
 ### Phase 7 — NNUE runway and data contract
 

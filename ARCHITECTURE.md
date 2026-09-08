@@ -1130,6 +1130,14 @@ without pretending that unmeasured low-level choices are already known.
 
 ## 18. Decision index
 
+The pre-NNUE board/search roadmap in
+[ADR-0068](docs/adr/0068-board-backbone-integrated-search-roadmap.md) preserves
+the existing dependency graph. Board facts remain position-owned; ordering,
+outcome evidence and prospective depth remain worker-local search policy;
+raw evaluation and completed-root publication keep their existing owners.
+New consumers must share those contracts rather than introduce parallel depth,
+history or evaluation authority. Concrete changes still need their owning ADR.
+
 The accepted decisions are indexed in [docs/adr/README.md](docs/adr/README.md).
 The Phase-0.3 exit verdict is recorded in `PLAN.md`. Later changes supersede an
 ADR rather than silently editing the historical decision.

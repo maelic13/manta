@@ -6,6 +6,15 @@ dependency mapping and test design. It is not a behavior or implementation
 target, an Elo claim, or permission to copy foreign formulas and constants.
 Manta remains an independently reasoned and implemented Zig engine.
 
+## Historical scope and current search owner
+
+This is the retained Phase-5.1 classical reference/evidence record, not the
+current search backlog. Its phase-specific statuses are historical.
+Modern search coverage and the Phase-6.5 dependency pipeline now live in
+[SEARCH_COVERAGE.md](SEARCH_COVERAGE.md), PLAN and ADR-0068. That current map
+supersedes stale aspiration, correction-history and SMP status/owner entries
+below; none of this historical text authorizes a rejected-feature retry.
+
 ## Frozen references
 
 The machine-readable provenance and critical-file SHA-256 values are in

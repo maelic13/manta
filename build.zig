@@ -394,6 +394,12 @@ pub fn build(b: *std.Build) void {
         "Run the versioned board-operation benchmark",
     );
     board_bench_step.dependOn(&run_board_bench.step);
+    const install_board_bench = b.addInstallArtifact(board_bench, .{});
+    const board_bench_binary_step = b.step(
+        "board-bench-bin",
+        "Build and install the board benchmark without running it",
+    );
+    board_bench_binary_step.dependOn(&install_board_bench.step);
 
     const board_bench_tests = b.addTest(.{
         .name = "board-benchmark-tests",

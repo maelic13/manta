@@ -264,37 +264,93 @@ precise rating or attribution to time, UCI or SMP individually.
 
 ## Open roadmap
 
-### Phase 6.5 — Pre-NNUE search and hot-path performance
+### Phase 6.5 — Board backbone and integrated search maturity
 
-This phase repairs two separately measured deficits before the board and
-evaluation contracts become inputs to NNUE work: Manta processes each node too
-slowly and searches far too many nodes to reach the same nominal depth. The
-post-MAN-S29 audit measured `9–14x` more depth-ten nodes and `2.6–3.2x` more
-time per node than the sibling engines. Small hot-path or PGO gains cannot close
-that combined gap, so tree efficiency is the first-class objective.
+Replanned on 2026-09-08 by maintainer request after MAN-S31 and the stopped
+MAN-S33 attempt. ADR-0068 supersedes the old open-step sequence; completed
+6.5.0–6.5.3 keep their historical numbers. Production remains MAN-S30 at
+`775,451`. This is implementation guidance, not permission to start engines,
+jobs, tuning or Phase 7.
 
-Behavior-neutral work must preserve legal move membership and order,
-terminal/draw/history semantics, score/bound/provenance, TT/PV results and the
-exact one-thread search tree. If an implementation instead changes a history
-snapshot, move order, score, bound or searched subtree, diagnose and record the
-cause, then treat the legal deterministic result as a playing candidate. A
-fingerprint change never rejects such a candidate for strength. Node reduction,
-depth, NPS, fixed-node quality and static tests remain diagnostics.
+There are two independent delivery objectives. Neither may hide failure of the
+other, and neither is a substitute for playing strength:
 
-Every retained production-executable candidate in this phase, including an
-exact speed optimization, must pass its own prospectively registered 1T
-time-based SPRT on the separate designated game-testing computer. Correctness,
-operational and throughput gates admit a candidate to games and may show that
-it does not solve this phase's performance objective; only clean H1 promotes
-it. Do not combine independent mechanisms to save game budget.
+| Objective | Frozen comparison and exit target |
+|---|---|
+| Board backbone | On the idle designated 5950X, native optimized builds, identical `cross-engine-board-v1` inputs/work counts and SEE semantics: geometric mean of Manta/Basilisk throughput ratios across all six cells at least `1.00`, with no cell below `0.95`. Report every cell, not just the aggregate. These are maintainer-request-derived planning targets, not achieved measurements. |
+| Mature search | Same immutable forty positions, 1T, Hash 64 MiB, fresh-process/reset policy and nominal depth 13: Manta total elapsed time no more than `1.10x` Basilisk. Require the same ratio for the ordinary-position subset excluding the two already identified mate-heavy cases; retain both cases in the full result. Separately require routine `bench 13 1 1` (Hash 1 MiB) within a prospectively frozen absolute time limit. |
+| Strength and safety | Legal results, correct terminal/draw/bound authority, unchanged hard time safety, each retained candidate's registered 1T H1, then cumulative H1 against immutable Manta 1.0.0. No inferred 4T strength improvement. |
 
-Track the whole depth curve rather than minimizing the depth-six fingerprint.
-Deep selectivity may leave shallow totals nearly unchanged. The final
-operational gate requires the common corpus through depth thirteen and a
-routinely runnable `bench 13 1 1` under a prospective wall-time limit frozen by
-the maintainer before the run. Equal-depth comparisons use identical positions,
-1T, Hash, toolchain class and fresh processes; fixed-node quality and SPRT guard
-against obtaining a smaller tree by discarding valuable chess work.
+Step 6.5.4 binds reference revisions, tolerances, timing protocol and the
+absolute routine-bench limit before implementation measurements. Do not move a
+target after seeing a result. A failed target means an open deficit or explicit
+maintainer scope revision, not a completed phase because all ideas were tried.
+Native compiler/ISA capability must be comparable, not identical compiler brands.
+Board moves/s, perft nodes/s, full-search NPS, searched nodes and elapsed time
+are separate quantities. Fewer cheap nodes can lower NPS while saving time;
+removing useful search can shrink nodes without saving strength. Nominal depth
+is an operational comparison, not equal chess coverage across engines.
+
+**Reference and implementation rule.** Use modern Stockfish search structure,
+feature relationships and evidence flow, currently pinned at
+`edb0d9db6731067ec50ce619ff372b463bc4dd5d`, as the primary design reference;
+Basilisk is the performance target and secondary implementation cross-check.
+The final pre-NNUE reference remains authoritative only for the HCE study.
+Reimplement selected structure and features as original Zig, with Manta-owned
+score units, history scales, depth semantics, safety predicates and tests.
+Do not import NNUE-dependent confidence assumptions or tuned constants. An
+absent/default-off family is a coverage question, not proof it will win here.
+
+**Delivery order and compatibility.** Board facts feed efficient generation and
+SEE; those feed qsearch and ordering; authoritative search outcomes train
+history; the same bounded evidence informs prospective depth, pruning,
+extensions and verification. Later candidates start from the accepted earlier
+head. A rejected dependency stays off and its dependent proposal must be
+re-derived; never quietly activate a rejected umbrella. The sequence is:
+
+`4 contracts -> 5 legal generation -> 6 transitions/SEE -> 7 qsearch ->
+8 search design -> 9 evidence substrate -> 10 integrated search core ->
+11 forward proofs -> 12 evaluation reliability -> 13 residual cost ->
+14 optional joint fit -> 15 qualification`.
+
+**Common implementation ticket (applies to every open step).**
+
+- Read the named code/contract; state the changed producer, transformations,
+  all consumers and the excluded scope before editing. Work on one numbered
+  ticket, not the next step as well.
+- Freeze feature-off reconstruction, typed ordinary/mate/tablebase/draw scores,
+  TT depth/bound/provenance, complete-root publication, cancellation restoration
+  and worker-local ownership. No hot-path allocation, I/O, locks or avoidable
+  shared atomics. Preserve portable scalar authority and Zig 0.16.0.
+- While editing use compile/focused invariant tests. Once frozen run the
+  applicable complete correctness/safety/process gates once. Exact claims
+  require fingerprint, PV and result identity; explain legal mismatches rather
+  than blessing a changed expected value.
+- Use existing board, observation, attribution and branching tools. Add only a
+  missing counter needed for the ticket's decision, behind disabled diagnostics.
+  Inspect release-build cost, never observer timings. Use matched A/B order and
+  repeated samples; unresolved noise is not a speed claim.
+- Each independently meaningful retained production change gets one final
+  registered 1T SPRT. An inseparable producer/consumer package or demonstrated
+  below-resolution cohesive package gets one gate for the package, not games
+  after each partial implementation ticket. Register package membership and
+  switches before games; agreement with a reference is not bundling evidence.
+- Use the trusted existing fastchess harness: setup-only validation, then the
+  final command. No candidate-specific pilots, no automatic second time control,
+  no extending or splicing an inconclusive run. Freeze source/binaries, host
+  placement, budget, anomaly rule and stop rule; maintainer runs games.
+- H0, cap and maintainer-stopped inconclusive runs do not promote. Do not infer
+  equivalence from an interval containing zero, or a settled verdict from an
+  LLR trend. Store concise evidence in EXPERIMENTS; raw artifacts stay ignored.
+
+**Model assignments.** The step choices below are engineering recommendations:
+GPT-5.6 Terra High for bounded exact implementation; GPT-6 Astra High/XHigh for
+search design and interacting selective-search semantics. A smaller model may
+implement a frozen sub-ticket but must stop at an unresolved chess assumption.
+GPT-5.6 Sol XHigh is the fallback for complex work, with an explicit semantic
+review before games. This allocation follows the capability/cost distinction
+in [official model guidance](https://developers.openai.com/api/docs/models);
+it is not a claim that OpenAI validated these particular chess assignments.
 
 #### 6.5.0 — Comparable performance audit
 
@@ -415,23 +471,24 @@ store outcome partitions and check/extension chain histograms, and
 `zig build search-attribution` sweeps the forty-position corpus across depths
 and table sizes.
 
-Four results reorder the remaining phase:
+Four historical results inform the reworked phase, without settling causality:
 
 - Two proven-mate positions are `47.5%` of the depth-ten corpus because Manta
   has no mate-distance pruning. Removing them moves the corpus ratio against
   Rarog from `12.3x` to `6.5x`, so the Step-6.5.0 aggregate overstated the
   ordinary-position gap; the per-position median is `5.4x`.
 - Branching over depths four to twelve is `2.412` against `1.750` and `1.873`
-  for the siblings, so tree efficiency remains the first-class deficit.
+  for the siblings, so tree efficiency remains a substantial separate deficit.
 - Late move reduction reaches `3.3%` of searched main moves and re-searches
   `0.71%` of those, while shallow pruning discards `57%` of candidates outright.
-  Reduction is far from the information-loss boundary.
+  These conditional rates do not measure missed refutations or safe headroom.
 - A 16/64/256 MiB sweep changes Manta's depth-ten tree by `0.70%`, and first
-  move cutoffs reach `92.5%`. Table pressure and move ordering are both retired
-  as explanations.
+  move cutoffs reach `92.5%`. This weakens capacity-pressure and gross cut-node
+  misordering explanations on this workload, not all TT/ordering hypotheses.
 
-Mate-distance pruning is added to Step 6.5.5 as its highest-priority candidate.
-It is a search change with its own registered 1T gate, not a cleanup.
+Mate-distance pruning was originally assigned to historical Step 6.5.5. The
+reworked shared-depth design in 6.5.8–6.5.10 now owns its complete contract.
+It remains a playing change, not an automatic cleanup or ordinary-tree solution.
 
 The original step definition follows.
 
@@ -458,281 +515,557 @@ promoted before this measurement ran.
 
 #### 6.5.3 — Forcing-line selectivity
 
-Measure the compound cost of unconditional extension at every checked node,
-full-depth treatment of every evasion and checking move, and checking-move
-exemption from shallow pruning. Nominal root depth, legal check evasion,
-existing terminal/draw precedence, mate distance and special-move legality
-remain fixed; only the amount of search allocated to non-root forcing lines
-may change.
+Closed by maintainer judgment, not formal H0. MAN-S31 removed only non-root
+blanket check increments and retained checked-root extension. Qualification
+passed; depth-ten nodes fell 56.53%, or 35.34% excluding the two mate-heavy
+positions. At 7,958 games the result was `-3.08 +/- 7.63` nElo, LLR `-1.60`,
+without anomaly. Production remains unchanged.
 
-First test removing blanket check extension as one independently switched
-candidate. If evidence then justifies it, test late checking-move or evasion LMR
-as a separate candidate using move ordinal, SEE/history and node expectation;
-do not prune legal evasions. Record check-chain length, in-check nodes,
-extensions, reduced checks/evasions, verification re-searches, tactical/mate
-results and the complete depth curve. Each production candidate receives its
-own remote-host 1T SPRT and requires clean H1.
+This does not prove a loss, equivalence, or why the change failed to establish
+a gain. Removing extensions changes tactical coverage at the same nominal
+depth. The old explanation that removing all checking-move protections would
+necessarily repair the result is withdrawn. A differently derived forcing-line
+policy may be considered only inside 6.5.10's shared depth contract; no isolated
+retry or automatic removal of all protections is authorized.
 
-Closed. The first candidate `MAN-S31` under ADR-0066 removed only interior
-blanket increments while retaining checked-root extension. Deterministic
-qualification passed every gate: bench `492,469` versus production `775,451`,
-and the depth-ten 64-MiB curve fell 56.53%, or 35.34% excluding the two
-mate-heavy positions. The maintainer rejected it by judgment at 7,958 games,
-`-3.08 +/- 7.63` nElo with LLR `-1.60` of `-2.94` and no anomaly, rather than
-spending the remaining hours on a verdict the trajectory had already settled.
-Production remains MAN-S30 at `775,451`; the switch stays archived default-on.
+MAN-S32 and MAN-S33 retain their experiment IDs and original registration under
+historical Step 6.5.5 / ADR-0067; open step numbers below are new:
+MAN-S32 mate-distance pruning remains default-off, with concentrated mate-tree
+savings rather than demonstrated ordinary-position strength. The maintainer
+stopped MAN-S33; the supplied 6,640-game snapshot is `+1.24 +/- 8.36` nElo,
+LLR `-0.39`. It is inconclusive and unpromoted, not H0. Do not restart it or
+treat its similar aggregate extension conversion as decision-quality proof.
+Final artifact reconciliation remains evidence housekeeping, not a new game job.
 
-The second candidate named below is **not** run in isolation, and this step
-closes without it. A structural comparison against the pinned Stockfish search
-reference, recorded in `docs/SEARCH_COVERAGE.md`, explains why. Manta grants
-checking moves three compounding privileges: a blanket extension, exemption
-from every late-move reduction, and exemption from every shallow prune cause.
-The reference grants none of them, and its checking moves are ordinary moves
-that are reduced like any other and still pruned by static exchange evaluation.
-`MAN-S31` withdrew one privilege and left the other two, so forcing lines became
-shallower without becoming cheaper per node. That is a misleading intermediate
-state, not a refutation of the underlying idea, and it is exactly the condition
-under which a cohesive bundle is permitted.
+#### 6.5.4 — Freeze the two targets and implementation contracts
 
-The remaining checking-move and evasion scope therefore transfers to Step 6.5.4,
-which owns the reduction surface those moves would have to be reduced by. The
-blanket extension may be reopened only inside that candidate, once checking
-moves are reducible and prunable.
+**Model:** GPT-6 Astra High. **Dependency:** completed evidence above.
+**Files:** PLAN, GUIDE, SEARCH_COVERAGE, existing benchmark manifests/tools;
+REQUIREMENTS and a relevant ADR only if their authority changes.
 
-A second, general lesson is recorded here because two candidates now support it:
-`MAN-S30` cut the tree 3% and gained `+13.19` nElo, while `MAN-S31` cut it
-between 35% and 56% and lost. Node reduction at a fixed time control does not
-convert to strength on its own. Later steps weigh where work is spent above how
-much of it there is.
+1. Reuse the existing audit; do not repeat a broad profiling campaign. Bind the
+   exact production Manta, Basilisk and modern search-reference source/binary
+   identities. Verify the board profile's six denominators, reset behavior,
+   SEE values, native backend and no hidden legality/evaluator work differences.
+2. Freeze the two target protocols above, baseline timings and an absolute
+   `bench 13 1 1` limit on the designated host. Reuse comparable retained
+   measurements; request only missing baseline measurements from the maintainer.
+   Depth-13 jobs have a predeclared timeout and incomplete is not a fast result.
+3. Rank board cells by gap and representative search cost, using existing
+   profiles first. Explicitly separate generation, transition, SEE, evaluator,
+   ordering and TT costs. Inspect relevant emitted code before proposing an
+   unchecked fast path, table expansion or layout change.
+4. Freeze a legal regression population covering checks/evasions, forced mates,
+   quiet tactics, sacrifices, pawn/zugzwang endings, repetitions/rule-50 and
+   castling/EP/underpromotions. Reuse existing cases and independent oracles.
+   Keep timing inputs separate from correctness stress; no benchmark-specific
+   branches or tuned corpus recognition.
 
-Recommended model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+**Gate/output:** one concise target/identity/cost table and bounded tickets for
+5–7; documentation/policy and missing setup checks only. No candidate or SPRT.
+Uncertain cost attribution must be marked, not filled with guessed percentages.
 
-#### 6.5.4 — Aspiration-aware contextual LMR
+**2026-09-08 execution checkpoint — contracts prepared; gate still open.**
+Read-only source/artifact checks below passed; no benchmark, build of an engine,
+game or implementation of 5–7 was run. Missing source bindings, comparison
+semantics and host timings prevent claiming this step complete.
 
-This step now also owns the checking-move and evasion scope transferred from
-Step 6.5.3, and it is the phase's load-bearing change. Step 6.5.2 measured the
-defect precisely: late move reduction reaches `3.3%` of searched main moves and
-`0.71%` of those need a full-depth re-search, while shallow pruning discards
-`57%` of candidates outright. A re-search rate near zero is not safety; it says
-the policy never approaches the point where reducing costs chess. The reference
-comparison in `docs/SEARCH_COVERAGE.md` adds the structural half: reductions
-there apply from the second move at depth two, cover captures, checks and
-evasions, are continuous and signed so a strong move is extended rather than
-merely unreduced, and are computed **before** shallow pruning so every pruning
-threshold consumes the prospective reduced depth instead of the nominal one.
-Manta computes pruning from nominal depth and its reduction afterwards, which
-is why its two selectivity families cannot trade against each other.
+Frozen identities (SHA-256 is over retained bytes, not a filename/version guess):
 
-Ordering inside the candidate is therefore part of the contract, not an
-implementation detail: derive the prospective reduction first, then let late
-move count, futility and static-exchange eligibility consume it.
+| Input | Identity | Qualification status |
+|---|---|---|
+| Manta production source | `48a163ebfa3d0f928ecd0209004debcb2a59cc38`, tree `a826f9cdbdc1c8e518348ee69436793b006eecb4` | Current uncommitted changes are roadmap documents; engine source unchanged |
+| Production reconstruction | `tools/test_engines/manta-MAN-S33-base.exe`, SHA `7727BB4FCB50BE1972E8A45BDE3EFEFC05DAFB3E2C507D5FDEE248DC9632CBB8` | Hash verified against retained schema-9 sidecar; sidecar records clean source, Zig 0.16.0, native integrated-time/live-history/check-extension on, other candidates off, bench `775451` |
+| Historical Basilisk search binary | `D:/code/basilisk/build/dist/basilisk-v1.10.0-dev-windows-x86_64-pext-pgo.exe`, SHA `1034DE95AE556B972878F91FF265FED2F4F5CD13F10AAC721D12B62282072906` | Matches attribution record; exact source/compiler/PGO binding is missing. Do not bind it to current checkout by assumption |
+| Inspected Basilisk source | `c378706a3465550341f750c1214e37837ddd57f4`, clean tracked checkout | Source-study pin only until a baseline build manifest binds executable bytes |
+| Modern search reference | `edb0d9db6731067ec50ce619ff372b463bc4dd5d`; `src/search.cpp` SHA `A934524DD2F386EC38CDF95B7B2E41CECDC85C9B17E12C0668621E6AE16BE28A` | Source reference, no reference binary needed for either performance target |
+| Forty-position timing corpus | `tools/bench_positions.epd`, SHA `F7451A4E7750C6DE5A9AC37AA6E3631782A6932B784B89EEB714BE533E6E1862` | Freeze order and all forty positions; ordinary subset excludes zero-based indices 6 and 30 only |
+| Manta board workload | `tools/board_bench.zig`, SHA `F98BF51D355A193FDE42BC0C324CC1E823A60C191D45846FFD0E997281DA38B0` | Work/SEE setup contract inspected; future code edits preserve the input/denominator contract rather than this implementation hash |
+| Basilisk board workload | `tests/board_performance.cpp`, SHA `95E2B546FF0BE6F825DC3D3A9B0B0C53C4E28D0C0551C0D23941B5493C68D7E3`, commit `d0f262765a198c61dc8fe9fdf09db6a733b61fec` | Source work counts, schedule and SEE setup endpoint agree; designated-host artifact binding pending |
 
-Replace the saturating minimum-shaped reduction only through one
-dependency-complete candidate. Root aspiration supplies the current window
-width; a non-saturating depth/move surface combines that width with typed node
-expectation, improving direction, TT quality, singular context, move class and
-accepted history. The prospective reduced depth may then consistently inform
-LMP, futility and SEE eligibility. Losing captures, checking moves and check
-evasions are inside this candidate's scope by the Step-6.5.3 transfer;
-promotions and the singular move retain explicit protection, and legal evasions
-are never pruned. Because the scope now includes forcing lines, the candidate
-may also retire the blanket check extension as one of its components, with its
-own switch for ablation.
+The old Basilisk binary reports version 1.9.3 despite its filename. Its current
+source checkout is not evidence of which code built it. A newly bound baseline
+may replace this unqualified historical binary only before candidate timings;
+record the replacement and do not combine old/new timing samples. No change
+to the target tolerances is implied.
 
-The candidate must retain at least one ordinary child ply where required.
-Every reduced alpha rise returns to an authoritative horizon before publishing
-score, bound, PV, TT or history evidence. Aspiration retries reset partial root
-evidence and only a final exact iteration commits. Per-depth and per-position
-node/re-search distributions diagnose the mechanism but cannot reject it for
-strength solely because the fingerprint moves. One remote-host 1T SPRT decides
-promotion; H1 licenses only the complete dependency cluster.
+**Board work and cost contract.** Both sources use the same five-position
+`cross-engine-board-v1` corpus, reused move lists, threshold zero, no HCE
+evaluation callback, 150 ms warm-up and 11 x 150 ms samples, median/MAD.
+State is restored between iterations. Native BMI2/PEXT capability must match;
+record actual compiler/optimization/PGO and benchmark anti-elision support.
+Use optimized source-bound board artifacts, not a PGO-labelled search binary
+as proof of the board test's build settings.
 
-Recommended model: GPT-6 Astra XHigh; GPT-5.6 Sol Max fallback.
+| Cell | Operations per corpus iteration | Historical Manta rate | Initial owner and limitation |
+|---|---:|---:|---|
+| Legal generation | 128 legal moves | 392M moves/s | 5: common unpinned/check-mask path; CPU share not measured |
+| Legal captures | 10 captures | 93M moves/s | 5: tactical subset; includes legality, not pseudo-legal output |
+| Make/unmake | 128 move pairs | 36M pairs/s | 6: includes generating the move list; not isolated transition cost |
+| Threshold SEE | 10 capture decisions | 31.6M decisions/s | 6: includes capture generation; historical Basilisk 54.4M is a diagnostic, not yet qualified equal-semantic work |
+| Start-position perft(4) | 197281 leaves | 239M nodes/s | 5+6: composite generation/transition cost, not search NPS |
+| Two-ply simulation | 4597 child legal moves | 323M moves/s | 5+6: composite generation/transition cost |
 
-#### 6.5.5 — Forward proof and pruning efficiency
+Both SEE implementations use pawn/knight/bishop/rook/queen/king values
+`100/300/300/500/900/20000`. That alone does not prove equal semantics:
+Manta selects a legal recapturer using `recaptureIsLegal`; the inspected
+Basilisk threshold path uses cached pin filtering and its own swap loop.
+Before certifying this cell, compare decisions on the ten frozen captures and
+review king/pin/x-ray exceptions against Manta's independent exchange oracle.
+Never weaken Manta legality to match a faster approximation. If the existing
+benchmark exposes no decision signature, propose only a setup-only signature
+check, not a new search experiment. The six-cell target stays unqualified
+until this comparison contract is settled.
 
-This step has a head-independent sequence before Step 6.5.4 and a head-dependent
-sequence after it. Every idea below is implemented and measured behind its own
-switch. A standalone candidate receives its own prospective 1T SPRT whenever
-its ordinary-position effect is material. Components may share one gate only
-after deterministic evidence shows that each is individually below affordable
-resolution or that intermediate states violate the mechanism contract.
+The historical board record says a general 22–39% gap, but retained exact
+per-cell Basilisk medians/MADs and source-bound host metadata were not located.
+Do not manufacture a per-cell ranking from that range. Generation is first
+because it contributes to five of the six measured cells; transition and SEE
+follow after their cost is separated. HCE's historical 3.39M evaluations/s,
+18.5 generated moves per searched move and TT/node counts are not CPU shares.
+Qsearch visibly generates/ranks quiets it discards; its marginal speed benefit
+still requires measurement. No emitted-code speed claim has been made.
 
-**Head-independent, authorized before 6.5.4, in this order:**
+**Prospective timing/acceptance protocol.** Freeze routine `bench 13 1 1` at
+30 seconds on the idle designated 5950X: a usability budget, not a prediction
+from the old curve. All forty cases and completed depth must be accounted for.
+Keep the 64-MiB relative target and six-cell limits above unchanged.
 
-1. mate-distance pruning (`MAN-S32`), retained default-off for a later
-   below-resolution bundle rather than tested alone;
-2. singular-exclusion horizon (`MAN-S33`), tested independently because its
-   effect is broad and material; and
-3. deeper null reduction plus verification scope, implemented as one coupled
-   candidate with independent component switches and one gate because either
-   half alone is misleading or unsafe.
+- Pin one physical core, identical affinity/power conditions for each engine;
+  record OS, CPU, clocks/power mode, source, compiler, ISA, PGO and binary SHA.
+- Board final comparison: three alternating matched process pairs in A/B,
+  B/A, A/B order, each using the existing 11-sample protocol. For each cell use
+  the median of pairwise throughput ratios, then their geometric mean. Retain
+  individual medians/MADs. If pair ratios straddle a target, report unresolved;
+  no extra repeats or relaxed threshold chosen after inspecting results.
+- Search final comparison: same three-pair order; fresh process per depth,
+  `ucinewgame` and `isready` per position, 1T/64 MiB, no ponder/tablebases or
+  competing timed work. Each position's wall interval includes reset/readiness
+  through `bestmove`, excluding process startup/shutdown. Sum these intervals
+  for full and ordinary cohorts; retain nodes and reported UCI time separately.
+  Use median pairwise elapsed ratios for the two <=1.10 acceptance tests.
+- Freeze 60 seconds per position, 300 seconds per depth and 900 seconds per
+  engine's depth-4–13 sweep. Timeout/incomplete depth is not a fast result;
+  stop and retain the diagnostic. A final routine bench over 30 seconds fails
+  its separate operational target. The maintainer starts all timing jobs.
+- Retained depth-12 JSON shows Manta 170853905 nodes / 129045 ms and Basilisk
+  8506949 / 2524 ms. These are historical aggregate diagnostics: reports have
+  `engine:null`, no bound host metadata, no depth 13 and no per-position times.
+  They cannot substitute for the missing qualified target baseline.
 
-**Head-dependent, after Step 6.5.4:** independently test whether late-move
-count, futility and static-exchange eligibility consume the final prospective
-depth consistently, then ProbCut TT reuse, tactical move cap and qsearch-to-main
-conversion. Do not reopen the complete rejected MAN-S20 bundle.
+**Frozen regression selection.** Reuse `src/search/observation.zig` v23
+(current SHA `64C50D5CE20D08645B9AF3D3527D5EC1DA6A8F85B24188097A7129A42BBA27B4`):
+opening-start/castling-pressure, quiet-piece-tension/closed-center,
+tactical-wac001/hanging-queen, both file-check evasions, zugzwang-opposition/
+locked-wings and both endgames. Retain timing cases 6 and 30 as mate regressions.
+Use existing movegen checks/pins/castling/EP/promotion properties, transition
+ordinary/special/null/nested restoration tests, SEE legal-exchange/king/pin
+oracles, draw repetition/null-boundary/rule-50/checkmate tests and qsearch
+stalemate/quiet-only/evasion tests. Freeze legal expectations, not selective
+search scores or node counts. Extend only a missing edge case in its owning
+implementation ticket; never tailor a fast path to this population.
 
-Step 6.5.2 promoted **mate distance pruning** to the head of this step. Manta
-clamps no search window against the mate band, so a proven mate neither stops
-its own iteration nor collapses the sibling subtrees that cannot beat it, and
-two proven-mate positions consume `47.5%` of the depth-ten corpus. Clamp alpha
-and beta against `matedIn(ply)` and `mateIn(ply + 1)` at node entry and let
-iterative deepening stop when the remaining horizon cannot improve a found
-mate. Legal PV, mate-distance normalization through the transposition table,
-terminal and draw precedence and root reporting all remain fixed.
+**Bounded handoff tickets (not implementation authorization).**
 
-Implementation checkpoint — `MAN-S32` is complete and default-off behind
-`-Dmate-distance-pruning`. It returns a proven bound at non-root main-search
-nodes whose window lies outside the reachable mate band, and it carries a new
-`mate_distance` provenance that the singular, ProbCut and evaluation-refinement
-filters all reject, so the proof can never acquire ordinary search authority.
-Depth-six bench is `642,394` against production `775,451`.
+- **5-A, Terra High:** inspect `generateFor`, `pinnedPieces`, `generatePieces`
+  and native emitted code; identify duplicated king/pin/check work. Propose
+  one exact ordinary-path specialization with unchanged legal order. Keep
+  king/EP/castling exceptions intact. Gate: independent every-encoding legality,
+  partition/order, special-position perft and exact search fingerprint/PV.
+  No unchecked operation, new table or layout without a measured/proven need.
+- **6-A, Terra High / Astra legality review:** use the accepted generation head;
+  inspect `makeNormal` and state/key/checker updates, then one exact duplicated
+  work elimination. Gate: independent complete state/delta and nested unmake
+  restoration, ReleaseSafe, all six board cells and exact search identity.
+  SEE is a separate 6-B ticket after the comparability question above is closed;
+  do not bundle unrelated transition and exchange algorithms.
+- **7-A, Terra High:** reuse accepted tactical generation in non-check qsearch;
+  establish a legal-move witness before stand-pat can mask stalemate, retaining
+  every evasion and tactical tie order. Gate: quiet-only/stalemate, checks,
+  EP/underpromotion, typed TT/stand-pat authority and exact fingerprint/PV.
+  No new pruning margins or history semantics. Performance and final H1 remain
+  required by each ticket's parent step; tests are not strength evidence.
 
-**The measurement says it must not be gated on its own.** Across the
-forty-position corpus at depth ten the candidate removes `41.70%` of nodes,
-but only thirteen positions change at all and the saving is almost entirely
-three positions that contain a proven mate: position 6 falls from `8,382,516`
-to `410`, position 30 by `66%` and position 9 by `18%`. Excluding the two
-dominant mate positions the corpus is `+0.59%`, and no other position moves by
-more than `0.11%`. This is the mechanism working exactly as derived — it fires
-only when alpha or beta already lies in the mate band — and it means the
-expected effect on ordinary game positions is far below the resolution the
-registered `[1,5]` gate can afford. A solo SPRT would exhaust its 16,000-game
-cap without a verdict, which is the failure mode that consumed `MAN-S21` and
-`MAN-R02`.
+**Tool completion and remaining blocker (2026-09-08).** The approved measurement
+repairs are implemented. `branching_profile.ps1` schema v2 binds executable,
+corpus and optional manifest hashes; records monotonic reset-through-bestmove
+time per position, full/ordinary depth summaries and UCI-reported time; enforces
+position/depth/run deadlines; and writes an explicit incomplete report before
+failing. A one-position depth-one smoke produced a complete bound report; a
+one-millisecond depth-13 canary produced an incomplete timeout report.
 
-It remains a default-off component with its own switch. It may enter a later
-bundle only with another independently measured below-resolution component;
-it is not silently attached to a material candidate.
+`board_bench.zig` and Basilisk's source-bound board benchmark now emit the same
+opt-in `SEE-CONTRACT-V1` rows outside all timed regions. The new
+`compare_board_see.ps1` runs both preflights, requires exactly ten unique
+position/UCI-move rows, normalizes generation order, binds binary hashes and
+fails on any membership/result difference. The local ReleaseSafe Manta artifact
+`C27CAA08...94F5CD` and Basilisk release-pext artifact
+`BA8D8B5A...860DBD5` agreed on all 10 threshold-zero decisions. This closes
+the frozen-corpus semantic question, not general cross-engine SEE equivalence;
+Manta's legal exchange oracle remains authoritative. The Basilisk diagnostic
+endpoint is committed at `d0f262765a198c61dc8fe9fdf09db6a733b61fec`.
 
-The second bounded question is the **singular-exclusion horizon**. Production
-searches at `depth - 2`, converting `285` of `3,009` attempts into extensions
-while the exclusion subtrees cover `5.1%` of the depth-ten tree. `MAN-S33`
-replaces only that horizon with `ceil(depth / 2)`, retaining at least three
-plies at the first eligible node. The legal ordinary TT move, threshold,
-excluded-move identity, null disablement, fail-low requirement and extension
-consumer remain unchanged.
+Reproduction, setup only (no timed samples, search or games):
 
-Implementation checkpoint — `MAN-S33` is complete, locally qualified and
-default-off behind `-Dsingular-exclusion-horizon`. Its depth-six fingerprint is
-`773,779` against production `775,451`. At depth ten it searches `24,335,279`
-nodes against
-`26,778,901` (−9.13%); all forty positions change, with 25 smaller and 15
-larger. It retains `2,853/3,009` attempts and `266/285` extensions, and its
-conversion rate stays `9.32%` against `9.47%`. This is a broad playing change,
-not a below-resolution bundle component, so one standalone registered 1T SPRT
-must decide it after the complete deterministic gate.
+```powershell
+zig build board-bench-bin -Dnative -Doptimize=ReleaseFast
+cmake --build D:/code/basilisk/build/release-pext --target board_performance_test
+./tools/compare_board_see.ps1 -MantaBench ./zig-out/bin/manta-board-bench.exe -BasiliskBench D:/code/basilisk/build/release-pext/board_performance_test.exe -OutFile ./zig-out/phase65-see-setup.json
+```
 
-The third is the null-move reduction and verification pair, which the reference
-comparison shows are one coupled mechanism rather than two. Manta reduces the
-null probe by two plies, three from depth eight, and then verifies every single
-fail-high at that same reduced depth; Step 6.5.2 measured `99.91%` of `37,085`
-depth-ten verifications confirming, at about `1.1%` of the tree. A shallow probe
-re-checked by an equally shallow search cannot disagree with itself, which is
-why the verification is nearly free of information. The reference instead
-reduces by roughly seven plies plus a third of the depth, skips verification
-entirely below depth sixteen, and implements the surviving verification as a
-search with null move disabled for the following plies rather than a repeat of
-the same window. Deepening the probe and re-scoping the verification are
-therefore one candidate with two switches, not two candidates: deepening alone
-removes the safety the current verification nominally provides, and removing
-verification alone leaves the expensive shallow probe in place. Checks, PV,
-consecutive nulls, pawn-only and zugzwang-prone material, decisive scores and
-shallow horizons retain exclusions or verification unless a new contract proves
-otherwise. Null evidence remains a typed lower-bound proof.
+The exact remaining work is maintainer-host baseline collection: create clean,
+source/build-bound production Manta and Basilisk search/board artifacts and run
+the frozen alternating six-cell and depth-13 protocols with profiler v2. Do not
+use the local smoke as performance evidence. Record the freshly built artifact
+hashes and reports in this checkpoint, then mark 6.5.4 complete and open 6.5.5.
+This is baseline measurement, not an SPRT pilot. No game harness is involved.
 
-Every candidate is tested for legal PV, mate/draw, zugzwang, bound/provenance,
-TT and restoration semantics. Node and conversion measurements decide scope
-and diagnose mechanisms; only the prospectively registered remote-host 1T SPRT
-decides promotion. Step 6.5.5 closes only after the pre-6.5.4 sequence and the
-post-6.5.4 consumers have explicit accepted, rejected or parked verdicts.
+#### 6.5.5 — Legal generation and attack/check backbone
 
-Recommended model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+**Model:** GPT-5.6 Terra High; Astra High for any legality proof change.
+**Dependency:** 4. **Files:** `src/chess/movegen.zig`, `queries.zig`,
+`attacks.zig`, relevant board tests; transition/state only for shared facts
+explicitly approved in the ticket.
 
-#### 6.5.6 — TT and qsearch efficiency
+1. Follow `generateFor`, `pinnedPieces`, king safety and evasion masks.
+   Specialize the common unpinned/non-check path; compute position-wide
+   king/check/pin facts once per valid position, not once per candidate move.
+   A reused fact has an explicit invalidation boundary at every real/null move.
+2. Keep legal tactical and quiet subsets exhaustive, disjoint and in the
+   accepted filtered generation order. Do not replace legal generation with
+   speculative pseudo-legal counts to improve the board score.
+3. Preserve exact double-check king-only evasions, pin-ray mobility, king
+   destination attacks with changed occupancy, castling transit/final safety,
+   EP's two removed pawns and all promotion choices. Never infer king safety
+   solely from attack maps computed with stale king occupancy.
+4. Inspect native attack lookup/inlining and repeated bounds/classification
+   work; PEXT already exists. Adopt an ISA-specific change only with exact
+   scalar fallback and measured emitted-code benefit, not a language-based
+   expectation that Zig must be faster.
 
-Measure TT density, replacement, generation aging, prefetch value and usable
-main/qsearch cutoff yield before changing layout or policy. Hash sweeps must
-distinguish a weak replacement policy from ordinary capacity pressure. Any
-layout-only candidate preserves exact encoded semantics; any changed
-replacement or cutoff behavior is a playing candidate with a new fingerprint.
+**Gate:** legal-set/order oracle, perft, randomized state recomputation and
+special-move safety; exact full-search fingerprint/PV/results. Measure all
+board cells plus fixed-tree full-search throughput. Retain only a resolved
+cost improvement and final 1T H1 under the common package rule.
+**Handoff to 6:** documented reusable facts and ownership, not a new search
+policy or a broad representation rewrite.
 
-At non-check qsearch nodes, generate only legal captures and promotions instead
-of generating and ranking every legal quiet that will be discarded. In-check
-qsearch still generates and searches every legal evasion. Preserve tactical
-generation order, SEE/delta decisions, checks, underpromotions, en passant,
-terminal results, TT stores and score provenance. An exact implementation must
-retain the fingerprint; a deterministic mismatch is diagnosed and moved to the
-playing track. Every retained production candidate receives its own remote-host
-1T SPRT after correctness and controlled throughput qualification.
+#### 6.5.6 — State transitions, SEE and board parity checkpoint
 
-Recommended model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+**Model:** GPT-5.6 Terra High; Astra High for SEE legality semantics.
+**Dependency:** 5's accepted facts, or unchanged production if 5 was rejected.
+**Files:** `src/chess/transition.zig`, `state.zig`, `position.zig`,
+`queries.zig`, `see.zig`, board tests.
 
-#### 6.5.7 — Exact board, SEE and HCE hot paths
+1. Profile ordinary relocation/make-unmake and state-copy/update cost. Remove
+   demonstrably duplicated occupancy, key, checker or material work while
+   preserving the factual move delta used by HCE and the later NNUE runway.
+   Keep quiet/capture/promotion/castling/EP/null paths independently accountable.
+2. Reuse move class, victim, attack and pin facts in threshold SEE where valid.
+   Preserve legal least-attacker selection, pinned recaptures, king captures,
+   x-ray discovery, promotion value and EP occupancy. A threshold early return
+   needs an inequality proof, not equality to the current implementation.
+3. Validate exact undo of mailbox, bitboards, occupancies, side, kings, castling,
+   EP, material, Zobrist, checker, rule-50 and repetition state. Preserve
+   evaluator callback order, root/null history boundaries and cancellation.
+4. Re-run the frozen six-cell comparison once implementation freezes. Report
+   geometric mean and every cell against Basilisk, plus full-search throughput.
+   If the board target is missed, identify the remaining measured owner and
+   propose a bounded follow-up here; do not hide it behind search gains.
 
-Reprofile only after the accepted search head freezes, because tree changes
-alter hot-path frequency. Candidate board areas are a no-pinned legal-generation
-path, reused pin/check facts, single move classification/SEE, and measured
-transition, checker or repetition work. PEXT already exists in native BMI2
-builds. Preserve every mailbox/bitboard/count/king/key/rule-50/repetition/checker
-and factual move-delta invariant through recomputation, randomized make/unmake,
-perft and special-move tests.
+**Gate:** independent make/unmake recomputation and SEE exchange oracle,
+ReleaseSafe, exact fingerprint/PV/results, controlled native A/B, final 1T H1.
+Exact changes sharing one derived-state invariant may form one preregistered
+package with 5; independent primitives are not bundled by default.
 
-For MAN-E19, compare occupied-piece traversal with the current 64-square
-material/PST/phase scan and instrument pawn-cache hit, collision and footprint
-before changing it. Preserve exact score, trace and symmetry. Do not add
-incremental HCE or a whole-eval cache without a new concentrated profile and
-ownership decision.
+#### 6.5.7 — Qsearch work proportional to tactical search
 
-Each candidate needs exact fingerprint/PV/results, repeated native board or HCE
-and complete-search throughput, and—under the Phase-6.5 production policy—one
-remote-host 1T SPRT. A mismatch is reclassified rather than hidden. Group only
-mechanically inseparable edits.
+**Model:** GPT-5.6 Terra High. **Dependency:** accepted board head.
+**Files:** `src/search/baseline.zig` qsearch, `ordering.zig`,
+`src/chess/movegen.zig` only for a necessary legality-existence interface.
 
-Recommended model: GPT-5.6 Terra High.
+1. Replace non-check qsearch's full legal generation and quiet ranking with
+   tactical-only generation/selection. Reuse the accepted board facts and
+   tactical/quiet partition instead of implementing a second move generator.
+2. Preserve stalemate: no tactical moves does not mean no legal moves.
+   Before stand-pat can mask stalemate, establish a legal-move witness through
+   a bounded existence query or equivalent proven contract. Checkmate still
+   requires complete legal evasions; all evasions are eligible for search.
+3. Preserve TT move eligibility, tactical tie order, SEE/delta decisions,
+   stand-pat and searched-bound provenance, draw precedence, promotions/EP and
+   exact terminal stores. Do not add qsearch pruning or change margins here.
+4. Avoid duplicate legality scans and eager ranking at stand-pat cutoffs while
+   retaining the terminal witness. Measure saved generation/ranking work and
+   whole-search elapsed/NPS, not just generated/searched move ratios.
 
-#### 6.5.8 — Build optimization
+**Gate:** stalemate with/without pseudo-legal captures, quiet-only legal moves,
+checks, promotions and EP; exact fingerprint/PV/results; controlled full-search
+speed gain and final 1T H1. Legal behavioral mismatches require diagnosis and
+a playing classification, not silent relaxation of this exact ticket.
 
-After source behavior freezes, define a representative PGO training workload
-from the deterministic corpus, including opening, tactical, quiet, check-evasion
-and endgame positions. Implement generate/merge/use as a checked build pipeline
-with compiler/version, workload and profile integrity recorded. Portable and
-non-PGO fallbacks remain available and accurately named.
+#### 6.5.8 — Modern search design and one evidence/depth contract
 
-Repeated clean builds must reproduce fingerprint, PV/results and profile-use
-metadata. Compare candidate and non-PGO binaries on fresh-process board, HCE and
-complete-search workloads. A retained PGO production artifact also requires its
-own remote-host 1T SPRT; no resolved end-to-end gain closes the step without
-adding product complexity.
+**Model:** GPT-6 Astra XHigh. **Dependency:** accepted 7 head.
+**Files:** SEARCH_COVERAGE, owning ADR/requirements, PLAN; read
+`baseline.zig`, `types.zig`, `ordering.zig`, `tt.zig`, `params.zig`.
+**This is a design ticket, not a game candidate.**
 
-Recommended model: GPT-5.6 Terra High.
+Write a Manta-native node/move pipeline from the pinned modern reference:
+terminal/draw and mate bounds -> authenticated TT/static evidence -> safe
+node-level pruning -> ordered legal candidates -> prospective move depth ->
+shallow pruning -> extension/reduced probe -> required re-search -> one
+authoritative outcome update/store. Specify the exact ordering where a producer
+depends on a searched result; never create a circular depth/extension decision.
 
-#### 6.5.9 — Qualification and close
+For each fact, name its producer, lifetime and consumers: raw HCE, ordinary
+compatible TT refinement, improving/opponent trend, expected PV/cut/all node,
+TT move/depth/bound/PV provenance, root/current window widths, move class,
+history strength and sample support, check/evasion state and singular result.
+Distinguish nominal depth, extension, reduction, probe depth and verification
+depth with signed intermediates and checked/clamped conversion to legal plies.
 
-Run the full correctness, ReleaseSafe, ReleaseFast, UCI/process, policy and
-platform gates after the final implementation freezes. On the separate
-designated host, verify source/archive identities, Zig/build options, candidate
-and baseline SHA-256, feature ledger, runner/book hashes and setup-only output
-before any SPRT. Run a fresh pilot only when one of those operational boundaries
-changed and needs requalification. The maintainer starts the jobs and returns
-manifest, log, PGN and checkpoint evidence; no result is recorded until
-independent pair and anomaly reconstruction agrees.
+Cover mature families explicitly: PVS/aspiration, mate-distance window bounds,
+TT/IIR, quiet/tactical ordering and outcome feedback, LMR, LMP/futility/SEE,
+null/verification, ProbCut, singular/forcing extensions, verified razoring,
+upcoming-repetition bounds, qsearch and optional correction history. Existing,
+rejected and missing
+consumers are different statuses; code behind a disabled umbrella is not
+production maturity.
 
-Repeat the common 1T/Hash depth curve through depth thirteen on the same host for
-Manta, Rarog and Basilisk, with Stockfish retained as a search-shape reference.
-Record nodes, NPS, elapsed time, effective growth and per-position tails against
-immutable Manta 1.0.0. Run `bench 13 1 1` under the prospectively frozen routine
-wall-time limit. These are operational exit gates, not Elo claims.
+**Gate/output:** frozen interfaces, eligibility/authority table, legal edge-case
+matrix and numbered implementation sub-tickets for 9–12. For each candidate
+package state why parts interact, what stays off and what refutes the claim.
+No copied reference constants, NNUE assumptions, automatic revived switches or
+target re-search percentage. Design review must precede smaller-model coding.
 
-Every retained production change must already hold its own clean H1. Then run
-one prospectively registered cumulative 1T SPRT against immutable Manta 1.0.0
-to establish the integrated result, not component attribution or a precise
-rating. Close Phase 6.5 only with accepted implementations, rejected/parked or
-unresolved dispositions, complete remote artifacts and no unowned selector.
-Phase 7 requires separate approval.
+#### 6.5.9 — Shared ordering and outcome-evidence substrate
 
-Recommended model: GPT-5.6 Sol High.
+**Model:** GPT-5.6 Terra High for frozen interfaces/tests; Astra High review.
+**Dependency:** 8. **Files:** `types.zig`, `ordering.zig`, `baseline.zig`,
+`params.zig`, disabled observation counters.
+
+1. Introduce only the facts required by 8. Preserve default production behavior
+   while expressing move class, TT confidence, bounded history evidence and
+   prospective depth through concrete worker-local types.
+2. Preserve MAN-S30's live quiet-history staging. Derive capture/continuation
+   evidence from legal searched outcomes, not SEE alone; track sample support,
+   saturation/aging and null/root chain breaks. Quiet and tactical history may
+   rank moves and modulate depth through the same documented scales.
+3. Update histories once from authoritative cutoff/exact/full-depth verification
+   outcomes. Do not reward speculative reduced fail-highs as proven wins, train
+   unsearched siblings as searched failures, or double-count probe and re-search.
+   Separate the policy decision from feedback and storage authority.
+4. Capture history is currently rejected/off (MAN-S16), not a free upgrade.
+   A new consumer must demonstrate a different populated relation on the new
+   head and state its distinct hypothesis. Low-ply/countermove/static-eval
+   feedback tables are optional only if they add non-redundant information;
+   do not allocate every reference table by default.
+
+**Gate:** feature-off exactness, synthetic outcome/aging/chain-boundary tests,
+allocation and lifetime checks. Disabled substrate needs no games. Any changed
+ordering/feedback remains candidate-only and is qualified with its coupled
+consumers in 10, not promoted as an unfinished intermediate policy.
+
+#### 6.5.10 — Integrated ordering, aspiration and selective depth
+
+**Model:** GPT-6 Astra XHigh. Terra High may implement one frozen sub-ticket;
+Astra owns integration and chess review. **Dependency:** 8–9.
+**Files:** search baseline/types/ordering/params, TT only for required typed
+evidence; root iteration/time consumer boundaries must remain authoritative.
+
+Implement in this order on one default-off candidate branch, with separate
+component switches and no production promotion between dependent sub-tickets:
+
+1. Establish mate-distance window bounds with correct ply-normalized TT scores,
+   draw/terminal precedence, returned bound and root mate-completion semantics.
+   Reassess MAN-S32's limited crossing-only implementation; do not claim it
+   already supplies the complete contract or solves ordinary-position branching.
+2. Add adaptive root aspiration around completed ordinary evidence, coupled
+   to the actual window-aware depth consumer. Carry root reference width and
+   current width explicitly; retries widen the failed bound and eventually
+   recover a valid full-window result. No partial retry commits to time/UCI.
+   This is a new consumer contract, not a repeat of isolated MAN-R02.
+3. Derive a depth/move-ordinal reduction surface with useful deep-search range.
+   Adjust it with supported node/TT/history/window/improving facts from 9.
+   Derive scales for Manta HCE; no fixed re-search-rate target and no requirement
+   to reduce more in every cell merely to resemble the reference.
+4. Compute prospective child depth before LMP/futility/SEE decisions, including
+   accepted IIR and explicit extension ownership. Quiet, capture, checking and
+   evasion eligibility is explicit; no pruning legal evasions or all legal
+   moves into a false terminal. Protect promotions/decisive scores and establish
+   a searched legal fallback before selective omission where required.
+5. Reconcile forcing and singular extensions with that depth budget. Removing
+   blanket check extensions is optional and needs a tactical rationale; do not
+   infer it from S31. Bound consecutive/multiple extensions and signed negative
+   reductions. Check/evasion reductions and any checking-move SEE prune require
+   legal forcing/sacrifice cases, not an ordinary-quiet predicate reused blindly.
+6. Verify reduced alpha rises at the required authoritative horizon before
+   score/PV/TT/history publication; full PV re-search follows PVS requirements.
+   Any adaptive verification-depth change needs its own explicit proof/contract.
+   Reconcile new ordering feedback from 9 with final outcomes, not probe guesses.
+
+**Package boundary:** common move-confidence evidence and one depth authority
+join ordering, reduction and shallow-pruning consumers; aspiration belongs only
+if its measured window feeds that policy. A semantically separable mate-bound
+or ordering change must be split unless independently below-resolution evidence
+justifies inclusion. Freeze the membership in 8 before registration. One H1
+licenses the frozen package, not each component. No broad "all modern features"
+bundle or late addition after results.
+
+**Gate:** legal PV/terminal/mate-distance/draw/exclusion/cancellation tests,
+feature-off reconstruction, full safety/process gates, per-position depth curve
+and exclusive work attribution. Inspect ordinary and mate cohorts separately,
+tactical misses, fail-low nodes and re-search tails; low re-search frequency
+does not measure false negatives. Compare elapsed, nodes and NPS separately.
+Register one final 1T gate after the complete dependent package freezes.
+
+#### 6.5.11 — Forward proofs matched to the accepted depth policy
+
+**Model:** GPT-6 Astra High. **Dependency:** accepted 10 policy; if rejected,
+return to 8 and re-derive this step against actual production before coding.
+**Files:** baseline/types/params, TT provenance and focused search tests;
+`src/chess/draw.zig`/history state only for a proven legal cycle-witness API.
+
+Work in bounded packages, each using the same evidence/depth interfaces:
+
+- **Upcoming repetition:** current search detects a draw already present in
+  history; the modern reference also detects an available move completing a
+  repetition. Derive a legal reversible-move witness and the root/search-history
+  condition before raising a non-root bound toward draw in main/qsearch.
+  Fence irreversible/null moves, castling/EP rights and check legality. Never
+  confuse a possible draw with a forced exact result, publish a history-local
+  bound as universally reusable TT truth, or infer repetition from a colliding
+  hash alone. Compare against an independent legal-move/history walk and price
+  the lookup at non-repeating nodes before retaining a candidate.
+- **Null move and verification:** production's fixed reduction is two plies.
+  Derive a depth/eval/context-sensitive probe together with verification scope
+  and a clearly bounded null-disabled region. The null probe passes the move;
+  verification searches real moves from the restored position. Keep PV/check,
+  consecutive-null, decisive-score and zugzwang/pawn-ending safety explicit.
+  Rare failed verifications may be valuable; include their cases in the oracle
+  population. Deeper reduction and safety policy are one coupled candidate.
+- **ProbCut and TT proof reuse:** reuse accepted tactical ordering, qsearch
+  and ordinary TT bounds to avoid redundant probes. Distinguish shallow
+  probabilistic lower bounds from full-depth exact results. Stale, decisive,
+  insufficient-depth or exclusion-contaminated evidence cannot acquire new
+  cutoff authority. A separate package from null move unless dependency is
+  concretely demonstrated.
+- **Singular proof/IIR and verified razoring review:** assess exclusion horizon,
+  threshold, TT age/depth, one/multiple extension and no-TT depth jointly where
+  they interact. Do not retry MAN-S33's half-depth change on the same head.
+  A new attempt needs changed accepted context and decision-level evidence.
+  Razoring must verify through qsearch with check/mate/zugzwang guards; a legal
+  tactical mismatch is examined, not dismissed or accepted by fingerprint alone.
+
+**Gate:** same-position alternative and zugzwang/fortress/only-move cases,
+bound/provenance and TT-history authority, exact unmake, cancellation; observed
+cost and outcomes on the accepted head, then one final 1T SPRT per meaningful
+package. Close each family as accepted, rejected or deferred with reason.
+Rejecting a family is permitted; declaring mature efficiency still requires 15.
+
+#### 6.5.12 — Evaluation reliability feeding search, only where justified
+
+**Model:** GPT-6 Astra High. **Dependency:** frozen accepted 10–11 consumers.
+**Files:** search evaluation-evidence/history boundary, baseline/params;
+`src/eval/hce.zig` only to expose existing exact facts, not refit the HCE.
+
+1. Preserve raw HCE separately from ordinary TT refinement and any learned
+   correction. Document which value may drive stand-pat, improving, futility,
+   null eligibility and reduction confidence; terminal/tablebase/mate values
+   never train or consume an ordinary correction.
+2. Inspect existing held-out residuals and populated search outcomes for a
+   systematic error affecting the new consumers. MAN-S25 was rejected: do not
+   simply turn it back on. A candidate must explain the new information or
+   changed consumer relation and bound both correction and uncertainty.
+3. If justified, make correction generation, reliable outcome training and its
+   coherent search consumers one package, with sample support, history
+   separation, saturation and worker ownership. Otherwise close as deferred.
+   No new datagen/Texel cycle, NNUE work or automatic cache family is authorized.
+
+**Gate:** independent raw/corrected provenance and learning-exclusion properties,
+held-out bias/sign checks, tactical/endgame safeguards and final 1T H1 for any
+retained package. Reference coverage alone never opens this optional experiment.
+
+#### 6.5.13 — Residual full-search cost and build optimization
+
+**Model:** GPT-5.6 Terra High; Astra High for TT semantic changes.
+**Dependency:** accepted search head frozen through 12.
+**Files:** profile-owned board/search/eval hot path; `build.zig` and build
+support only if the compiler branch is justified.
+
+1. Refresh only the profile portions invalidated by tree changes. Confirm the
+   board target remains met and rank time in HCE, SEE, picker, TT and transition.
+   Fix the largest evidenced residual owner, not all listed mechanisms.
+2. Compare occupied-piece traversal with HCE's 64-square placement/phase scan;
+   inspect pawn-cache hit/collision/footprint and exact trace behavior before
+   cache redesign. Incremental HCE is conditional on a concentrated profile,
+   exact refresh/unmake contract and a bounded payoff, not a default rewrite.
+3. TT work distinguishes cache-line/probe/prefetch cost from capacity and
+   replacement behavior. The prior hash sweep did not establish that layout,
+   replacement quality or warm-history behavior is optimal. Preserve 4T
+   publication/authentication; a special 1T path must not weaken shared safety.
+4. PGO/LTO/code layout is optional, not a standalone mandatory phase. First
+   verify actual Zig 0.16 support and reproducible profile use; use a
+   representative training population distinct from timing validation, with
+   fallback builds. No working pipeline or no measured full-search gain means
+   defer without adding launcher/product complexity.
+
+**Gate:** exact scalar/fingerprint/PV/results, repeated release-build whole-search
+timing, applicable board/HCE/TT concurrency tests and final 1T H1 per retained
+candidate/package. A changed TT replacement decision is playing behavior,
+not an exact optimization. No local microbenchmark can conceal a full-search loss.
+
+#### 6.5.14 — Conditional fit of the interacting accepted search
+
+**Model:** GPT-6 Astra High for coordinate/consumer design; Terra High for an
+approved existing-wrapper configuration. **Dependency:** mechanisms frozen.
+
+This is a decision checkpoint, not authorization to tune. Reuse MAN-S29 scales
+where their meanings survive; do not assume they remain optimum after new depth,
+ordering and pruning consumers. Map each proposed continuous parameter to all
+live consumers and show interaction/sensitivity worth the game budget.
+
+If justified and separately approved, use the existing Weather Factory bridge
+and a prospectively bounded active-coordinate fit. Exclude inactive, categorical,
+safety/terminal and unsupported NNUE coordinates. Freeze the complete rounded
+vector and qualify it once as a whole; no cherry-picked coordinates or changing
+mechanisms during a run. SPSA sensitivity is not SPRT harness calibration.
+
+**Gate:** explicit tune/defer decision. For an approved fit, complete valid
+checkpoints, no infrastructure-contaminated gradients, bounded active theta and
+one final production 1T H1. An inconclusive or rejected fit does not replace
+the previously accepted parameters. No automatic new clock fit or 4T gate.
+
+#### 6.5.15 — Separate board/search targets and integrated closeout
+
+**Model:** GPT-5.6 Terra High for evidence collection; Astra High for final
+causal/contract review. **Dependency:** all prior dispositions explicit.
+
+1. Freeze final source, binaries, Zig/options, feature ledger and accepted
+   fingerprints. Run each required final correctness, ReleaseSafe/ReleaseFast,
+   UCI/time/SMP lifecycle and platform gate once; do not infer multi-thread
+   strength from 1T qualification.
+2. On the idle designated host, measure the board six-cell target and the
+   common forty-position depth curve through 13 with the frozen reset policy.
+   Record nodes, NPS, elapsed, ordinary/mate cohorts and per-position tails.
+   Do not subtract inconvenient cases, use observer timings, alter depth
+   semantics or stop accounting after a search becomes expensive.
+3. Check both the 64-MiB Basilisk-relative depth-13 limits and the independent
+   routine `bench 13 1 1` absolute limit. Record the relation
+   elapsed = counted nodes / measured NPS without treating it as chess quality.
+   If either target misses, identify remaining cost/tree owners and request a
+   bounded plan revision; no automatic phase advance or endless unguided tuning.
+4. Require every retained production candidate/package's H1, then one final
+   cumulative registered 1T SPRT against immutable Manta 1.0.0. Use setup-only
+   verification and the trusted fastchess harness, no candidate pilots.
+5. GUIDE records board target, search target and strength gate separately.
+   Close Phase 6.5 only when all three pass, or the maintainer explicitly
+   changes the objective prospectively. Phase 7 still needs separate approval.
+
+**Removed obligations:** no standalone retry of S31/S33, no automatic sequence
+of shallow proof weakenings, no TT-capacity campaign after a negative capacity
+diagnostic, no mandatory PGO project and no mandatory SPSA. Their useful,
+evidence-dependent parts now have owners above.
 
 ### Phase 7 — NNUE runway and data contract
 

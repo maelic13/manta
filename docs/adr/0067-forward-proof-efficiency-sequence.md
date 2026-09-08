@@ -2,6 +2,16 @@
 
 ## Status
 
+Historical contract. ADR-0068 supersedes the open-step sequencing below.
+The maintainer stopped MAN-S33 inconclusive; the supplied 6,640-game snapshot
+is `+1.24 +/- 8.36` nElo, LLR `-0.39`, not a formal verdict. Final artifact
+reconciliation is pending; neither candidate is promoted. The commands below
+preserve the original registration and are not instructions to restart it.
+Null verification is a real-move search, not a repeat of the null probe;
+conversion and node savings alone do not prove redundant work.
+
+Original decision at registration:
+
 Accepted as the Step-6.5.5 sequencing and authority contract. `MAN-S32` is a
 qualified default-off below-resolution component. `MAN-S33` is implemented,
 locally qualified and prospectively registered for one remote-host 1T SPRT.
