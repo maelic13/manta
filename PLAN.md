@@ -83,6 +83,10 @@ approval.
   verification. Require a fresh bounded pilot only when a changed engine/
   protocol, clock, runner, host, placement, book or adjudication boundary needs
   qualification. Agents do not start long jobs on either host.
+- The checked fastchess SPRT harness is trusted from battle-tested Rarog and
+  Basilisk use. An ordinary Manta search candidate with unchanged operational
+  boundaries proceeds directly from setup-only validation to its final SPRT;
+  do not insert a candidate-specific pilot.
 - Do not overlap games, tuning or data generation on that host.
 
 ### Release policy
@@ -467,18 +471,71 @@ extensions, reduced checks/evasions, verification re-searches, tactical/mate
 results and the complete depth curve. Each production candidate receives its
 own remote-host 1T SPRT and requires clean H1.
 
+Closed. The first candidate `MAN-S31` under ADR-0066 removed only interior
+blanket increments while retaining checked-root extension. Deterministic
+qualification passed every gate: bench `492,469` versus production `775,451`,
+and the depth-ten 64-MiB curve fell 56.53%, or 35.34% excluding the two
+mate-heavy positions. The maintainer rejected it by judgment at 7,958 games,
+`-3.08 +/- 7.63` nElo with LLR `-1.60` of `-2.94` and no anomaly, rather than
+spending the remaining hours on a verdict the trajectory had already settled.
+Production remains MAN-S30 at `775,451`; the switch stays archived default-on.
+
+The second candidate named below is **not** run in isolation, and this step
+closes without it. A structural comparison against the pinned Stockfish search
+reference, recorded in `docs/SEARCH_COVERAGE.md`, explains why. Manta grants
+checking moves three compounding privileges: a blanket extension, exemption
+from every late-move reduction, and exemption from every shallow prune cause.
+The reference grants none of them, and its checking moves are ordinary moves
+that are reduced like any other and still pruned by static exchange evaluation.
+`MAN-S31` withdrew one privilege and left the other two, so forcing lines became
+shallower without becoming cheaper per node. That is a misleading intermediate
+state, not a refutation of the underlying idea, and it is exactly the condition
+under which a cohesive bundle is permitted.
+
+The remaining checking-move and evasion scope therefore transfers to Step 6.5.4,
+which owns the reduction surface those moves would have to be reduced by. The
+blanket extension may be reopened only inside that candidate, once checking
+moves are reducible and prunable.
+
+A second, general lesson is recorded here because two candidates now support it:
+`MAN-S30` cut the tree 3% and gained `+13.19` nElo, while `MAN-S31` cut it
+between 35% and 56% and lost. Node reduction at a fixed time control does not
+convert to strength on its own. Later steps weigh where work is spent above how
+much of it there is.
+
 Recommended model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
 
 #### 6.5.4 — Aspiration-aware contextual LMR
+
+This step now also owns the checking-move and evasion scope transferred from
+Step 6.5.3, and it is the phase's load-bearing change. Step 6.5.2 measured the
+defect precisely: late move reduction reaches `3.3%` of searched main moves and
+`0.71%` of those need a full-depth re-search, while shallow pruning discards
+`57%` of candidates outright. A re-search rate near zero is not safety; it says
+the policy never approaches the point where reducing costs chess. The reference
+comparison in `docs/SEARCH_COVERAGE.md` adds the structural half: reductions
+there apply from the second move at depth two, cover captures, checks and
+evasions, are continuous and signed so a strong move is extended rather than
+merely unreduced, and are computed **before** shallow pruning so every pruning
+threshold consumes the prospective reduced depth instead of the nominal one.
+Manta computes pruning from nominal depth and its reduction afterwards, which
+is why its two selectivity families cannot trade against each other.
+
+Ordering inside the candidate is therefore part of the contract, not an
+implementation detail: derive the prospective reduction first, then let late
+move count, futility and static-exchange eligibility consume it.
 
 Replace the saturating minimum-shaped reduction only through one
 dependency-complete candidate. Root aspiration supplies the current window
 width; a non-saturating depth/move surface combines that width with typed node
 expectation, improving direction, TT quality, singular context, move class and
 accepted history. The prospective reduced depth may then consistently inform
-LMP, futility and SEE eligibility. Losing captures and any check/evasion scope
-must be justified by 6.5.3 evidence; promotions and the singular move retain
-explicit protection.
+LMP, futility and SEE eligibility. Losing captures, checking moves and check
+evasions are inside this candidate's scope by the Step-6.5.3 transfer;
+promotions and the singular move retain explicit protection, and legal evasions
+are never pruned. Because the scope now includes forcing lines, the candidate
+may also retire the blanket check extension as one of its components, with its
+own switch for ablation.
 
 The candidate must retain at least one ordinary child ply where required.
 Every reduced alpha rise returns to an authoritative horizon before publishing
@@ -492,7 +549,20 @@ Recommended model: GPT-6 Astra XHigh; GPT-5.6 Sol Max fallback.
 
 #### 6.5.5 — Forward proof and pruning efficiency
 
-After the LMR head freezes, attribute and test proof mechanisms separately.
+This step has two halves with different dependencies, and only the second waits
+for the Step-6.5.4 head to freeze.
+
+**Head-independent, authorized now.** Mate distance pruning and the null-move
+reduction/verification pair do not consume the prospective reduced depth and do
+not interact with reduction breadth, so they may be gated before Step 6.5.4.
+Run them first: they are small, they are measured, and they keep the phase
+moving while the reduction rebuild is prepared.
+
+**Head-dependent, after Step 6.5.4.** Whether late move count, futility and
+static-exchange eligibility consume the final prospective depth consistently
+can only be asked once that depth exists, as can ProbCut's interaction with it.
+The singular exclusion horizon sits between the two and may be gated in either
+order.
 
 Step 6.5.2 promoted **mate distance pruning** to the head of this step. Manta
 clamps no search window against the mate band, so a proven mate neither stops
@@ -510,11 +580,20 @@ searches at `depth - 2` convert `9.5%` of `3,009` attempts into extensions at
 `5.1%` of the depth-ten tree, so a shallower horizon may keep the extensions
 and drop most of the cost.
 
-The third is whether the present same-node null verification is needed in safe
-ordinary material: Step 6.5.2 measured `99.91%` of `37,085` depth-ten
-verifications confirming their fail-high, at about `1.1%` of the tree. Either
-the verification buys almost nothing or the null reduction is too conservative
-for it to catch anything; the readings are distinguishable. Checks, PV,
+The third is the null-move reduction and verification pair, which the reference
+comparison shows are one coupled mechanism rather than two. Manta reduces the
+null probe by two plies, three from depth eight, and then verifies every single
+fail-high at that same reduced depth; Step 6.5.2 measured `99.91%` of `37,085`
+depth-ten verifications confirming, at about `1.1%` of the tree. A shallow probe
+re-checked by an equally shallow search cannot disagree with itself, which is
+why the verification is nearly free of information. The reference instead
+reduces by roughly seven plies plus a third of the depth, skips verification
+entirely below depth sixteen, and implements the surviving verification as a
+search with null move disabled for the following plies rather than a repeat of
+the same window. Deepening the probe and re-scoping the verification are
+therefore one candidate with two switches, not two candidates: deepening alone
+removes the safety the current verification nominally provides, and removing
+verification alone leaves the expensive shallow probe in place. Checks, PV,
 consecutive nulls, pawn-only and zugzwang-prone material, decisive scores and
 shallow horizons retain exclusions or verification unless a new contract proves
 otherwise. Null evidence remains a typed lower-bound proof.

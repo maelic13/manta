@@ -97,6 +97,10 @@
     Select the Step-6.5.1b live-history staged picker explicitly. It defaults
     on; pass -LiveHistoryStaging:$false only for an archived reconstruction.
 
+.PARAMETER NonrootCheckExtension
+    Keep production non-root check extension. Pass
+    -NonrootCheckExtension:$false for the default-off MAN-S31 candidate.
+
 .PARAMETER BenchDepth
     Depth for the verification bench. Default 6 (the manta-search-bench-v1
     default). Lower it for a quicker smoke test; the node count is only a
@@ -133,6 +137,7 @@ param(
     [switch]$IntegratedTime,
     [switch]$StabilityAspiration,
     [switch]$LiveHistoryStaging,
+    [switch]$NonrootCheckExtension,
     [switch]$BuildOnly,
     [int]$BenchDepth = 6,
     [string]$TestEnginesDir = "$PSScriptRoot\test_engines",
@@ -154,6 +159,12 @@ $liveHistoryStagingEnabled = if ($PSBoundParameters.ContainsKey("LiveHistoryStag
 }
 
 if ($BenchDepth -lt 1) { throw "-BenchDepth must be positive." }
+
+$nonrootCheckExtensionEnabled = if ($PSBoundParameters.ContainsKey("NonrootCheckExtension")) {
+    [bool]$NonrootCheckExtension
+} else {
+    $true
+}
 
 # Manta's bench holds the job until it completes, and both `quit` and EOF
 # cancel it (docs/UCI.md §4.2). Piping "bench`nquit" therefore returns nothing.
@@ -185,6 +196,7 @@ function Write-EngineManifest {
         [Parameter(Mandatory)][bool]$IntegratedTime,
         [Parameter(Mandatory)][bool]$StabilityAspiration,
         [Parameter(Mandatory)][bool]$LiveHistoryStaging,
+        [Parameter(Mandatory)][bool]$NonrootCheckExtension,
         [switch]$SkipBench
     )
 
@@ -209,7 +221,7 @@ function Write-EngineManifest {
     }
 
     $manifest = [ordered]@{
-        schema_version     = 7
+        schema_version     = 8
         engine             = $binary.Name
         binary_sha256      = $binaryHash
         binary_size_bytes  = $binary.Length
@@ -224,6 +236,7 @@ function Write-EngineManifest {
         integrated_time     = $IntegratedTime
         stability_aspiration = $StabilityAspiration
         live_history_staging = $LiveHistoryStaging
+        nonroot_check_extension = $NonrootCheckExtension
         search_spsa_bake    = $false
         git_sha            = $sha
         git_tree           = $tree
@@ -269,6 +282,8 @@ try {
     if ($StabilityAspiration) { $buildArgs += "-Dstability-aspiration=true" }
     $liveHistoryStagingText = $liveHistoryStagingEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dlive-history-staging=$liveHistoryStagingText"
+    $nonrootCheckExtensionText = $nonrootCheckExtensionEnabled.ToString().ToLowerInvariant()
+    $buildArgs += "-Dnonroot-check-extension=$nonrootCheckExtensionText"
     $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })"
 
     Write-Host ""
@@ -302,7 +317,8 @@ try {
         -RootConfidenceTime ([bool]$RootConfidenceTime) `
         -IntegratedTime $integratedTimeEnabled `
         -StabilityAspiration ([bool]$StabilityAspiration) `
-        -LiveHistoryStaging $liveHistoryStagingEnabled -SkipBench:$BuildOnly
+        -LiveHistoryStaging $liveHistoryStagingEnabled `
+        -NonrootCheckExtension $nonrootCheckExtensionEnabled -SkipBench:$BuildOnly
     Write-Host ""
     Write-Host "Done: $dest"
     Write-Host ""

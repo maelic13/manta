@@ -226,7 +226,7 @@ $summary = [ordered]@{
     limitations = @(
         "Temporary bridge; Colosseum remains the strategic runner.",
         "fastchess has no pair-atomic checkpoint/resume contract in this launcher.",
-        "Pilot is a bounded workflow/fault check, not a strength verdict.",
+        $(if ($Job -eq "pilot") { "Pilot is a bounded workflow/fault check, not a strength verdict." } else { "This is the registered final SPRT; no candidate-specific pilot is required." }),
         $(if ($DiagnosticNoAffinity) { "DiagnosticNoAffinity disables required placement; its output cannot support calibration or strength claims." } else { "Required one-core-per-game affinity is enabled." })
     )
 }

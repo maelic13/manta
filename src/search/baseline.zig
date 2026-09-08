@@ -596,7 +596,9 @@ fn negamax(
 ) Abort!NodeValue {
     var active_depth = depth_intent;
     if (comptime features.search_context and features.depth_authority and features.check_extension) {
-        if (checkExtensionEligible(value.current.checkers != 0, depth_intent, ply)) {
+        if ((features.nonroot_check_extension or ply == 0) and
+            checkExtensionEligible(value.current.checkers != 0, depth_intent, ply))
+        {
             active_depth.extension +|= 1;
             context.observer.extension(.check);
         }

@@ -954,6 +954,96 @@ test "check extension is independently ablatable and preserves legal evasion pub
     try std.testing.expect(chess.state.isConsistent(&disabled_position));
 }
 
+test "MAN-S31 preserves root extension and removes only interior check increments" {
+    // The checked root is entered once per completed iteration. With the
+    // interior producer disabled, those are the only check-extension events.
+    // A non-checked mating root exercises checked children but must emit none.
+    const cases = [_]struct { fen: []const u8, root_checked: bool }{
+        .{ .fen = "4k3/8/8/8/8/8/4R3/4K3 b - - 0 1", .root_checked = true },
+        .{ .fen = "7k/8/5KQ1/8/8/8/8/8 w - - 0 1", .root_checked = false },
+    };
+    for (cases) |case| {
+        var root: chess.position.PositionState = .{};
+        var position = try chess.fen.parse(case.fen, &root);
+        const original_key = position.current.key;
+        var harness: Harness = .{};
+        var counters: search.diagnostics.Counters = .{};
+        var control: search.types.NeverStop = .{};
+        const result = search.baseline.runWithFeatures(
+            .{ .nonroot_check_extension = false },
+            &position,
+            harness.binding(),
+            .{ .depth = 2 },
+            &control,
+            &harness.thread,
+            null,
+            null,
+            &counters,
+        );
+        try std.testing.expectEqual(@as(u16, 2), result.completed.?.depth);
+        try std.testing.expectEqual(@as(u64, if (case.root_checked) 2 else 0), counters.extensions_by_cause[@intFromEnum(search.diagnostics.ExtensionCause.check)]);
+        try std.testing.expect(counters.context_in_check != 0);
+        if (!case.root_checked)
+            try std.testing.expectEqual(@as(?i32, 1), result.evidence.value.mateDistance());
+        try expectLegalPv(case.fen, result.completed.?.pv.slice());
+        try std.testing.expect(chess.state.isConsistent(&position));
+        try std.testing.expectEqual(original_key, position.current.key);
+    }
+}
+
+test "MAN-S31 preserves terminal rules and special-move forcing outcomes" {
+    // Independent chess oracles: checkmate/stalemate, a free queen capture,
+    // and legal special moves at a restricted root. Both arms must restore
+    // the full root and publish a sequentially legal PV; scores need not match.
+    const cases = [_]struct {
+        fen: []const u8,
+        only: ?[]const u8 = null,
+        terminal: ?i32 = null,
+        positive: bool = false,
+    }{
+        .{ .fen = "7k/6Q1/5K2/8/8/8/8/8 b - - 100 1", .terminal = -32000 },
+        .{ .fen = "7k/5K2/6Q1/8/8/8/8/8 b - - 0 1", .terminal = 0 },
+        .{ .fen = "4k3/8/8/8/8/8/3q4/3RK3 w - - 0 1", .positive = true },
+        .{ .fen = "4k3/P7/8/8/8/8/8/4K3 w - - 0 1", .only = "a7a8q" },
+        .{ .fen = "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", .only = "e5d6" },
+        .{ .fen = "4k3/8/8/8/8/8/8/4K2R w K - 0 1", .only = "e1g1" },
+    };
+    inline for (.{ true, false }) |nonroot_extension| {
+        for (cases) |case| {
+            var root: chess.position.PositionState = .{};
+            var position = try chess.fen.parse(case.fen, &root);
+            const original = root;
+            var harness: Harness = .{};
+            var counters: search.diagnostics.Counters = .{};
+            var control: search.types.NeverStop = .{};
+            const only = if (case.only) |text| try chess.notation.parseLegal(&position, text) else chess.move.Move.none;
+            const result = search.baseline.runRestrictedWithFeatures(
+                .{ .nonroot_check_extension = nonroot_extension },
+                &position,
+                harness.binding(),
+                .{ .depth = 3 },
+                &control,
+                &harness.thread,
+                null,
+                null,
+                &counters,
+                if (case.only != null) &.{only} else null,
+            );
+            if (case.terminal) |expected| {
+                try std.testing.expectEqual(expected, result.evidence.value.raw());
+                try std.testing.expectEqual(search.types.Provenance.terminal, result.evidence.provenance);
+                try std.testing.expectEqual(@as(?chess.move.Move, null), result.best_move);
+            } else {
+                if (case.positive) try std.testing.expect(result.evidence.value.raw() > 0);
+                if (case.only != null) try std.testing.expectEqual(only, result.best_move.?);
+                try expectLegalPv(case.fen, result.completed.?.pv.slice());
+            }
+            try std.testing.expectEqualDeep(original, root);
+            try std.testing.expect(chess.state.isConsistent(&position));
+        }
+    }
+}
+
 test "IIR reduces only a non-root PV node without TT move authority" {
     // With no table, the first child of the depth-six restricted root is a
     // non-root depth-five PV node lacking a legal TT move. That is precisely

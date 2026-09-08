@@ -609,6 +609,14 @@ without side-to-move non-pawn material are excluded. ADR-0022 is accepted:
 `MAN-S03` passed its registered zero-anomaly `[3,10]` time-based gate and this
 verified-null mechanism is retained architecture.
 
+ADR-0066/`MAN-S31` exposes the Step-6.5.3 default-off interior check-extension
+ablation through `-Dnonroot-check-extension=false`. It gates only the existing
+checker-to-depth increment at non-root nodes; checked-root extension, legal
+evasion generation, in-check qsearch and bound/provenance ownership remain
+unchanged. Runtime, bench and diagnostic entry points select the same
+compile-time arm. No new state, allocation or cross-worker communication is
+introduced. Production keeps blanket extension until clean registered 1T H1.
+
 The accepted ADR-0023/`MAN-S04` mechanism gives the fourth and later
 ordered quiet non-checking moves at depth four or greater a one-ply-reduced
 null-window probe. A probe

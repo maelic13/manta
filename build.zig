@@ -51,6 +51,11 @@ pub fn build(b: *std.Build) void {
         "live-history-staging",
         "Enable the accepted Step-6.5.1b live-history staged move picker",
     ) orelse true;
+    const nonroot_check_extension = b.option(
+        bool,
+        "nonroot-check-extension",
+        "Retain blanket non-root check extension (false selects Step-6.5.3 MAN-S31)",
+    ) orelse true;
     if (b.option([]const u8, "target", "Cross-compilation is not supported") != null or
         b.option([]const u8, "cpu", "Use -Dprofile instead of raw CPU features") != null)
     {
@@ -96,6 +101,7 @@ pub fn build(b: *std.Build) void {
     search_build_options.addOption(bool, "integrated_time", integrated_time);
     search_build_options.addOption(bool, "stability_aspiration", stability_aspiration);
     search_build_options.addOption(bool, "live_history_staging", live_history_staging);
+    search_build_options.addOption(bool, "nonroot_check_extension", nonroot_check_extension);
     const search_build_options_module = search_build_options.createModule();
     const omit_frame_pointer: ?bool = if (optimize == .ReleaseFast and
         target.result.cpu.arch == .x86_64) true else null;
@@ -250,6 +256,7 @@ pub fn build(b: *std.Build) void {
     transcript_search_build_options.addOption(bool, "integrated_time", integrated_time);
     transcript_search_build_options.addOption(bool, "stability_aspiration", stability_aspiration);
     transcript_search_build_options.addOption(bool, "live_history_staging", live_history_staging);
+    transcript_search_build_options.addOption(bool, "nonroot_check_extension", nonroot_check_extension);
     const transcript_manta = b.addModule("manta-transcript", .{
         .root_source_file = b.path("src/manta.zig"),
         .target = target,

@@ -1,10 +1,12 @@
 # Search coverage against the pinned modern reference
 
 Manta's one-thread search compared mechanism by mechanism with Stockfish
-`229f6339` (2026-08-19), checked out locally for this audit. PLAN 5.4.0 requires
-a *current* reference here: the pinned pre-NNUE snapshots are the right study
-input for a classical evaluator and the wrong one for asking whether a modern
-search is complete.
+`229f6339` (2026-08-19), checked out locally for this audit, and re-audited
+against `edb0d9db` (Stockfish 19) on 2026-09-08 after `MAN-S31` was rejected.
+Findings 1 to 3 are from the original audit and Findings 4 to 7 from the
+re-audit. PLAN 5.4.0 requires a *current* reference here: the pinned pre-NNUE
+snapshots are the right study input for a classical evaluator and the wrong one
+for asking whether a modern search is complete.
 
 Same contract as [`HCE_COVERAGE.md`](HCE_COVERAGE.md). This is a **coverage map,
 not a parity target**. Manta implements every adopted mechanism as original Zig;
@@ -128,6 +130,84 @@ verdict was correct *for aspiration alone*, and it is the clearest case in this
 ledger of a mechanism judged in isolation whose value is mostly as an input to a
 consumer Manta had not built. Aspiration and delta-proportional reduction are
 one dependency-complete cluster and should be registered together or not at all.
+
+## Finding 4 — checking moves are an ordinary move class in the reference
+
+This is the finding that explains `MAN-S31`. In the reference's whole main
+search, the "this move gives check" fact appears in exactly three places: where
+it is computed, where it selects which shallow-pruning branch a move takes, and
+where it is handed to the move-making routine. It never touches depth and never
+touches the reduction. In-check status likewise never gates the reduction. The
+only extension sources in the entire node are singular extension and a negative
+extension for a non-singular transposition move.
+
+Manta grants checking moves three compounding privileges instead:
+
+| privilege | Manta | reference |
+|---|---|---|
+| Check extension | one ply, unconditional, at every checked node | none |
+| Late move reduction on checking moves and evasions | excluded by `lateMoveEligible` | reduced like any other move |
+| Shallow pruning of checking moves | **every** cause waived | futility waived; static-exchange pruning still applies |
+
+`MAN-S31` withdrew the first and kept the other two. Forcing lines therefore
+became shallower without becoming cheaper per node, which is why a `35%` to
+`56%` smaller tree produced no strength. The concept is not refuted; the
+isolated formulation is. Step 6.5.4 owns the retry because making checking moves
+reducible and prunable requires the reduction surface that step builds.
+
+## Finding 5 — pruning consumes the prospective reduced depth, and ordering is why
+
+The reference derives a move's reduction **before** its shallow-pruning tests
+and then expresses every one of those tests against the resulting prospective
+reduced depth rather than the nominal depth. Late move count, futility margin
+and static-exchange margin all read the same reduced quantity, and history
+adjusts that quantity rather than adjusting each threshold separately.
+
+Manta computes its shallow-pruning decisions from nominal depth and derives its
+reduction afterwards, independently. The two selectivity families therefore
+cannot trade against each other: a move is either discarded or searched at full
+depth, with no graded middle. Step 6.5.2 measured the consequence directly —
+`57%` of legal main candidates discarded outright at depth ten, while only
+`3.3%` of the moves that survive are reduced at all.
+
+This ordering is a contract, not an implementation detail, and PLAN 6.5.4
+records it as part of that candidate's scope.
+
+## Finding 6 — null-move reduction and verification are one mechanism
+
+Manta reduces the null probe by two plies, three from depth eight, and then
+verifies **every** fail-high with a search at that same reduced depth. Step
+6.5.2 measured `99.91%` of `37,085` depth-ten verifications confirming their
+fail-high, at about `1.1%` of the tree. A shallow probe re-checked by an equally
+shallow search cannot disagree with itself.
+
+The reference reduces far more deeply — its base reduction is several times
+Manta's and grows with depth — skips verification entirely below a high depth
+threshold, and implements the surviving verification as a search with null move
+disabled for the following plies rather than a repeat of the same window. The
+deep probe is what makes verification meaningful, and the verification is what
+makes the deep probe safe.
+
+Deepening the reduction alone removes the safety the present verification
+nominally provides; removing the verification alone leaves the expensive
+shallow probe in place. PLAN 6.5.5 therefore registers them as one candidate
+with two switches.
+
+## Finding 7 — two proof mechanisms Manta simply does not have
+
+**Mate distance pruning.** The reference clamps alpha against the
+mated-in-this-ply bound and beta against the mate-in-next-ply bound at every
+node, and returns immediately when they cross. Manta clamps neither, which is
+why Step 6.5.2 found two proven-mate positions consuming `47.5%` of the
+depth-ten corpus. Note that the reference's root-level early exit on a found
+mate lives in its time-management block and does not apply to a fixed-depth
+search, so the node collapse observed at fixed depth is attributable to the
+node-level clamp alone.
+
+**A shallow singular exclusion horizon.** The reference searches its exclusion
+probe at roughly half the new depth. Manta searches it two plies below the
+launching node, which is why Step 6.5.2 measured `3,009` exclusion searches
+converting `9.5%` of attempts into extensions while costing `5.1%` of the tree.
 
 ## Mechanism inventory
 

@@ -93,8 +93,34 @@ groups retain strict timeout handling.
 
 ## Phase 6.5 search evidence
 
+`MAN-S31` ran its registered ADR-0066 gate on the separate 5950X and was
+**rejected by maintainer judgment** at 7,958 games: `-3.08 +/- 7.63` nElo
+(`-2.14 +/- 5.30` Elo), LLR `-1.60` of `-2.94`, LOS `21.43%`, no timeout,
+crash, disconnect, illegal move or affinity fault. The run was `54.5%` of the
+way to a formal H0 and its trajectory was monotone; the maintainer stopped
+rather than spend the remaining hours confirming a verdict already evident.
+This is an early stop toward the boundary the run was already approaching, not
+a waiver of an adverse result, and it leaves production untouched. The switch
+remains archived default-on.
+
+The result is informative rather than merely negative. Deterministic
+qualification had measured a `56.53%` smaller depth-ten tree, or `35.34%`
+excluding the two mate-heavy corpus positions, at unchanged strength within
+the interval. A structural comparison against the pinned Stockfish search
+reference (`docs/SEARCH_COVERAGE.md`) identifies the confound: Manta grants
+checking moves three compounding privileges — a blanket extension, exemption
+from every late-move reduction and exemption from every shallow prune cause —
+and the reference grants none of them. `MAN-S31` withdrew one and kept two, so
+forcing lines became shallower without becoming cheaper per node. The remaining
+scope moved to Step 6.5.4 rather than being retried in isolation.
+
+Read together with `MAN-S30`, which cut the tree `3%` and gained `+13.19` nElo,
+these two runs say node reduction at a fixed time control does not convert to
+strength on its own.
+
 | ID | Candidate and hypothesis | Registered gate | Result |
 |---|---|---|---|
+| `MAN-S31` | Phase-6.5.3 non-root blanket check-extension ablation against production MAN-S30. Spending one extra ply at every checked interior node costs more time than its tactical protection earns. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `6533108` | Rejected by maintainer judgment after 7,958 games at `-3.08 +/- 7.63` nElo, LLR `-1.60`; archived default-off, scope transferred to Step 6.5.4 |
 | `MAN-S30` | Phase-6.5.1b live-history staged picker against production MAN-S29. Delaying non-tactical quiet generation and consuming descendant-completed worker-local history will reduce abandoned generation and improve time-controlled play without changing chess or evidence authority. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `1445075129` | Accepted H1 after 8,752 games at `+13.19 +/- 7.28` nElo (`+8.93 +/- 4.93` Elo, LLR `2.95`); promoted to production |
 
 `MAN-S30` ran on the separate designated Ryzen 9 5950X from candidate
@@ -151,6 +177,7 @@ must stay otherwise idle for the registered rule to hold.
 | `MAN-E21` shelter-moderated king danger | H0 at `-9.31 +/- 7.98` nElo | A materially different coupling is derived |
 | `MAN-R01` root-uncertainty time consumer | H0; disabled | Root evidence or time architecture changes materially |
 | `MAN-R02` stability-gated aspiration | 16,000-game cap without H1; disabled | Evaluator/search head changes make the old gate stale |
+| `MAN-S31` isolated check-extension removal | Rejected by judgment on an adverse trajectory | Only inside a Step-6.5.4 candidate that also reduces and prunes checking moves |
 | Colosseum | Parked by maintainer direction | The maintainer explicitly authorizes re-evaluation |
 | Additional classical HCE fitting | Closed in the normal path | Serious NNUE retries fail and Phase 11 is explicitly entered |
 | Additional pre-NNUE search/time SPSA | Closed | Phase-9 co-adaptation freezes new interacting consumers and justifies a fit |

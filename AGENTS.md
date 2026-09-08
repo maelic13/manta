@@ -182,9 +182,20 @@ the ordinary-position gap is nearer `5x` than the Step-6.5.0 aggregate;
 LMR reaches `3.3%` of searched main moves and re-searches `0.71%`; a
 16/64/256 MiB sweep moves the tree `0.70%` and first-move cutoffs reach
 `92.5%`, retiring table pressure and move ordering as explanations.
-Mate-distance pruning is now Step 6.5.5's highest-priority candidate and needs
-its own registered 1T gate. Step 6.5.3 is next. Stop before Phase 7; its first step
-requires separate maintainer approval.
+Step 6.5.3 is closed. Its `MAN-S31` candidate removed non-root blanket check
+extension and cut the depth-ten tree 56.53%, or 35.34% excluding the two
+mate-heavy positions, but the maintainer rejected it by judgment at 7,958 games
+and `-3.08 +/- 7.63` nElo with no anomaly. A structural comparison against the
+pinned Stockfish search reference, recorded in `docs/SEARCH_COVERAGE.md`,
+explains the result: Manta grants checking moves a blanket extension, exemption
+from every reduction and exemption from every shallow prune, the reference
+grants none of the three, and MAN-S31 withdrew one of them. The remaining
+checking-move and evasion scope transferred to Step 6.5.4, which owns the
+reduction surface. Two candidates now agree that node reduction at a fixed time
+control does not convert to strength by itself. Step 6.5.5's head-independent
+half — mate distance pruning, then the coupled null reduction/verification pair
+— is authorized before Step 6.5.4. Production remains MAN-S30 at `775,451`.
+Stop before Phase 7; its first step requires separate maintainer approval.
 
 ## Product objective
 
@@ -257,11 +268,18 @@ The designated game-testing, tuning and final cross-engine comparison host is
 the separate Ryzen 9 5950X, not the development workspace computer. Do not
 start long jobs as a coding agent. Prepare exact candidate/baseline source and
 binary identities, hashes, toolchain/options, a setup-only command, prospective
-pair/game cap, pilot-measured pair rate, expected and worst-case wall time,
+pair/game cap, qualified retained pair rate, expected and worst-case wall time,
 storage estimate, checkpoint/resume path and stop rule for the user to run.
 Require the returned manifest, log, PGN and checkpoint before recording a
 verdict. Do not overlap it with data generation or other timed work on that
 machine.
+
+The Rarog/Basilisk-derived fastchess SPRT harness, its 5950X placement, book,
+time control, adjudication and anomaly checks are battle-tested and trusted.
+Do not require a pilot before an ordinary Manta SPRT while those boundaries are
+unchanged. Reuse retained rate/storage evidence and proceed directly from a
+successful setup-only check to the registered final SPRT. A pilot is warranted
+only when an operational boundary changes and specifically needs qualification.
 
 Colosseum is parked until the maintainer explicitly authorizes trying it again.
 Until then, use Manta's checked Rarog-derived fastchess bridge for matches and

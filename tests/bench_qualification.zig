@@ -107,7 +107,12 @@ test "optimized safety and production modes preserve the accepted MAN-S30 finger
     var ordering: manta.search.ordering.State = .{};
     var control: manta.search.types.NeverStop = .{};
     var clock = IncrementingClock{};
-    const report = bench.run(
+    // This snapshot names the accepted production features explicitly, even
+    // when the executable under qualification selects the MAN-S31 arm.
+    // Artifact-selected bench behavior is checked separately by repeat tests
+    // and the prospectively frozen candidate report; do not relabel MAN-S30.
+    const report = bench.runWithFeatures(
+        .{},
         .{ .depth = bench.default_depth },
         &clock,
         &control,

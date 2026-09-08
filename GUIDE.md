@@ -121,16 +121,22 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   `1.873`; two proven-mate positions are `47.5%` of the depth-ten corpus because
   mate-distance pruning is missing; LMR reaches `3.3%` of searched main moves
   and re-searches `0.71%`; the 16/64/256 MiB sweep moves the tree `0.70%`.
-- [ ] **6.5.3 — Forcing-line selectivity:** Test blanket check extension,
-  checking-move protection and evasion reductions as separately gated playing
-  candidates. Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+- [x] **6.5.3 — Forcing-line selectivity:** Closed. MAN-S31 removed non-root
+  blanket check extension, cut the depth-ten tree 56.53% (35.34% excluding the
+  mate positions) and was rejected by judgment at 7,958 games and
+  `-3.08 +/- 7.63` nElo. Manta gives checks three compounding privileges and
+  MAN-S31 withdrew one; the remaining checking-move and evasion scope transfers
+  to 6.5.4.
 - [ ] **6.5.4 — Aspiration-aware contextual LMR:** Build a dependency-complete,
-  non-saturating reduction policy and give it one remote-host SPRT. Model:
-  GPT-6 Astra XHigh; GPT-5.6 Sol Max fallback.
-- [ ] **6.5.5 — Forward proof and pruning efficiency:** Gate mate-distance
-  pruning first, then the singular exclusion horizon, null verification, ProbCut
-  and prospective-depth LMP/futility/SEE work, each separately.
-  Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+  non-saturating reduction policy that also carries the transferred check and
+  evasion scope, computes the prospective reduction before shallow pruning
+  consumes it, and gets one remote-host SPRT. Model: GPT-6 Astra XHigh;
+  GPT-5.6 Sol Max fallback.
+- [ ] **6.5.5 — Forward proof and pruning efficiency:** Head-independent half
+  authorized before 6.5.4: mate-distance pruning, then the coupled null-move
+  reduction/verification pair. Head-dependent half after it: prospective-depth
+  LMP/futility/SEE and ProbCut, with the singular exclusion horizon in either
+  order. Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
 - [ ] **6.5.6 — TT and qsearch efficiency:** Measure replacement/cutoff yield
   and remove unnecessary non-check qsearch move generation before considering
   broader TT changes. Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.

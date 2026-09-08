@@ -211,6 +211,9 @@ pub const Features = struct {
     search_context: bool = true,
     depth_authority: bool = true,
     check_extension: bool = true,
+    /// MAN-S31 disables only the non-root blanket increment. Root check
+    /// extension and the existing whole-producer ablation remain independent.
+    nonroot_check_extension: bool = true,
     internal_iterative_reduction: bool = true,
     singular_extension: bool = true,
     /// Step-6.0.3 stability-gated root aspiration candidate. It consumes only
@@ -341,6 +344,7 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     try std.testing.expect(features.search_context);
     try std.testing.expect(features.depth_authority);
     try std.testing.expect(features.check_extension);
+    try std.testing.expect(features.nonroot_check_extension);
     try std.testing.expect(features.internal_iterative_reduction);
     try std.testing.expect(features.singular_extension);
     try std.testing.expect(features.null_move);
