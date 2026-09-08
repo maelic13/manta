@@ -247,6 +247,34 @@ test "MAN-S32 mate-distance pruning builds on the current production head" {
     try std.testing.expectEqual(@as(u64, 642_394), report.fingerprint_nodes);
 }
 
+test "MAN-S33 singular exclusion horizon builds on the current production head" {
+    if (builtin.mode == .Debug) return;
+    // SCORE-011/QUAL-015: this frozen diagnostic proves the default-off switch
+    // selects the qualified candidate tree on MAN-S30. It is not strength
+    // evidence; only the prospectively registered time-controlled games decide
+    // whether the changed singular decisions are useful.
+    var hash = try manta.engine.runtime.HashResource.init(
+        std.testing.allocator,
+        bench.hash_bytes / (1024 * 1024),
+    );
+    defer hash.deinit(std.testing.allocator);
+    var thread = manta.search.types.ThreadState.init();
+    var ordering: manta.search.ordering.State = .{};
+    var control: manta.search.types.NeverStop = .{};
+    var clock = IncrementingClock{};
+    const report = bench.runWithFeatures(
+        .{ .singular_exclusion_horizon = true },
+        .{ .depth = bench.default_depth },
+        &clock,
+        &control,
+        &thread,
+        &hash.table,
+        &ordering,
+    );
+    try std.testing.expect(!report.cancelled and !report.failed);
+    try std.testing.expectEqual(@as(u64, 773_779), report.fingerprint_nodes);
+}
+
 test "MAN-R02 stability aspiration builds on the MAN-S29 picker it was qualified under" {
     if (builtin.mode == .Debug) return;
     // This exact total proves that the default-off candidate is live and

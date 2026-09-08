@@ -10,7 +10,8 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   evaluation, deterministic one-thread search, Syzygy, mature clock control and
   main-authoritative lazy SMP.
 - Phases 0–6 and the Manta 1.0 release baseline are complete. Targeted
-  pre-NNUE performance Phase 6.5 is current; Phase 7 has not started.
+  pre-NNUE performance Phase 6.5 is current; Phase 7 remains blocked until the
+  whole Phase 6.5 candidate and evidence sequence is complete.
 - Production is the MAN-E19 HCE, MAN-S29 search fit, MAN-T05 clock fit and
   MAN-S30 live-history move ordering. The deterministic one-thread depth-6
   fingerprint is `775,451` nodes.
@@ -133,10 +134,13 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   consumes it, and gets one remote-host SPRT. Model: GPT-6 Astra XHigh;
   GPT-5.6 Sol Max fallback.
 - [ ] **6.5.5 — Forward proof and pruning efficiency:** Head-independent half
-  authorized before 6.5.4: mate-distance pruning, then the coupled null-move
-  reduction/verification pair. Head-dependent half after it: prospective-depth
-  LMP/futility/SEE and ProbCut, with the singular exclusion horizon in either
-  order. Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+  authorized before 6.5.4. MAN-S32 mate-distance pruning is implemented and
+  parked default-off for a later below-resolution bundle. MAN-S33 singular-
+  exclusion horizon is implemented, locally qualified and prospectively
+  registered as the current standalone candidate; the coupled null-move
+  reduction/verification candidate follows its verdict. After 6.5.4, test
+  prospective-depth LMP/futility/SEE and ProbCut separately. Model: GPT-6 Astra
+  High; GPT-5.6 Sol XHigh fallback.
 - [ ] **6.5.6 — TT and qsearch efficiency:** Measure replacement/cutoff yield
   and remove unnecessary non-check qsearch move generation before considering
   broader TT changes. Model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.

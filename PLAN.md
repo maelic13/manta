@@ -8,7 +8,9 @@ measurement verdicts.
 ## Current state
 
 Manta 1.0.0 is the release baseline. Phases 0–6 are closed, targeted pre-NNUE
-performance Phase 6.5 is current and Phase 7 has not started. The production
+performance Phase 6.5 is current and Phase 7 has not started. Phase 7 remains
+blocked until all of Phase 6.5, including every retained candidate and evidence
+closeout below, is complete. The production
 engine combines MAN-E19 classical evaluation, MAN-S29 search parameters and
 MAN-T05 integrated clock parameters, MAN-S30 live-history move ordering.
 One-thread depth-6 bench is `775,451` nodes. The release configuration supports portable 64-bit Windows x86-64,
@@ -549,20 +551,27 @@ Recommended model: GPT-6 Astra XHigh; GPT-5.6 Sol Max fallback.
 
 #### 6.5.5 — Forward proof and pruning efficiency
 
-This step has two halves with different dependencies, and only the second waits
-for the Step-6.5.4 head to freeze.
+This step has a head-independent sequence before Step 6.5.4 and a head-dependent
+sequence after it. Every idea below is implemented and measured behind its own
+switch. A standalone candidate receives its own prospective 1T SPRT whenever
+its ordinary-position effect is material. Components may share one gate only
+after deterministic evidence shows that each is individually below affordable
+resolution or that intermediate states violate the mechanism contract.
 
-**Head-independent, authorized now.** Mate distance pruning and the null-move
-reduction/verification pair do not consume the prospective reduced depth and do
-not interact with reduction breadth, so they may be gated before Step 6.5.4.
-Run them first: they are small, they are measured, and they keep the phase
-moving while the reduction rebuild is prepared.
+**Head-independent, authorized before 6.5.4, in this order:**
 
-**Head-dependent, after Step 6.5.4.** Whether late move count, futility and
-static-exchange eligibility consume the final prospective depth consistently
-can only be asked once that depth exists, as can ProbCut's interaction with it.
-The singular exclusion horizon sits between the two and may be gated in either
-order.
+1. mate-distance pruning (`MAN-S32`), retained default-off for a later
+   below-resolution bundle rather than tested alone;
+2. singular-exclusion horizon (`MAN-S33`), tested independently because its
+   effect is broad and material; and
+3. deeper null reduction plus verification scope, implemented as one coupled
+   candidate with independent component switches and one gate because either
+   half alone is misleading or unsafe.
+
+**Head-dependent, after Step 6.5.4:** independently test whether late-move
+count, futility and static-exchange eligibility consume the final prospective
+depth consistently, then ProbCut TT reuse, tactical move cap and qsearch-to-main
+conversion. Do not reopen the complete rejected MAN-S20 bundle.
 
 Step 6.5.2 promoted **mate distance pruning** to the head of this step. Manta
 clamps no search window against the mate band, so a proven mate neither stops
@@ -571,9 +580,7 @@ two proven-mate positions consume `47.5%` of the depth-ten corpus. Clamp alpha
 and beta against `matedIn(ply)` and `mateIn(ply + 1)` at node entry and let
 iterative deepening stop when the remaining horizon cannot improve a found
 mate. Legal PV, mate-distance normalization through the transposition table,
-terminal and draw precedence and root reporting all remain fixed. This changes
-the tree and the fingerprint, so it is a playing candidate with its own
-registered remote-host 1T SPRT.
+terminal and draw precedence and root reporting all remain fixed.
 
 Implementation checkpoint — `MAN-S32` is complete and default-off behind
 `-Dmate-distance-pruning`. It returns a proven bound at non-root main-search
@@ -595,13 +602,27 @@ registered `[1,5]` gate can afford. A solo SPRT would exhaust its 16,000-game
 cap without a verdict, which is the failure mode that consumed `MAN-S21` and
 `MAN-R02`.
 
-It therefore becomes one component of the head-independent bundle below, with
-its own switch retained for ablation.
+It remains a default-off component with its own switch. It may enter a later
+bundle only with another independently measured below-resolution component;
+it is not silently attached to a material candidate.
 
-The exclusion horizon is the second bounded question: singular verification
-searches at `depth - 2` convert `9.5%` of `3,009` attempts into extensions at
-`5.1%` of the depth-ten tree, so a shallower horizon may keep the extensions
-and drop most of the cost.
+The second bounded question is the **singular-exclusion horizon**. Production
+searches at `depth - 2`, converting `285` of `3,009` attempts into extensions
+while the exclusion subtrees cover `5.1%` of the depth-ten tree. `MAN-S33`
+replaces only that horizon with `ceil(depth / 2)`, retaining at least three
+plies at the first eligible node. The legal ordinary TT move, threshold,
+excluded-move identity, null disablement, fail-low requirement and extension
+consumer remain unchanged.
+
+Implementation checkpoint — `MAN-S33` is complete, locally qualified and
+default-off behind `-Dsingular-exclusion-horizon`. Its depth-six fingerprint is
+`773,779` against production `775,451`. At depth ten it searches `24,335,279`
+nodes against
+`26,778,901` (−9.13%); all forty positions change, with 25 smaller and 15
+larger. It retains `2,853/3,009` attempts and `266/285` extensions, and its
+conversion rate stays `9.32%` against `9.47%`. This is a broad playing change,
+not a below-resolution bundle component, so one standalone registered 1T SPRT
+must decide it after the complete deterministic gate.
 
 The third is the null-move reduction and verification pair, which the reference
 comparison shows are one coupled mechanism rather than two. Manta reduces the
@@ -621,12 +642,11 @@ consecutive nulls, pawn-only and zugzwang-prone material, decisive scores and
 shallow horizons retain exclusions or verification unless a new contract proves
 otherwise. Null evidence remains a typed lower-bound proof.
 
-Then measure ProbCut TT reuse, tactical move cap and qsearch-to-main conversion,
-and whether LMP, futility and SEE consume the final prospective depth from
-6.5.4 consistently. Do not reopen the complete rejected MAN-S20 bundle. Each
-new producer/consumer relation is independently switched, tested for legal PV,
-mate/draw, zugzwang, bound/provenance, TT and restoration semantics, and given
-its own remote-host 1T SPRT before promotion.
+Every candidate is tested for legal PV, mate/draw, zugzwang, bound/provenance,
+TT and restoration semantics. Node and conversion measurements decide scope
+and diagnose mechanisms; only the prospectively registered remote-host 1T SPRT
+decides promotion. Step 6.5.5 closes only after the pre-6.5.4 sequence and the
+post-6.5.4 consumers have explicit accepted, rejected or parked verdicts.
 
 Recommended model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
 

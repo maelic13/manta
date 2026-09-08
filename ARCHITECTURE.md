@@ -615,7 +615,18 @@ checker-to-depth increment at non-root nodes; checked-root extension, legal
 evasion generation, in-check qsearch and bound/provenance ownership remain
 unchanged. Runtime, bench and diagnostic entry points select the same
 compile-time arm. No new state, allocation or cross-worker communication is
-introduced. Production keeps blanket extension until clean registered 1T H1.
+introduced. MAN-S31 was rejected by maintainer judgment without anomaly, so
+production keeps blanket extension and the remaining check/evasion relation is
+owned by Step 6.5.4.
+
+ADR-0067/`MAN-S33` exposes a default-off singular-exclusion-horizon candidate
+through `-Dsingular-exclusion-horizon=true`. It changes only the same-position
+probe from the accepted depth-minus-two horizon to a monotonic half-depth
+horizon with at least three searched plies. The legal ordinary TT move and its
+threshold still produce the question; the exclusion fail-low alone grants the
+extension. Exclusion state, null disablement, TT/PV/history isolation, board and
+observer restoration, allocation behavior and worker ownership are unchanged.
+Its material ordinary-position tree change requires an independent 1T SPRT.
 
 The accepted ADR-0023/`MAN-S04` mechanism gives the fourth and later
 ordered quiet non-checking moves at depth four or greater a one-ply-reduced

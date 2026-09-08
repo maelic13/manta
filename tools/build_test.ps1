@@ -101,12 +101,13 @@
     Keep production non-root check extension. Pass
     -NonrootCheckExtension:$false for the archived MAN-S31 candidate.
 
-    -MateDistancePruning enables the default-off Step-6.5.5 MAN-S32 candidate.
-    It changes no UCI surface.
-
 .PARAMETER MateDistancePruning
     Build the Step-6.5.5 MAN-S32 mate-distance-pruning candidate arm. It
     defaults off; the production arm omits the switch.
+
+.PARAMETER SingularExclusionHorizon
+    Build the default-off Step-6.5.5 singular-exclusion-horizon candidate arm.
+    It changes only the depth of the same-position exclusion probe.
 
 .PARAMETER BenchDepth
     Depth for the verification bench. Default 6 (the manta-search-bench-v1
@@ -146,6 +147,7 @@ param(
     [switch]$LiveHistoryStaging,
     [switch]$NonrootCheckExtension,
     [switch]$MateDistancePruning,
+    [switch]$SingularExclusionHorizon,
     [switch]$BuildOnly,
     [int]$BenchDepth = 6,
     [string]$TestEnginesDir = "$PSScriptRoot\test_engines",
@@ -206,6 +208,7 @@ function Write-EngineManifest {
         [Parameter(Mandatory)][bool]$LiveHistoryStaging,
         [Parameter(Mandatory)][bool]$NonrootCheckExtension,
         [Parameter(Mandatory)][bool]$MateDistancePruning,
+        [Parameter(Mandatory)][bool]$SingularExclusionHorizon,
         [switch]$SkipBench
     )
 
@@ -230,7 +233,7 @@ function Write-EngineManifest {
     }
 
     $manifest = [ordered]@{
-        schema_version     = 8
+        schema_version     = 9
         engine             = $binary.Name
         binary_sha256      = $binaryHash
         binary_size_bytes  = $binary.Length
@@ -247,6 +250,7 @@ function Write-EngineManifest {
         live_history_staging = $LiveHistoryStaging
         nonroot_check_extension = $NonrootCheckExtension
         mate_distance_pruning = $MateDistancePruning
+        singular_exclusion_horizon = $SingularExclusionHorizon
         search_spsa_bake    = $false
         git_sha            = $sha
         git_tree           = $tree
@@ -295,7 +299,8 @@ try {
     $nonrootCheckExtensionText = $nonrootCheckExtensionEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dnonroot-check-extension=$nonrootCheckExtensionText"
     if ($MateDistancePruning) { $buildArgs += "-Dmate-distance-pruning=true" }
-    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($MateDistancePruning) { '-mate-distance-pruning' } else { '' })"
+    if ($SingularExclusionHorizon) { $buildArgs += "-Dsingular-exclusion-horizon=true" }
+    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($MateDistancePruning) { '-mate-distance-pruning' } else { '' })$(if ($SingularExclusionHorizon) { '-singular-exclusion-horizon' } else { '' })"
 
     Write-Host ""
     Write-Host "Building Manta ($flavor) - suffix: $Suffix"
@@ -330,7 +335,8 @@ try {
         -StabilityAspiration ([bool]$StabilityAspiration) `
         -LiveHistoryStaging $liveHistoryStagingEnabled `
         -NonrootCheckExtension $nonrootCheckExtensionEnabled `
-        -MateDistancePruning ([bool]$MateDistancePruning) -SkipBench:$BuildOnly
+        -MateDistancePruning ([bool]$MateDistancePruning) `
+        -SingularExclusionHorizon ([bool]$SingularExclusionHorizon) -SkipBench:$BuildOnly
     Write-Host ""
     Write-Host "Done: $dest"
     Write-Host ""

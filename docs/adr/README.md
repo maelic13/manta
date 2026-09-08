@@ -73,6 +73,7 @@ close their owning evidence steps. They are read with [`ARCHITECTURE.md`](../../
 | [0064](0064-lazy-smp-ownership.md) | Main-authoritative lazy SMP with worker-local search state and shared validated TT evidence |
 | [0065](0065-integrated-time-management.md) | Integrated optimum/maximum clock policy from completed-root, ponder and normalized SMP evidence |
 | [0066](0066-nonroot-check-extension-ablation.md) | Default-off non-root blanket check-extension ablation and registered MAN-S31 gate |
+| [0067](0067-forward-proof-efficiency-sequence.md) | Step-6.5.5 forward-proof sequence and standalone singular-exclusion-horizon candidate |
 
 An ADR records the accepted decision and its boundary, not implementation
 detail that still requires evidence. A later incompatible choice adds a new

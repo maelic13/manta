@@ -180,6 +180,7 @@ fn measure(
             .live_history_staging = search_build_options.live_history_staging,
             .nonroot_check_extension = search_build_options.nonroot_check_extension,
             .mate_distance_pruning = search_build_options.mate_distance_pruning,
+            .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
         },
         &position,
         harness.binding(),

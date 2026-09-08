@@ -1232,8 +1232,10 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
     const tt_move = try chess.notation.parseLegal(&seed_position, "c1d1");
 
     var storage: [256]search.tt.Cluster = undefined;
+    var candidate_storage: [256]search.tt.Cluster = undefined;
     var disabled_storage: [256]search.tt.Cluster = undefined;
     var table = search.tt.Table.init(&storage);
+    var candidate_table = search.tt.Table.init(&candidate_storage);
     var disabled_table = search.tt.Table.init(&disabled_storage);
     _ = table.store(
         seed_position.current.key,
@@ -1255,18 +1257,34 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
         .full_search,
         1,
     );
+    _ = candidate_table.store(
+        seed_position.current.key,
+        tt_move,
+        manta.score.Score.fromOrdinary(1_000).?,
+        null,
+        5,
+        .exact,
+        .full_search,
+        1,
+    );
 
     var root_state: chess.position.PositionState = .{};
+    var candidate_root_state: chess.position.PositionState = .{};
     var disabled_root_state: chess.position.PositionState = .{};
     var position = try chess.fen.parse(fen_text, &root_state);
+    var candidate_position = try chess.fen.parse(fen_text, &candidate_root_state);
     var disabled_position = try chess.fen.parse(fen_text, &disabled_root_state);
     const only = try chess.notation.parseLegal(&position, "a1a2");
+    const candidate_only = try chess.notation.parseLegal(&candidate_position, "a1a2");
     const disabled_only = try chess.notation.parseLegal(&disabled_position, "a1a2");
     var harness: Harness = .{};
+    var candidate_harness: Harness = .{};
     var disabled_harness: Harness = .{};
     var counters: search.diagnostics.Counters = .{};
+    var candidate_counters: search.diagnostics.Counters = .{};
     var disabled_counters: search.diagnostics.Counters = .{};
     var control: search.types.NeverStop = .{};
+    var candidate_control: search.types.NeverStop = .{};
     var disabled_control: search.types.NeverStop = .{};
     const result = search.baseline.runRestrictedWithFeatures(
         .{ .shallow_selectivity = false },
@@ -1279,6 +1297,18 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
         null,
         &counters,
         &.{only},
+    );
+    const candidate = search.baseline.runRestrictedWithFeatures(
+        .{ .singular_exclusion_horizon = true, .shallow_selectivity = false },
+        &candidate_position,
+        candidate_harness.binding(),
+        .{ .depth = 7 },
+        &candidate_control,
+        &candidate_harness.thread,
+        &candidate_table,
+        null,
+        &candidate_counters,
+        &.{candidate_only},
     );
     const disabled = search.baseline.runRestrictedWithFeatures(
         .{ .singular_extension = false, .shallow_selectivity = false },
@@ -1305,12 +1335,23 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
         counters.tt_stores_by_producer[@intFromEnum(search.types.Provenance.exclusion_search)],
     );
     try std.testing.expectEqual(@as(u16, 7), result.completed.?.depth);
+    try std.testing.expect(candidate_counters.singular_attempts != 0);
+    try std.testing.expect(candidate_counters.singular_extensions != 0);
+    try std.testing.expectEqual(candidate_counters.singular_attempts, candidate_counters.exclusion_moves_skipped);
+    try std.testing.expectEqual(
+        @as(u64, 0),
+        candidate_counters.tt_stores_by_producer[@intFromEnum(search.types.Provenance.exclusion_search)],
+    );
+    try std.testing.expectEqual(@as(u16, 7), candidate.completed.?.depth);
+    try std.testing.expect(candidate.nodes < result.nodes);
     try std.testing.expectEqual(@as(u64, 0), disabled_counters.singular_attempts);
     try std.testing.expectEqual(@as(u64, 0), disabled_counters.singular_extensions);
     try std.testing.expectEqual(@as(u16, 7), disabled.completed.?.depth);
     try expectLegalPv(fen_text, result.completed.?.pv.slice());
+    try expectLegalPv(fen_text, candidate.completed.?.pv.slice());
     try expectLegalPv(fen_text, disabled.completed.?.pv.slice());
     try std.testing.expect(chess.state.isConsistent(&position));
+    try std.testing.expect(chess.state.isConsistent(&candidate_position));
     try std.testing.expect(chess.state.isConsistent(&disabled_position));
 }
 

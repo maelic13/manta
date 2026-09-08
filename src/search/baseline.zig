@@ -994,6 +994,7 @@ fn negamaxNode(
             // per-ply path facts are saved and restored around it exactly like
             // the ply context itself.
             context.observer.exclusionEnter(ply);
+            const exclusion_depth = singularExclusionDepth(features, depth);
             const alternatives = negamax(
                 features,
                 false,
@@ -1001,7 +1002,7 @@ fn negamaxNode(
                 value,
                 binding,
                 control,
-                types.DepthIntent.reduced(depth, 2),
+                types.DepthIntent.reduced(depth, depth - exclusion_depth),
                 ply,
                 threshold - 1,
                 threshold,
@@ -2615,6 +2616,34 @@ fn singularTableProvenance(producer: types.Provenance) bool {
 fn singularThreshold(tt_value: score.Score) i32 {
     std.debug.assert(tt_value.isOrdinary());
     return @max(-score.ordinary_max_raw, tt_value.raw() - score.units_per_pawn);
+}
+
+fn singularExclusionDepth(comptime features: types.Features, depth: u16) u16 {
+    std.debug.assert(depth >= 6);
+    if (!features.singular_exclusion_horizon) return depth - 2;
+    // Half of the launching horizon preserves at least three plies at the
+    // first eligible node and grows monotonically every other ply. The probe
+    // remains deep enough to search alternatives rather than treating their
+    // absence as evidence, while no longer shadowing the ordinary child
+    // horizon as depth grows.
+    return (depth + 1) / 2;
+}
+
+test "singular exclusion horizon is bounded and monotonic" {
+    // SCORE-011/QUAL-014: the candidate changes only how much work establishes
+    // exclusion fail-low. It always retains a real multi-ply search, never
+    // exceeds the accepted depth-minus-two horizon, and cannot become shallower
+    // when the launching search becomes deeper.
+    var previous: u16 = 0;
+    for (6..32) |raw_depth| {
+        const depth: u16 = @intCast(raw_depth);
+        try std.testing.expectEqual(depth - 2, singularExclusionDepth(.{}, depth));
+        const candidate = singularExclusionDepth(.{ .singular_exclusion_horizon = true }, depth);
+        try std.testing.expect(candidate >= 3);
+        try std.testing.expect(candidate <= depth - 2);
+        try std.testing.expect(candidate >= previous);
+        previous = candidate;
+    }
 }
 
 fn singularExtensionPlies(

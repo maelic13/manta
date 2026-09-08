@@ -265,6 +265,11 @@ pub const Features = struct {
     /// mate still sufferable, the window describes no reachable score and the
     /// node returns the proven bound instead of searching.
     mate_distance_pruning: bool = false,
+    /// Step-6.5.5 singular-exclusion-horizon candidate. The same-position
+    /// search still excludes exactly the legal ordinary TT move and alone
+    /// decides whether that move extends; this switch only replaces the
+    /// historical depth-minus-two horizon with a bounded half-depth horizon.
+    singular_exclusion_horizon: bool = false,
     /// Accepted Step-6.5.1b playing head. Ordinary non-check interior nodes
     /// emit TT and good tactical moves before generating non-tactical quiets.
     /// The delayed quiet rank observes descendant-completed worker-local
@@ -392,6 +397,7 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     try std.testing.expect(!features.history_lmr);
     try std.testing.expect(!features.lmr_reply_feedback);
     try std.testing.expect(!features.mate_distance_pruning);
+    try std.testing.expect(!features.singular_exclusion_horizon);
     try std.testing.expect(!features.main_selectivity_sync);
     try std.testing.expect(!features.depth_authority_sync);
     try std.testing.expect(!features.razoring);

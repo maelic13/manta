@@ -177,8 +177,8 @@ freeze a source archive before transferring to the game host.
 
 The checked setup-only command passed, including tool/book hashes and the
 14-physical-core placement, and started no engine or game. Its displayed run
-directory is prospective, not evidence of an actual run. The MAN-S31 final
-SPRT and its returned evidence remain pending; Step 6.5.3 stays open.
+directory was prospective; the completed gate and final verdict are recorded
+below. Step 6.5.3 is closed.
 
 ## Traceability
 
