@@ -28,6 +28,11 @@ pub const Provenance = enum {
     speculative_cutoff,
     exclusion_search,
     tablebase,
+    /// Proved from mate distance alone: the node's window cannot contain any
+    /// reachable score, because a mate cannot be delivered sooner than the next
+    /// ply nor suffered sooner than this one. It carries a true bound and no
+    /// position knowledge, so it never gains ordinary search authority.
+    mate_distance,
 };
 
 pub const Evidence = struct {
@@ -254,6 +259,12 @@ pub const Features = struct {
     continuation_distance_2: bool = true,
     continuation_distance_4: bool = true,
     continuation_distance_6: bool = true,
+    /// Step-6.5.5 `MAN-S32` playing candidate, default off until its gate. At
+    /// non-root main-search nodes whose alpha already matches or beats the
+    /// fastest mate still reachable, or whose beta is at or below the fastest
+    /// mate still sufferable, the window describes no reachable score and the
+    /// node returns the proven bound instead of searching.
+    mate_distance_pruning: bool = false,
     /// Accepted Step-6.5.1b playing head. Ordinary non-check interior nodes
     /// emit TT and good tactical moves before generating non-tactical quiets.
     /// The delayed quiet rank observes descendant-completed worker-local
@@ -380,6 +391,7 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     try std.testing.expect(!features.balanced_history);
     try std.testing.expect(!features.history_lmr);
     try std.testing.expect(!features.lmr_reply_feedback);
+    try std.testing.expect(!features.mate_distance_pruning);
     try std.testing.expect(!features.main_selectivity_sync);
     try std.testing.expect(!features.depth_authority_sync);
     try std.testing.expect(!features.razoring);

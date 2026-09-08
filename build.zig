@@ -56,6 +56,11 @@ pub fn build(b: *std.Build) void {
         "nonroot-check-extension",
         "Retain blanket non-root check extension (false selects Step-6.5.3 MAN-S31)",
     ) orelse true;
+    const mate_distance_pruning = b.option(
+        bool,
+        "mate-distance-pruning",
+        "Enable the Step-6.5.5 MAN-S32 mate-distance pruning candidate in this build",
+    ) orelse false;
     if (b.option([]const u8, "target", "Cross-compilation is not supported") != null or
         b.option([]const u8, "cpu", "Use -Dprofile instead of raw CPU features") != null)
     {
@@ -102,6 +107,7 @@ pub fn build(b: *std.Build) void {
     search_build_options.addOption(bool, "stability_aspiration", stability_aspiration);
     search_build_options.addOption(bool, "live_history_staging", live_history_staging);
     search_build_options.addOption(bool, "nonroot_check_extension", nonroot_check_extension);
+    search_build_options.addOption(bool, "mate_distance_pruning", mate_distance_pruning);
     const search_build_options_module = search_build_options.createModule();
     const omit_frame_pointer: ?bool = if (optimize == .ReleaseFast and
         target.result.cpu.arch == .x86_64) true else null;
@@ -257,6 +263,7 @@ pub fn build(b: *std.Build) void {
     transcript_search_build_options.addOption(bool, "stability_aspiration", stability_aspiration);
     transcript_search_build_options.addOption(bool, "live_history_staging", live_history_staging);
     transcript_search_build_options.addOption(bool, "nonroot_check_extension", nonroot_check_extension);
+    transcript_search_build_options.addOption(bool, "mate_distance_pruning", mate_distance_pruning);
     const transcript_manta = b.addModule("manta-transcript", .{
         .root_source_file = b.path("src/manta.zig"),
         .target = target,

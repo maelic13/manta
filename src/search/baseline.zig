@@ -670,6 +670,13 @@ fn negamaxNode(
             active_depth,
         );
 
+    if (comptime features.mate_distance_pruning) {
+        if (ply != 0) {
+            if (mateDistanceBound(ply, alpha_initial, beta)) |proof|
+                return resolved(proof, active_depth);
+        }
+    }
+
     const table_evidence = if (exclusion_node)
         TableEvidence{}
     else
@@ -2485,6 +2492,8 @@ fn probCutTableDecision(record: ?tt.Record, depth: u16, threshold: i32) ProbCutT
 fn probCutTableProvenance(producer: types.Provenance) bool {
     return switch (producer) {
         .qsearch_move, .pvs_probe, .full_search, .tt_exact, .tt_bound, .probcut => true,
+        // Mate-distance evidence proves nothing about a tactical threshold.
+        .mate_distance,
         .terminal,
         .static_eval,
         .stand_pat,
@@ -2583,6 +2592,9 @@ fn singularExtensionEligibility(
 fn singularTableProvenance(producer: types.Provenance) bool {
     return switch (producer) {
         .full_search, .pvs_probe => true,
+        // Mate-distance evidence is a window proof, never a searched move, so
+        // it can never establish that one move is singular.
+        .mate_distance,
         .terminal,
         .static_eval,
         .stand_pat,
@@ -2881,6 +2893,38 @@ fn synchronizedLateMoveReduction(
 /// that resets the clock, or to establish that none exists.
 const tt_rule_fifty_guard_clock: u16 = 90;
 
+/// Step-6.5.5 `MAN-S32`. Mate distance is measured in plies from the root, so a
+/// node at `ply` can do no better than mating on the next ply and no worse than
+/// being mated on this one. Any window lying entirely outside
+/// `[matedIn(ply), mateIn(ply + 1)]` therefore describes outcomes the rules of
+/// chess cannot produce, and the node can return a proven bound instead of
+/// searching for a score it already knows is unreachable.
+///
+/// Only the two crossing cases are implemented, not a window clamp carried
+/// through the node. For a zero window the clamp is exactly equivalent: raising
+/// alpha above its own value already reaches beta, and lowering beta below its
+/// own value already reaches alpha, so any clamp that would change the window
+/// also crosses it. A principal node with a wide window could additionally be
+/// searched with a tightened window; that part is deliberately omitted so the
+/// zero-window contract asserted at node entry stays intact.
+///
+/// The returned evidence is a fact about ply, not about the position, and both
+/// facts survive the transposition table's distance-relative normalization: an
+/// upper bound of `mateIn(ply + 1)` normalizes to "no mate faster than one ply
+/// from here" and a lower bound of `matedIn(ply)` to "not already mated".
+fn mateDistanceBound(ply: usize, alpha: i32, beta: i32) ?NodeValue {
+    const fastest_mate = (score.Score.mateIn(ply + 1) orelse return null).raw();
+    const fastest_loss = (score.Score.matedIn(ply) orelse return null).raw();
+    // Alpha already holds a mate at least as fast as anything reachable here,
+    // so nothing this node can find raises it.
+    if (alpha >= fastest_mate)
+        return .{ .raw = fastest_mate, .bound = .upper, .provenance = .mate_distance };
+    // Beta is at or below being mated immediately, which cannot be undercut.
+    if (fastest_loss >= beta)
+        return .{ .raw = fastest_loss, .bound = .lower, .provenance = .mate_distance };
+    return null;
+}
+
 fn tableDepth(provenance: types.Provenance, nominal_depth: u16, reduction: u16) u16 {
     std.debug.assert(reduction != 0);
     return if (provenance == .reduced_search) nominal_depth -| reduction else nominal_depth;
@@ -3077,7 +3121,9 @@ fn refinedStaticEval(raw: i32, table_record: ?tt.Record) i32 {
 fn searchedEvalProvenance(producer: types.Provenance) bool {
     return switch (producer) {
         .qsearch_move, .pvs_probe, .full_search, .tt_exact, .tt_bound, .reduced_search, .probcut => true,
-        .terminal, .static_eval, .stand_pat, .fallback, .null_move, .speculative_cutoff, .exclusion_search, .tablebase => false,
+        // Mate-distance evidence proves a bound from ply arithmetic and knows
+        // nothing about the position, so it can never refine an evaluation.
+        .terminal, .static_eval, .stand_pat, .fallback, .null_move, .speculative_cutoff, .exclusion_search, .tablebase, .mate_distance => false,
     };
 }
 
@@ -4057,6 +4103,69 @@ fn evidence(raw: i32, bound: types.Bound, provenance: types.Provenance) types.Ev
     const value = score.Score{ .raw_value = raw };
     std.debug.assert(value.isValid() and !value.isNone());
     return .{ .value = value, .bound = bound, .provenance = provenance };
+}
+
+test "mate-distance proof states only what the rules of chess guarantee" {
+    // Independent oracle: mate distance is counted in plies from the root, so
+    // at ply p the reachable band is exactly [matedIn(p), mateIn(p + 1)]. The
+    // asserted bounds are re-derived here from that definition rather than from
+    // the implementation's expressions.
+    const ply: usize = 7;
+    const fastest_mate = score.Score.mateIn(ply + 1).?.raw();
+    const fastest_loss = score.Score.matedIn(ply).?.raw();
+
+    // Alpha already holds a mate at least as fast as anything reachable here.
+    const above = mateDistanceBound(ply, fastest_mate, fastest_mate + 1).?;
+    try std.testing.expectEqual(types.Bound.upper, above.bound);
+    try std.testing.expectEqual(fastest_mate, above.raw);
+    try std.testing.expectEqual(types.Provenance.mate_distance, above.provenance);
+
+    // Beta sits at or below being mated on this very ply.
+    const below = mateDistanceBound(ply, fastest_loss - 1, fastest_loss).?;
+    try std.testing.expectEqual(types.Bound.lower, below.bound);
+    try std.testing.expectEqual(fastest_loss, below.raw);
+    try std.testing.expectEqual(types.Provenance.mate_distance, below.provenance);
+
+    // An ordinary window lies strictly inside the band and proves nothing.
+    try std.testing.expect(mateDistanceBound(ply, -50, 50) == null);
+    // One unit inside either edge is still reachable and must be searched.
+    try std.testing.expect(mateDistanceBound(ply, fastest_mate - 1, fastest_mate) == null);
+    try std.testing.expect(mateDistanceBound(ply, fastest_loss, fastest_loss + 1) == null);
+}
+
+test "mate-distance proof is exactly equivalent to a clamp on every zero window" {
+    // This is the property that licenses returning instead of carrying a
+    // clamped window through the node. For a zero window, any clamp that would
+    // change either edge also crosses them, so the omitted tightening can never
+    // have altered a searched zero-window node.
+    var ply: usize = 1;
+    while (ply < chess.types.max_ply - 1) : (ply += 37) {
+        const fastest_mate = score.Score.mateIn(ply + 1).?.raw();
+        const fastest_loss = score.Score.matedIn(ply).?.raw();
+        for ([_]i32{
+            fastest_loss - 2, fastest_loss - 1, fastest_loss,     fastest_loss + 1,
+            -300,             0,                300,              fastest_mate - 2,
+            fastest_mate - 1, fastest_mate,     fastest_mate + 1,
+        }) |alpha| {
+            const beta = alpha + 1;
+            const clamped_alpha = @max(alpha, fastest_loss);
+            const clamped_beta = @min(beta, fastest_mate);
+            const clamp_changed = clamped_alpha != alpha or clamped_beta != beta;
+            const proof = mateDistanceBound(ply, alpha, beta);
+            if (clamp_changed) try std.testing.expect(proof != null);
+            if (proof != null) try std.testing.expect(clamped_alpha >= clamped_beta);
+        }
+    }
+}
+
+test "mate-distance evidence never acquires ordinary search authority" {
+    // The proof knows the ply and nothing about the position, so it may not
+    // refine an evaluation, qualify a singular move or settle a ProbCut
+    // threshold. These filters are exhaustive switches, so a future provenance
+    // cannot silently default into any of them either.
+    try std.testing.expect(!searchedEvalProvenance(.mate_distance));
+    try std.testing.expect(!singularTableProvenance(.mate_distance));
+    try std.testing.expect(!probCutTableProvenance(.mate_distance));
 }
 
 comptime {

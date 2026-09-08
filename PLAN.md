@@ -575,6 +575,29 @@ terminal and draw precedence and root reporting all remain fixed. This changes
 the tree and the fingerprint, so it is a playing candidate with its own
 registered remote-host 1T SPRT.
 
+Implementation checkpoint — `MAN-S32` is complete and default-off behind
+`-Dmate-distance-pruning`. It returns a proven bound at non-root main-search
+nodes whose window lies outside the reachable mate band, and it carries a new
+`mate_distance` provenance that the singular, ProbCut and evaluation-refinement
+filters all reject, so the proof can never acquire ordinary search authority.
+Depth-six bench is `642,394` against production `775,451`.
+
+**The measurement says it must not be gated on its own.** Across the
+forty-position corpus at depth ten the candidate removes `41.70%` of nodes,
+but only thirteen positions change at all and the saving is almost entirely
+three positions that contain a proven mate: position 6 falls from `8,382,516`
+to `410`, position 30 by `66%` and position 9 by `18%`. Excluding the two
+dominant mate positions the corpus is `+0.59%`, and no other position moves by
+more than `0.11%`. This is the mechanism working exactly as derived — it fires
+only when alpha or beta already lies in the mate band — and it means the
+expected effect on ordinary game positions is far below the resolution the
+registered `[1,5]` gate can afford. A solo SPRT would exhaust its 16,000-game
+cap without a verdict, which is the failure mode that consumed `MAN-S21` and
+`MAN-R02`.
+
+It therefore becomes one component of the head-independent bundle below, with
+its own switch retained for ablation.
+
 The exclusion horizon is the second bounded question: singular verification
 searches at `depth - 2` convert `9.5%` of `3,009` attempts into extensions at
 `5.1%` of the depth-ten tree, so a shallower horizon may keep the extensions

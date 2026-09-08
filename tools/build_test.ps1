@@ -99,7 +99,14 @@
 
 .PARAMETER NonrootCheckExtension
     Keep production non-root check extension. Pass
-    -NonrootCheckExtension:$false for the default-off MAN-S31 candidate.
+    -NonrootCheckExtension:$false for the archived MAN-S31 candidate.
+
+    -MateDistancePruning enables the default-off Step-6.5.5 MAN-S32 candidate.
+    It changes no UCI surface.
+
+.PARAMETER MateDistancePruning
+    Build the Step-6.5.5 MAN-S32 mate-distance-pruning candidate arm. It
+    defaults off; the production arm omits the switch.
 
 .PARAMETER BenchDepth
     Depth for the verification bench. Default 6 (the manta-search-bench-v1
@@ -138,6 +145,7 @@ param(
     [switch]$StabilityAspiration,
     [switch]$LiveHistoryStaging,
     [switch]$NonrootCheckExtension,
+    [switch]$MateDistancePruning,
     [switch]$BuildOnly,
     [int]$BenchDepth = 6,
     [string]$TestEnginesDir = "$PSScriptRoot\test_engines",
@@ -197,6 +205,7 @@ function Write-EngineManifest {
         [Parameter(Mandatory)][bool]$StabilityAspiration,
         [Parameter(Mandatory)][bool]$LiveHistoryStaging,
         [Parameter(Mandatory)][bool]$NonrootCheckExtension,
+        [Parameter(Mandatory)][bool]$MateDistancePruning,
         [switch]$SkipBench
     )
 
@@ -237,6 +246,7 @@ function Write-EngineManifest {
         stability_aspiration = $StabilityAspiration
         live_history_staging = $LiveHistoryStaging
         nonroot_check_extension = $NonrootCheckExtension
+        mate_distance_pruning = $MateDistancePruning
         search_spsa_bake    = $false
         git_sha            = $sha
         git_tree           = $tree
@@ -284,7 +294,8 @@ try {
     $buildArgs += "-Dlive-history-staging=$liveHistoryStagingText"
     $nonrootCheckExtensionText = $nonrootCheckExtensionEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dnonroot-check-extension=$nonrootCheckExtensionText"
-    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })"
+    if ($MateDistancePruning) { $buildArgs += "-Dmate-distance-pruning=true" }
+    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($MateDistancePruning) { '-mate-distance-pruning' } else { '' })"
 
     Write-Host ""
     Write-Host "Building Manta ($flavor) - suffix: $Suffix"
@@ -318,7 +329,8 @@ try {
         -IntegratedTime $integratedTimeEnabled `
         -StabilityAspiration ([bool]$StabilityAspiration) `
         -LiveHistoryStaging $liveHistoryStagingEnabled `
-        -NonrootCheckExtension $nonrootCheckExtensionEnabled -SkipBench:$BuildOnly
+        -NonrootCheckExtension $nonrootCheckExtensionEnabled `
+        -MateDistancePruning ([bool]$MateDistancePruning) -SkipBench:$BuildOnly
     Write-Host ""
     Write-Host "Done: $dest"
     Write-Host ""

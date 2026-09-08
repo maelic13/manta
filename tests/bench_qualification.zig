@@ -218,6 +218,35 @@ test "disabling MAN-S30 staging reconstructs the archived MAN-S29 fingerprint" {
     try std.testing.expectEqual(@as(u64, 799_610), report.fingerprint_nodes);
 }
 
+test "MAN-S32 mate-distance pruning builds on the current production head" {
+    if (builtin.mode == .Debug) return;
+    // A prospective Step-6.5.5 candidate on the live MAN-S30 head. The exact
+    // total proves its artifact switch is live and records the tree it searches;
+    // only the registered games decide strength. The reduction is concentrated
+    // in the corpus positions that contain a proven mate, so this figure is not
+    // a general node-efficiency claim.
+    var hash = try manta.engine.runtime.HashResource.init(
+        std.testing.allocator,
+        bench.hash_bytes / (1024 * 1024),
+    );
+    defer hash.deinit(std.testing.allocator);
+    var thread = manta.search.types.ThreadState.init();
+    var ordering: manta.search.ordering.State = .{};
+    var control: manta.search.types.NeverStop = .{};
+    var clock = IncrementingClock{};
+    const report = bench.runWithFeatures(
+        .{ .mate_distance_pruning = true },
+        .{ .depth = bench.default_depth },
+        &clock,
+        &control,
+        &thread,
+        &hash.table,
+        &ordering,
+    );
+    try std.testing.expect(!report.cancelled and !report.failed);
+    try std.testing.expectEqual(@as(u64, 642_394), report.fingerprint_nodes);
+}
+
 test "MAN-R02 stability aspiration builds on the MAN-S29 picker it was qualified under" {
     if (builtin.mode == .Debug) return;
     // This exact total proves that the default-off candidate is live and

@@ -695,6 +695,7 @@ fn executeSearch(
         .aspiration = search_build_options.stability_aspiration,
         .live_history_staging = search_build_options.live_history_staging,
         .nonroot_check_extension = search_build_options.nonroot_check_extension,
+        .mate_distance_pruning = search_build_options.mate_distance_pruning,
     };
     if (execution) |worker_execution| return search.baseline.runRestrictedWorkerWithTablebaseAndParams(
         features,

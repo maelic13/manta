@@ -954,6 +954,126 @@ test "check extension is independently ablatable and preserves legal evasion pub
     try std.testing.expect(chess.state.isConsistent(&disabled_position));
 }
 
+test "MAN-S32 is behavior-identical wherever no mate score enters the window" {
+    // The proof can only fire when alpha or beta already lies in the mate band,
+    // so on searches that never produce a mate score it must change nothing at
+    // all. Equal node counts and an equal published PV are the oracle; a
+    // candidate that moved either would be pruning reachable scores.
+    const quiet = [_][]const u8{
+        chess.fen.start_position,
+        "r2qr1k1/p4ppp/1pn1bn2/2b1p3/4P3/1BN1BN2/PPP2PPP/R2QR1K1 b - - 6 10",
+        "3r1rk1/1ppb1pb1/p2npqnp/P5p1/3P4/1BN1BN1P/1PP2PP1/3RQR1K w - - 3 10",
+        "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+    };
+    for (quiet) |fen_text| {
+        var baseline_root: chess.position.PositionState = .{};
+        var candidate_root: chess.position.PositionState = .{};
+        var baseline_position = try chess.fen.parse(fen_text, &baseline_root);
+        var candidate_position = try chess.fen.parse(fen_text, &candidate_root);
+        var baseline_harness: Harness = .{};
+        var candidate_harness: Harness = .{};
+        var baseline_storage: [4096]search.tt.Cluster = undefined;
+        var candidate_storage: [4096]search.tt.Cluster = undefined;
+        var baseline_table = search.tt.Table.init(&baseline_storage);
+        var candidate_table = search.tt.Table.init(&candidate_storage);
+        var baseline_ordering: search.ordering.State = .{};
+        var candidate_ordering: search.ordering.State = .{};
+        var baseline_counters: search.diagnostics.Counters = .{};
+        var candidate_counters: search.diagnostics.Counters = .{};
+        var baseline_control: search.types.NeverStop = .{};
+        var candidate_control: search.types.NeverStop = .{};
+
+        const production = search.baseline.runWithFeatures(
+            .{},
+            &baseline_position,
+            baseline_harness.binding(),
+            .{ .depth = 6 },
+            &baseline_control,
+            &baseline_harness.thread,
+            &baseline_table,
+            &baseline_ordering,
+            &baseline_counters,
+        );
+        const candidate = search.baseline.runWithFeatures(
+            .{ .mate_distance_pruning = true },
+            &candidate_position,
+            candidate_harness.binding(),
+            .{ .depth = 6 },
+            &candidate_control,
+            &candidate_harness.thread,
+            &candidate_table,
+            &candidate_ordering,
+            &candidate_counters,
+        );
+
+        try std.testing.expect(production.evidence.value.mateDistance() == null);
+        try std.testing.expectEqual(production.nodes, candidate.nodes);
+        try std.testing.expectEqual(production.evidence, candidate.evidence);
+        try std.testing.expectEqual(production.best_move.?, candidate.best_move.?);
+        try std.testing.expectEqualSlices(
+            chess.move.Move,
+            production.completed.?.pv.slice(),
+            candidate.completed.?.pv.slice(),
+        );
+        try std.testing.expectEqual(
+            @as(u64, 0),
+            candidate_counters.outcomes_by_producer[@intFromEnum(search.types.Provenance.mate_distance)],
+        );
+    }
+}
+
+test "MAN-S32 keeps the proven mate distance while removing unreachable work" {
+    // Mate distance is an independent chess fact, so both arms must agree on it
+    // exactly and both must publish a legal PV from a restored root. Only the
+    // amount of work may differ, and on a proven mate it must actually fall:
+    // every sibling of a mate in one is searched under a window that no legal
+    // continuation can satisfy.
+    const cases = [_]struct { fen: []const u8, distance: i32 }{
+        .{ .fen = "r1bq1r2/pp2n3/4N2k/3pPppP/1b1n2Q1/2N5/PP3PP1/R1B1K2R w KQ g6 0 20", .distance = 1 },
+        .{ .fen = "7k/8/5KQ1/8/8/8/8/8 w - - 0 1", .distance = 1 },
+        .{ .fen = "2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1", .distance = 3 },
+    };
+    for (cases) |case| {
+        var smaller = false;
+        var nodes_before: u64 = 0;
+        var distances: [2]?i32 = .{ null, null };
+        inline for (.{ false, true }, 0..) |mate_distance_pruning, index| {
+            var root: chess.position.PositionState = .{};
+            var position = try chess.fen.parse(case.fen, &root);
+            const original_key = position.current.key;
+            var harness: Harness = .{};
+            var storage: [8192]search.tt.Cluster = undefined;
+            var table = search.tt.Table.init(&storage);
+            var ordering: search.ordering.State = .{};
+            var counters: search.diagnostics.Counters = .{};
+            var control: search.types.NeverStop = .{};
+            const result = search.baseline.runWithFeatures(
+                .{ .mate_distance_pruning = mate_distance_pruning },
+                &position,
+                harness.binding(),
+                .{ .depth = 6 },
+                &control,
+                &harness.thread,
+                &table,
+                &ordering,
+                &counters,
+            );
+            distances[index] = result.evidence.value.mateDistance();
+            try expectLegalPv(case.fen, result.completed.?.pv.slice());
+            try std.testing.expect(chess.state.isConsistent(&position));
+            try std.testing.expectEqual(original_key, position.current.key);
+            if (index == 0) {
+                nodes_before = result.nodes;
+            } else {
+                smaller = result.nodes < nodes_before;
+            }
+        }
+        try std.testing.expectEqual(case.distance, distances[0].?);
+        try std.testing.expectEqual(distances[0].?, distances[1].?);
+        try std.testing.expect(smaller);
+    }
+}
+
 test "MAN-S31 preserves root extension and removes only interior check increments" {
     // The checked root is entered once per completed iteration. With the
     // interior producer disabled, those are the only check-extension events.
