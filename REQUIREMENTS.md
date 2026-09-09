@@ -91,6 +91,26 @@ behaviour or architecture is affected.
 | `SCORE-031` | The accepted Step-6.5.1b live-history staged picker shall operate only at ordinary non-root, non-check, non-exclusion main-search nodes with worker-local ordering state. It shall first generate the exact tactical subset—every capture and every promotion—and may emit one validated quiet TT move without generating its siblings. Only after no TT or good tactical move remains may it append the exact non-tactical quiet subset and rank that subset from then-current main, reply and continuation history; bad tacticals remain available afterward. The two generated subsets shall preserve their filtered legal-generation order, form the complete legal set without duplicates, and emit the TT move once. Root, check-evasion, exclusion, terminal/draw, score/bound/provenance, TT/PV, pruning/reduction, allocation and thread authority remain unchanged. A legal deterministic fingerprint or PV change is expected playing behavior and required a causal record plus the clean remote-host 1T `MAN-S30` H1 that promoted it. The mechanism shall remain compile-time ablatable to the superseded MAN-S29 eager picker, which shall keep reconstructing fingerprint `799,610` for archived diagnostics. | 6.5 | Tactical/quiet partition and order properties, live-rank/TT uniqueness property, deterministic legal PV/state restoration, stage accounting, production and switch-off fingerprints and registered remote games |
 | `SCORE-032` | The accepted Step-6.5.7 qsearch generation policy shall keep complete legal evasion generation in check. Outside check it may generate and rank only the accepted exact tactical partition. A non-empty tactical partition is a legal-move witness even when a later SEE/delta guard rejects recursion; only when it is empty shall the disjoint non-tactical-quiet partition be generated into the same bounded storage solely to distinguish quiet mobility from stalemate, then discarded without ranking or search. Tactical order, TT eligibility, SEE/delta and checking exemptions, make/unmake, draw/terminal precedence, stand-pat and searched score/bound/provenance, PV, depth-zero TT storage, allocation and thread ownership shall remain unchanged. The mechanism shall default on and remain compile-time ablatable to MAN-S30's exact full-qsearch-generation behavior. Its clean registered 1T `MAN-S34` H1 is required promotion evidence. | 6.5 | Independent full-legal terminal witness, tactical partition/order, quiet-only/stalemate/check/EP/promotion tests, exact best-move/score/bound/provenance/node/PV equivalence, generated-work accounting, production/reconstruction fingerprints, matched throughput and registered games |
 
+### 2.1 Planned shared search contract
+
+For Phase 6.5.9–6.5.12, [ADR-0070](docs/adr/0070-shared-search-evidence-and-depth.md)
+specifies the implementation boundary for `SCORE-010` depth/outcome separation,
+`SCORE-011` forcing authority and the existing history, TT/static and root-result
+requirements. Step 6.5.9 shall preserve production behavior and fingerprint
+`775451`; unknown TT PV-origin, trend or sample support shall remain unknown.
+Diagnostic history samples shall pair value/support from the same eligible
+outcomes and shall not affect production ranking or feedback. A later shared
+depth consumer shall distinguish selected ordinal from actually searched moves,
+count check/IIR/extension depth once, and verify reduced alpha rises at its
+declared authoritative horizon before winner publication or learning. Source,
+scope and bound restrictions shall survive return/negation and TT handling.
+`SCORE-031` live staging and `SCORE-032` qsearch terminal witnesses remain intact.
+
+This is a future-candidate contract, not a declaration that the new interfaces
+already exist or permission to replace accepted policies. Any incompatible
+change to an existing requirement needs an explicit owning candidate decision
+and verification gate; a rejected or disabled mechanism gains no authority here.
+
 ## 3. Product and protocol requirements
 
 | ID | Requirement | Owner | Verification |

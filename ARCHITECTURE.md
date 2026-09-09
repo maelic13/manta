@@ -442,6 +442,15 @@ interchangeable merely because each carries an integer. The implementation may
 use compact tagged values, compile-time node modes or proven local invariants;
 it shall not pay for a large runtime object at every node.
 
+Step 6.5.8's [ADR-0070](docs/adr/0070-shared-search-evidence-and-depth.md)
+freezes the future shared node/move depth plan and outcome-authority boundary.
+Board legality and raw evaluation remain inward producers; worker-local search
+owns contextual facts, prospective depth, verification and feedback. Root
+publication and the shared TT retain their separate authority. Step 6.5.9 adds
+only exact adapters and compile-time-disabled observations: it does not change
+production ordering, depth, history updates or TT policy. Later consumers need
+their separately approved implementation and playing gates.
+
 The Step-4.0 baseline realizes the single-worker subset with a borrowed root,
 concrete evaluator binding, injected stop policy and caller-owned `ThreadState`.
 That state holds reversible position slots, fixed-capacity PV rows, node count,

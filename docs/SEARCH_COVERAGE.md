@@ -1,6 +1,6 @@
 # Search coverage against the pinned modern reference
 
-Current interpretation: 2026-09-08, superseding the earlier causal claims and
+Current interpretation: 2026-09-09, superseding the earlier causal claims and
 open-step assignments. Modern Stockfish search at
 `edb0d9db6731067ec50ce619ff372b463bc4dd5d` is the structural reference
 (inspected local `src/search.cpp`); earlier audits used `229f6339`.
@@ -15,8 +15,9 @@ Reference presence suggests a hypothesis, not a promotion verdict.
 
 ## Current production and missing consumers
 
-Production is MAN-E19 HCE, MAN-S29 fitted search, MAN-T05 clock and MAN-S30
-live-history staging, deterministic depth-six fingerprint `775,451`.
+Production is MAN-E19 HCE, MAN-S29 fitted search, MAN-T05 clock, MAN-S30
+live-history staging and accepted MAN-S34 exact qsearch generation,
+deterministic depth-six fingerprint `775,451`.
 A disabled implementation is not an active feature. A rejected formulation is
 not a proof that its entire concept can never help, nor permission to retry.
 
@@ -41,7 +42,7 @@ not a proof that its entire concept can never help, nor permission to retry.
 | Richer singular/multi-cut/depth authority | MAN-S21 unresolved at cap, off | No blanket revival; individual relations require 6.5.8 contract and new evidence |
 | Half-depth singular exclusion | MAN-S33 stopped inconclusive, off | No same-head retry; changed-context review only in 6.5.11 |
 | Verified razoring | Parked implementation | 6.5.11 conditional qsearch-verified shallow proof, with tactical/draw safeguards |
-| Qsearch SEE/delta and complete evasions | Present; non-check full legal generation/ranking wastes quiet work | 6.5.7 exact tactical path plus stalemate witness; later consumers reuse it |
+| Qsearch SEE/delta and complete evasions | Present; MAN-S34 accepted exact tactical-only non-check generation plus complete terminal witness | 6.5.7 closed; later consumers preserve its ordering, legality and stand-pat authority |
 | Correction history | MAN-S25 rejected/off, not an unimplemented Phase-5 task | 6.5.12 conditional reliable HCE-error producer and coherent search consumers |
 | Syzygy, SMP, time/UCI | Present and qualified in prior phases | Preserve authority; no new SMP/NNUE/clock optimization inferred from this phase |
 
@@ -50,6 +51,35 @@ deliverable is a compatible, efficient search that meets PLAN's elapsed and
 strength gates, not a count of enabled features.
 
 ## Verified implementation differences and implications
+
+### Step 6.5.8 design closure
+
+[ADR-0070](adr/0070-shared-search-evidence-and-depth.md) freezes Manta's fact
+interfaces, shared depth pipeline, eligibility/authority matrix, edge cases
+and candidate membership. Step 6.5.9 is behavior-neutral; changing consumers
+starts only in separately approved 6.5.10 tickets. Complete mate windows are
+independent; the initial depth core couples existing pruning and reduction
+without new ranking/feedback. Window-aware aspiration is a later paired
+producer/consumer candidate, not a repeat of isolated MAN-R02.
+
+The modern reference was rechecked at the pin above; `src/search.cpp` SHA-256
+is `A934524DD2F386EC38CDF95B7B2E41CECDC85C9B17E12C0668621E6AE16BE28A`.
+The following are source relationships, not copied policy or numerical targets:
+
+| Pinned source area | Relationship adopted or deliberately constrained |
+|---|---|
+| Main search, lines 737–810 | Upcoming repetition is distinct from reached draw; mate windows precede ordinary continuation. Manta requires explicit history-local authority. |
+| Main search, lines 974–1119 | Static facts, null verification, IIR and ProbCut have ordered dependencies. Manta keeps separate producer/horizon certificates and packages. |
+| Move loop, lines 1140–1426 | Prospective reduction participates in shallow pruning; singular and checking depth affect subsequent dispatch. Manta uses one finalized plan and mandatory fixed planned verification, not the reference's adaptive verification horizon. |
+| Outcome/store and qsearch, lines 1554–1874 | Feedback follows searched outcomes; qsearch has distinct terminal/static/tactical authority. Preserve accepted MAN-S34 generation rather than port a picker. |
+
+Current Manta source audit adds three implementation cautions: the move-loop
+`searched_move_count` includes moves later omitted; TT records have no independent
+PV-origin bit; and continuation distances 2/4/6 share one table. Therefore 9 must
+not silently change the legacy ordinal, invent PV confidence from exact bounds,
+or interpret three lookups as independent support. Paired outcome/support stays
+disabled until a distinct consumer is qualified. Neither this design nor the
+positive MAN-S34 strength result closes the board or depth-13 performance target.
 
 ### Reduction and pruning are a coordinated depth decision
 

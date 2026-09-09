@@ -938,15 +938,31 @@ candidate, baseline and run manifests.
 MAN-S34 is production by default. Explicit
 `-Dqsearch-tactical-generation=false` reconstructs MAN-S30's full qsearch
 generation for archived diagnostics. Both arms retain fingerprint `775451`.
-Step 6.5.7 is closed; Step 6.5.8 is next and remains a separately authorized
-design ticket.
+Step 6.5.7 is closed; Step 6.5.8's subsequent design closure is recorded below.
 
 #### 6.5.8 — Modern search design and one evidence/depth contract
 
 **Model:** GPT-6 Astra XHigh. **Dependency:** accepted 7 head.
 **Files:** SEARCH_COVERAGE, owning ADR/requirements, PLAN; read
 `baseline.zig`, `types.zig`, `ordering.zig`, `tt.zig`, `params.zig`.
-**This is a design ticket, not a game candidate.**
+**Complete, 2026-09-09. This is a design ticket, not a game candidate.**
+
+[ADR-0070](docs/adr/0070-shared-search-evidence-and-depth.md) is the frozen
+implementation contract: concrete fact interfaces and lifetimes, ordered
+node/move pipeline, signed horizon arithmetic, consumer eligibility/authority,
+feedback admission, package boundaries and independent legal edge-case gates.
+SEARCH_COVERAGE records the source-bound reference check and current gaps.
+The approved design leaves production MAN-S34 and fingerprint `775451`
+unchanged. Step 6.5.9 is next, not a playing candidate or SPRT preparation.
+
+Verification: `git diff --check` passes. `zig build policy` reports no issue in
+this step's documents, but repository-wide success is blocked by three unchanged
+bench-contract reference-name violations in `docs/adr/0021-search-benchmark-and-qualification.md`,
+`docs/UCI.md` and `tests/uci/README.md`. These are already present at the source
+head above; no policy repair is bundled. The smallest separate repair is to
+allowlist those intentional reference documents, then rerun policy. The design
+is complete; this outstanding repository gate must be resolved before claiming
+a clean implementation gate for 6.5.9.
 
 Write a Manta-native node/move pipeline from the pinned modern reference:
 terminal/draw and mate bounds -> authenticated TT/static evidence -> safe
@@ -980,29 +996,46 @@ target re-search percentage. Design review must precede smaller-model coding.
 
 **Model:** GPT-5.6 Terra High for frozen interfaces/tests; Astra High review.
 **Dependency:** 8. **Files:** `types.zig`, `ordering.zig`, `baseline.zig`,
-`params.zig`, disabled observation counters.
+`params.zig`, `build.zig` for the default-off diagnostic selector, disabled
+observation counters and focused `tests/search_substrate.zig` properties.
 
-1. Introduce only the facts required by 8. Preserve default production behavior
-   while expressing move class, TT confidence, bounded history evidence and
-   prospective depth through concrete worker-local types.
-2. Preserve MAN-S30's live quiet-history staging. Derive capture/continuation
-   evidence from legal searched outcomes, not SEE alone; track sample support,
-   saturation/aging and null/root chain breaks. Quiet and tactical history may
-   rank moves and modulate depth through the same documented scales.
-3. Update histories once from authoritative cutoff/exact/full-depth verification
-   outcomes. Do not reward speculative reduced fail-highs as proven wins, train
-   unsearched siblings as searched failures, or double-count probe and re-search.
-   Separate the policy decision from feedback and storage authority.
-4. Capture history is currently rejected/off (MAN-S16), not a free upgrade.
-   A new consumer must demonstrate a different populated relation on the new
-   head and state its distinct hypothesis. Low-ply/countermove/static-eval
-   feedback tables are optional only if they add non-redundant information;
-   do not allocate every reference table by default.
+Implement these bounded sub-tickets in order, as one behavior-neutral step.
+Names, fields and admission rules are in ADR-0070; no coefficient fitting or
+new production consumer is part of this work.
 
-**Gate:** feature-off exactness, synthetic outcome/aging/chain-boundary tests,
-allocation and lifetime checks. Disabled substrate needs no games. Any changed
-ordering/feedback remains candidate-only and is qualified with its coupled
-consumers in 10, not promoted as an unfinished intermediate policy.
+1. **6.5.9.1 — Exact fact adapters (`types`, `baseline`).** Add `StaticFacts`,
+   `TtFacts`, `WindowFacts` and `MoveFacts` views at existing producers. Preserve
+   raw/refined separation, original TT producer and unknown PV-origin. Trend
+   validity records root/null/exclusion boundaries without changing legacy
+   pruning. Keep selected ordinal and actually-searched count distinct; legacy
+   policy continues using its existing ordinal. Test absent/stale/decisive TT,
+   move-class EP/promotion and perspective/chain-boundary cases.
+2. **6.5.9.2 — Depth/outcome observations (`types`, `baseline`).** Record
+   `NodeDepthPlan`, `MoveDepthPlan` and `SearchOutcome` at existing dispatch and
+   completion boundaries. Observe current check/IIR/singular/probe/verification
+   depth; do not move the check wrapper or replace any formula yet. Preserve
+   same-ply scratch restoration, origin and scope. Test signed boundary
+   arithmetic, reduced-alpha-rise orchestration, exclusion/null re-entry and
+   interrupted outcomes. Observation cannot alter PV, TT storage or feedback.
+3. **6.5.9.3 — Paired shadow outcomes (`ordering`, `types`, `baseline`).**
+   Define ADR-0070's signed value/saturating-support cell and once-only eligible
+   update packet. Add `-Dsearch-evidence-observation=false` as the default,
+   with no public UCI option. Compile-time-disabled shadows may use existing main/reply/
+   continuation keys only; keep current live staging and production updates
+   exact. Pair values/counts from identical admitted outcomes. Test searched
+   sibling filtering, reset/saturation, root/null boundaries and shared-key
+   aliasing. No capture-history revival, new table family or periodic aging.
+4. **6.5.9.4 — Integration closure.** Compare default and observation-enabled
+   results, PV, node fingerprint and restoration; prove default removes shadow
+   allocations/updates, bound diagnostic worker storage and run the owning
+   safety gate once after freeze. Update the interface map with actual symbols.
+   Astra High reviews the authority boundary before closing the step.
+
+**Gate:** feature-off and observation-on exactness at `775451`, legal PV/result
+equivalence, synthetic outcome/reset/chain-boundary tests, allocation and lifetime
+checks. Disabled substrate needs no games. Stop and diagnose any mismatch;
+do not conceal a playing change in this step. Richer support is not calibrated
+confidence and has no initial production consumer in 10.2.
 
 #### 6.5.10 — Integrated ordering, aspiration and selective depth
 
@@ -1011,51 +1044,66 @@ Astra owns integration and chess review. **Dependency:** 8–9.
 **Files:** search baseline/types/ordering/params, TT only for required typed
 evidence; root iteration/time consumer boundaries must remain authoritative.
 
-Implement in this order on one default-off candidate branch, with separate
-component switches and no production promotion between dependent sub-tickets:
+Separate candidates in this order. Only the dependent parts *within* a package
+are implemented together; there is no unqualified umbrella branch spanning all
+four tickets. Rebase each later decision on actual accepted production.
 
-1. Establish mate-distance window bounds with correct ply-normalized TT scores,
-   draw/terminal precedence, returned bound and root mate-completion semantics.
-   Reassess MAN-S32's limited crossing-only implementation; do not claim it
-   already supplies the complete contract or solves ordinary-position branching.
-2. Add adaptive root aspiration around completed ordinary evidence, coupled
-   to the actual window-aware depth consumer. Carry root reference width and
-   current width explicitly; retries widen the failed bound and eventually
-   recover a valid full-window result. No partial retry commits to time/UCI.
-   This is a new consumer contract, not a repeat of isolated MAN-R02.
-3. Derive a depth/move-ordinal reduction surface with useful deep-search range.
-   Adjust it with supported node/TT/history/window/improving facts from 9.
-   Derive scales for Manta HCE; no fixed re-search-rate target and no requirement
-   to reduce more in every cell merely to resemble the reference.
-4. Compute prospective child depth before LMP/futility/SEE decisions, including
-   accepted IIR and explicit extension ownership. Quiet, capture, checking and
-   evasion eligibility is explicit; no pruning legal evasions or all legal
-   moves into a false terminal. Protect promotions/decisive scores and establish
-   a searched legal fallback before selective omission where required.
-5. Reconcile forcing and singular extensions with that depth budget. Removing
-   blanket check extensions is optional and needs a tactical rationale; do not
-   infer it from S31. Bound consecutive/multiple extensions and signed negative
-   reductions. Check/evasion reductions and any checking-move SEE prune require
-   legal forcing/sacrifice cases, not an ordinary-quiet predicate reused blindly.
-6. Verify reduced alpha rises at the required authoritative horizon before
-   score/PV/TT/history publication; full PV re-search follows PVS requirements.
-   Any adaptive verification-depth change needs its own explicit proof/contract.
-   Reconcile new ordering feedback from 9 with final outcomes, not probe guesses.
+1. **6.5.10.1 — Complete mate windows (independent).** Derive non-root alpha/beta
+   narrowing from legal mate distance, with reached draw/checkmate precedence,
+   normalized TT scores, correct returned bound and unchanged root completion.
+   MAN-S32's crossing-only path is not this contract. Test positive/negative
+   mate at different plies and both crossing/non-crossing windows. No new
+   ordering/depth policy; inspect mate and ordinary cohorts separately, then
+   qualify this candidate independently rather than attributing mate savings
+   to ordinary pruning.
+2. **6.5.10.2 — Shared selective-depth core (one coupled package).**
+   **A:** Astra freezes a Manta-derived reduction surface, units, rounding and
+   caps before Terra implements formulas. Inputs are active depth, selected
+   ordinal and explicitly supported existing node/TT/history/trend facts; no
+   imported constants, confidence votes or target re-search percentage.
+   **B:** Replace independent prospective-depth calculations with ADR-0070's
+   one plan feeding existing LMP/quiet-futility/main-SEE and LMR. Preserve
+   accepted staging/ranking, IIR/forcing eligibility and explicit single check
+   grant. Initial LMR remains ordinary non-checking quiet search; no capture,
+   evasion or checking reduction expansion. Protect actual searched fallback,
+   promotions, decisive scores and TT/forcing exceptions.
+   **C:** Dispatch probes, mandatory planned-horizon verification and PVS
+   re-search from that same plan. Preserve source/scope, terminal authority and
+   once-only publication; freeze any necessary existing-requirement amendment
+   before implementing incompatible semantics. Keep production history updates
+   unchanged and 9's richer paired outcome tables diagnostic.
+   **D:** Validate the complete A–C policy and register one final candidate.
+   Components remain ablatable for diagnosis, but a passing bundle does not
+   prove each component helped. No aspiration, new ranking/feedback, correction,
+   capture history/futility, null or singular-proof redesign in this package.
+3. **6.5.10.3 — Window-aware aspiration (conditional coupled package).** On
+   the accepted core, require an actual new window/depth consumer relation
+   before adding adaptive root windows. Freeze root reference/current width,
+   missing/full-window evidence, failed-side widening and full-window recovery
+   as in ADR-0070. Include only that depth consumer and its root producer;
+   no partial retry commits to time/UCI. Test fail-low/fail-high, unstable PV,
+   mate/ordinary transitions and cancellation. Qualify independently, or defer
+   if it would merely repeat isolated MAN-R02.
+4. **6.5.10.4 — Forcing-policy disposition (conditional).** Review forcing
+   work on the accepted core. Current check/singular behavior stays intact
+   unless a new decision-level relation justifies a separately frozen candidate.
+   Derive extension limits, tactical sacrifices/only-move safeguards and any
+   changed eligibility before coding; negative reductions and adaptive
+   verification horizons remain excluded from the initial core. Do not revive
+   S31/S33 or the MAN-S21 umbrella. Record accepted/rejected/deferred disposition.
 
-**Package boundary:** common move-confidence evidence and one depth authority
-join ordering, reduction and shallow-pruning consumers; aspiration belongs only
-if its measured window feeds that policy. A semantically separable mate-bound
-or ordering change must be split unless independently below-resolution evidence
-justifies inclusion. Freeze the membership in 8 before registration. One H1
-licenses the frozen package, not each component. No broad "all modern features"
-bundle or late addition after results.
+**Package boundary:** ADR-0070 freezes the memberships above. Additional new
+ordering/feedback requires a distinct populated hypothesis and explicit scope
+approval, not an automatic extra table/consumer. Independent packages receive
+independent gates; there is no evidence to claim below-resolution bundling.
 
 **Gate:** legal PV/terminal/mate-distance/draw/exclusion/cancellation tests,
 feature-off reconstruction, full safety/process gates, per-position depth curve
 and exclusive work attribution. Inspect ordinary and mate cohorts separately,
 tactical misses, fail-low nodes and re-search tails; low re-search frequency
 does not measure false negatives. Compare elapsed, nodes and NPS separately.
-Register one final 1T gate after the complete dependent package freezes.
+Register one final 1T gate per retained package after its dependent parts freeze.
+No automatic games or candidate-specific pilot on the unchanged trusted harness.
 
 #### 6.5.11 — Forward proofs matched to the accepted depth policy
 
@@ -1066,7 +1114,7 @@ return to 8 and re-derive this step against actual production before coding.
 
 Work in bounded packages, each using the same evidence/depth interfaces:
 
-- **Upcoming repetition:** current search detects a draw already present in
+- **6.5.11.1 — Upcoming repetition:** current search detects a draw already present in
   history; the modern reference also detects an available move completing a
   repetition. Derive a legal reversible-move witness and the root/search-history
   condition before raising a non-root bound toward draw in main/qsearch.
@@ -1075,24 +1123,26 @@ Work in bounded packages, each using the same evidence/depth interfaces:
   bound as universally reusable TT truth, or infer repetition from a colliding
   hash alone. Compare against an independent legal-move/history walk and price
   the lookup at non-repeating nodes before retaining a candidate.
-- **Null move and verification:** production's fixed reduction is two plies.
+- **6.5.11.2 — Null move and verification:** production's fixed reduction is two plies.
   Derive a depth/eval/context-sensitive probe together with verification scope
   and a clearly bounded null-disabled region. The null probe passes the move;
   verification searches real moves from the restored position. Keep PV/check,
   consecutive-null, decisive-score and zugzwang/pawn-ending safety explicit.
   Rare failed verifications may be valuable; include their cases in the oracle
   population. Deeper reduction and safety policy are one coupled candidate.
-- **ProbCut and TT proof reuse:** reuse accepted tactical ordering, qsearch
+- **6.5.11.3 — ProbCut and TT proof reuse:** reuse accepted tactical ordering, qsearch
   and ordinary TT bounds to avoid redundant probes. Distinguish shallow
   probabilistic lower bounds from full-depth exact results. Stale, decisive,
   insufficient-depth or exclusion-contaminated evidence cannot acquire new
   cutoff authority. A separate package from null move unless dependency is
   concretely demonstrated.
-- **Singular proof/IIR and verified razoring review:** assess exclusion horizon,
+- **6.5.11.4 — Singular proof/IIR review:** assess exclusion horizon,
   threshold, TT age/depth, one/multiple extension and no-TT depth jointly where
   they interact. Do not retry MAN-S33's half-depth change on the same head.
   A new attempt needs changed accepted context and decision-level evidence.
-  Razoring must verify through qsearch with check/mate/zugzwang guards; a legal
+- **6.5.11.5 — Verified razoring decision:** separately assess a populated
+  shallow-error relation; defer if none justifies a new candidate. Razoring
+  must verify through qsearch with check/mate/zugzwang guards; a legal
   tactical mismatch is examined, not dismissed or accepted by fingerprint alone.
 
 **Gate:** same-position alternative and zugzwang/fortress/only-move cases,
@@ -1107,16 +1157,19 @@ Rejecting a family is permitted; declaring mature efficiency still requires 15.
 **Files:** search evaluation-evidence/history boundary, baseline/params;
 `src/eval/hce.zig` only to expose existing exact facts, not refit the HCE.
 
-1. Preserve raw HCE separately from ordinary TT refinement and any learned
-   correction. Document which value may drive stand-pat, improving, futility,
+1. **6.5.12.1 — Provenance/consumer map.** Preserve raw HCE separately from
+   ordinary TT refinement and any learned correction. Document which value may
+   drive stand-pat, improving, futility,
    null eligibility and reduction confidence; terminal/tablebase/mate values
    never train or consume an ordinary correction.
-2. Inspect existing held-out residuals and populated search outcomes for a
-   systematic error affecting the new consumers. MAN-S25 was rejected: do not
+2. **6.5.12.2 — Open-or-defer decision.** Inspect existing held-out residuals
+   and populated search outcomes for a systematic error affecting the new
+   consumers. MAN-S25 was rejected: do not
    simply turn it back on. A candidate must explain the new information or
    changed consumer relation and bound both correction and uncertainty.
-3. If justified, make correction generation, reliable outcome training and its
-   coherent search consumers one package, with sample support, history
+3. **6.5.12.3 — Conditional coherent candidate.** If justified, make correction
+   generation, reliable outcome training and its coherent search consumers one
+   package, with sample support, history
    separation, saturation and worker ownership. Otherwise close as deferred.
    No new datagen/Texel cycle, NNUE work or automatic cache family is authorized.
 
