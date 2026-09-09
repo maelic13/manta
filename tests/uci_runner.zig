@@ -185,7 +185,7 @@ fn runCase(
                     var expected_buffer: [256]u8 = undefined;
                     const rendered = std.fmt.bufPrint(
                         &expected_buffer,
-                        "info string bench position {d}/40 nodes {{{{U64}}}} time_ms {{{{U64}}}} nps {{{{U64}}}} ebf {{{{DECIMAL}}}}",
+                        "bench {d}/40  depth {{{{U64}}}}  score {{{{I64}}}}  nodes {{{{U64}}}}  ebf {{{{DECIMAL}}}}  time {{{{U64}}}}ms  nps {{{{U64}}}}",
                         .{position_index},
                     ) catch return error.UnexpectedOutput;
                     if (!matchesExpected(rendered, actual.slice())) {
@@ -452,6 +452,7 @@ fn takeAvailable(io: std.Io, queue: *std.Io.Queue(StreamLine)) !?StreamLine {
 }
 
 fn matchesExpected(expected: []const u8, actual: []const u8) bool {
+    if (std.mem.eql(u8, expected, "{{EMPTY}}")) return actual.len == 0;
     if (std.mem.eql(u8, expected, "{{ROOT_MOVE_INFO}}")) return validRootMoveInfo(actual);
     if (std.mem.eql(u8, expected, "{{ITERATION_INFO}}")) return validIterationInfo(actual);
     if (std.mem.eql(u8, expected, "{{SEARCH_INFO}}"))
@@ -484,9 +485,16 @@ fn matchesPlaceholder(placeholder: []const u8, value: []const u8) bool {
     if (std.mem.eql(u8, placeholder, "{{VERSION}}")) return std.mem.eql(u8, value, build_options.version);
     if (std.mem.eql(u8, placeholder, "{{PONDER}}")) return matchesOptionalPonder(value);
     if (std.mem.eql(u8, placeholder, "{{U64}}")) return parseUnsigned(value, false);
+    if (std.mem.eql(u8, placeholder, "{{I64}}")) return parseSigned(value);
     if (std.mem.eql(u8, placeholder, "{{POSITIVE_U64}}")) return parseUnsigned(value, true);
     if (std.mem.eql(u8, placeholder, "{{DECIMAL}}")) return parseDecimal(value);
     return false;
+}
+
+fn parseSigned(value: []const u8) bool {
+    if (value.len == 0) return false;
+    _ = std.fmt.parseInt(i64, value, 10) catch return false;
+    return true;
 }
 
 /// Match either no continuation or one ` ponder <move>` suffix. A search cancelled

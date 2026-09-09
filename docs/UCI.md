@@ -192,7 +192,7 @@ job.
 | `go` | Search form in §6 or diagnostic `go perft <depth>` | Search info and one `bestmove`, or perft records only | Replaces an active job in order. |
 | `stop` | `stop` | Required search or diagnostic completion, if active | Urgent and epoch-tagged; otherwise no-op. |
 | `ponderhit` | `ponderhit` | Retained or eventual `bestmove` when normal limits end | Valid only for matching ponder epoch; otherwise no-op. |
-| `bench` | `bench [depth] [repeats] [threads]` | Bench records only | Diagnostic job; contract is in `PLAN.md` §4.2. |
+| `bench` | `bench [depth] [repeats]` | Rarog-compatible bench records and summary only | Diagnostic job; contract is in `PLAN.md` §4.2. |
 | `quit` | `quit` | None required | Urgent bounded shutdown with exit code 0. |
 | EOF | Input stream closes | None required | Same lifecycle as `quit`. |
 
@@ -289,8 +289,11 @@ Perft never emits search `info` or `bestmove` records.
 `bench` follows the versioned 40-position work contract in `PLAN.md` §4.2.
 Arguments are positive decimal integers and requested depth shares the
 authoritative depth ceiling. `manta-search-bench-v1` defaults to depth `6`;
-repeats and threads default to one, repeats are capped at `16`, and the
-deterministic bench keeps its independent one-thread scope after SMP activation.
+its optional arguments are depth then whole-suite repeat count, matching Rarog.
+Single-run output reports each position's completed depth, score, nodes, EBF,
+elapsed milliseconds and NPS, followed by the same aggregate summary layout.
+Repeats default to one and are capped at `16`; the deterministic bench keeps
+its independent one-thread scope after SMP activation.
 Bench does not consult the current
 Hash or Threads options. Each repeat clears a private 16 MiB TT and ordering
 history once, then shares those caches across the ordered positions. The
@@ -300,21 +303,32 @@ completion.
 A single repeat emits 40 ordered records:
 
 ```text
-info string bench position <index>/40 nodes <nodes> time_ms <time> nps <nps> ebf <ebf>
+bench <index>/40  depth <depth>  score <score>  nodes <nodes>  ebf <ebf>  time <time>ms  nps <nps>
 ```
 
 It then emits exactly:
 
 ```text
-info string bench total depth <depth> repeats 1 threads <threads> nodes <nodes> time_ms <time> nps <nps> ebf <ebf> median_nodes <nodes> top_share <ratio>
+=========================
+Nodes searched  : <nodes>
+Geomean EBF     : <ebf>
+Median nodes    : <nodes>
+Top-pos share   : <percent>%  (<maximum> nodes)
+Total time (ms) : <time>
+Nodes/second    : <nps>
 ```
 
 Multiple repeats omit position records, emit one compact line per run, then a
 summary. `fingerprint_nodes` is the deterministic node total from run one:
 
 ```text
-info string bench run <index>/<repeats> depth <depth> threads <threads> nodes <nodes> time_ms <time> nps <nps>
-info string bench summary depth <depth> repeats <repeats> threads <threads> fingerprint_nodes <nodes> best_nps <nps> median_nps <nps>
+run <index>/<repeats>  nodes <nodes>  time <time>ms  nps <nps>
+=========================
+Nodes searched  : <fingerprint-nodes>
+Geomean EBF     : <ebf>
+Median nodes    : <nodes>
+Top-pos share   : <percent>%  (<maximum> nodes)
+Nodes/second    : <best-nps>   (best of <repeats>; median <median-nps>, min <minimum-nps>)
 ```
 
 Cancellation emits one final line for fully completed work:
@@ -325,9 +339,10 @@ info string bench cancelled run <run>/<repeats> positions <completed>/40 nodes <
 
 Bench emits no `bestmove`. Timing, NPS, EBF, median, and share values are
 diagnostic measurements; the one-thread node total is the behavior
-fingerprint. EBF uses three decimal places, `top_share` is a six-place ratio,
-and the even-sized corpus reports the upper median. A zero-millisecond position
-reports its node count as NPS rather than inventing elapsed precision.
+fingerprint. Position EBF uses two decimal places, aggregate EBF uses three,
+top share is a one-decimal percentage with the maximum node count, and the
+even-sized corpus reports the upper median. A zero-millisecond position reports
+its node count as NPS rather than inventing elapsed precision.
 
 ## 7. UCI options
 

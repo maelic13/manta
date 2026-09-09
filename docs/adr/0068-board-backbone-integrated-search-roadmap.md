@@ -20,7 +20,7 @@ comparison engine and matched native host/work semantics, the board suite
 requires a six-cell throughput-ratio geometric mean >= 1.00 and every cell
 >= 0.95. Common-corpus 1T/64-MiB depth-13 elapsed must be <= 1.10 times the
 comparison engine, both over all forty cases and the preidentified ordinary
-subset. A separate routine `bench 13 1 1` has a prospectively fixed absolute
+subset. A separate routine `bench 13 1` has a prospectively fixed absolute
 time limit. PLAN 6.5.4 freezes identities, timing protocol and that limit.
 These tolerances operationalize the requested goals; they are not measured
 capabilities. No post-result relaxation or substitution of one goal for another.

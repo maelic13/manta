@@ -492,20 +492,15 @@ fn parseBench(raw: []const u8) ParsedBench {
         return .{ .invalid = lineText("info string invalid bench: depth must be a positive integer") };
     const repeats = parseBenchField(tokens.next(), 1) orelse
         return .{ .invalid = lineText("info string invalid bench: repeats must be a positive integer") };
-    const threads = parseBenchField(tokens.next(), 1) orelse
-        return .{ .invalid = lineText("info string invalid bench: threads must be a positive integer") };
     if (tokens.next() != null)
-        return .{ .invalid = lineText("info string invalid bench: expected at most depth, repeats and threads") };
+        return .{ .invalid = lineText("info string invalid bench: expected at most depth and repeats") };
     if (depth > chess.types.max_ply - 1)
         return .{ .invalid = lineText("info string invalid bench: depth exceeds MAX_PLY - 1") };
     if (repeats > engine.bench.max_repeats)
         return .{ .invalid = lineFmt("info string invalid bench: repeats exceeds {d}", .{engine.bench.max_repeats}) };
-    if (threads != 1)
-        return .{ .invalid = lineText("info string invalid bench: threads must be 1 until Phase 6") };
     return .{ .spec = .{
         .depth = @intCast(depth),
         .repeats = @intCast(repeats),
-        .threads = @intCast(threads),
     } };
 }
 
@@ -1141,21 +1136,29 @@ fn publishBench(shared: *Shared, report: engine.bench.Report) void {
         return;
     }
 
+    if (!offerText(shared, "")) return;
     if (report.spec.repeats == 1) {
         for (report.positions, 0..) |record, index| {
-            const ebf = fixedDecimal(engine.bench.positionEbfMilli(record), 3);
+            const ebf = fixedDecimal(engine.bench.positionEbfCenti(record), 2);
             if (!offerLine(shared, lineFmt(
-                "info string bench position {d}/40 nodes {d} time_ms {d} nps {d} ebf {s}",
-                .{ index + 1, record.nodes, record.time_ms, engine.bench.nps(record.nodes, record.time_ms), ebf.slice() },
+                "bench {d}/40  depth {d}  score {d}  nodes {d}  ebf {s}  time {d}ms  nps {d}",
+                .{ index + 1, record.completed_depth, record.score, record.nodes, ebf.slice(), record.time_ms, engine.bench.nps(record.nodes, record.time_ms) },
             ))) return;
         }
         const run_record = report.runs[0];
         const ebf = fixedDecimal(report.geomean_ebf_milli, 3);
-        const top_share = fixedDecimal(report.top_share_million, 6);
-        _ = offerLine(shared, lineFmt(
-            "info string bench total depth {d} repeats 1 threads {d} nodes {d} time_ms {d} nps {d} ebf {s} median_nodes {d} top_share {s}",
-            .{ report.spec.depth, report.spec.threads, run_record.nodes, run_record.time_ms, engine.bench.nps(run_record.nodes, run_record.time_ms), ebf.slice(), report.median_nodes, top_share.slice() },
-        ));
+        const top_share = fixedDecimal(engine.bench.topShareTenthsPercent(&report), 1);
+        if (!offerText(shared, "")) return;
+        if (!offerText(shared, "=========================")) return;
+        if (!offerLine(shared, lineFmt("Nodes searched  : {d}", .{report.fingerprint_nodes}))) return;
+        if (!offerLine(shared, lineFmt("Geomean EBF     : {s}", .{ebf.slice()}))) return;
+        if (!offerLine(shared, lineFmt("Median nodes    : {d}", .{report.median_nodes}))) return;
+        if (!offerLine(shared, lineFmt(
+            "Top-pos share   : {s}%  ({d} nodes)",
+            .{ top_share.slice(), report.maximum_nodes },
+        ))) return;
+        if (!offerLine(shared, lineFmt("Total time (ms) : {d}", .{run_record.time_ms}))) return;
+        _ = offerLine(shared, lineFmt("Nodes/second    : {d}", .{engine.bench.nps(run_record.nodes, run_record.time_ms)}));
         return;
     }
 
@@ -1163,15 +1166,26 @@ fn publishBench(shared: *Shared, report: engine.bench.Report) void {
     for (report.runs[0..report.completed_runs], 0..) |run_record, index| {
         samples[index] = engine.bench.nps(run_record.nodes, run_record.time_ms);
         if (!offerLine(shared, lineFmt(
-            "info string bench run {d}/{d} depth {d} threads {d} nodes {d} time_ms {d} nps {d}",
-            .{ index + 1, report.spec.repeats, report.spec.depth, report.spec.threads, run_record.nodes, run_record.time_ms, samples[index] },
+            "run {d}/{d}  nodes {d}  time {d}ms  nps {d}",
+            .{ index + 1, report.spec.repeats, run_record.nodes, run_record.time_ms, samples[index] },
         ))) return;
     }
     const ordered = samples[0..report.completed_runs];
     std.mem.sort(u64, ordered, {}, std.sort.asc(u64));
+    const ebf = fixedDecimal(report.geomean_ebf_milli, 3);
+    const top_share = fixedDecimal(engine.bench.topShareTenthsPercent(&report), 1);
+    if (!offerText(shared, "")) return;
+    if (!offerText(shared, "=========================")) return;
+    if (!offerLine(shared, lineFmt("Nodes searched  : {d}", .{report.fingerprint_nodes}))) return;
+    if (!offerLine(shared, lineFmt("Geomean EBF     : {s}", .{ebf.slice()}))) return;
+    if (!offerLine(shared, lineFmt("Median nodes    : {d}", .{report.median_nodes}))) return;
+    if (!offerLine(shared, lineFmt(
+        "Top-pos share   : {s}%  ({d} nodes)",
+        .{ top_share.slice(), report.maximum_nodes },
+    ))) return;
     _ = offerLine(shared, lineFmt(
-        "info string bench summary depth {d} repeats {d} threads {d} fingerprint_nodes {d} best_nps {d} median_nps {d}",
-        .{ report.spec.depth, report.spec.repeats, report.spec.threads, report.fingerprint_nodes, ordered[ordered.len - 1], ordered[ordered.len / 2] },
+        "Nodes/second    : {d}   (best of {d}; median {d}, min {d})",
+        .{ ordered[ordered.len - 1], report.spec.repeats, ordered[ordered.len / 2], ordered[0] },
     ));
 }
 
@@ -1511,11 +1525,10 @@ test "bench parsing freezes defaults, semantic caps, and one-thread scope" {
     try std.testing.expectEqual(engine.bench.default_depth, defaults.depth);
     try std.testing.expectEqual(@as(u16, 1), defaults.repeats);
     try std.testing.expectEqual(@as(u16, 1), defaults.threads);
-    try std.testing.expectEqual(@as(u16, 5), parseBench("bench 5 2 1").spec.depth);
+    try std.testing.expectEqual(@as(u16, 5), parseBench("bench 5 2").spec.depth);
     try std.testing.expect(parseBench("bench 0") == .invalid);
     try std.testing.expect(parseBench("bench 1 17") == .invalid);
-    try std.testing.expect(parseBench("bench 1 1 2") == .invalid);
-    try std.testing.expect(parseBench("bench 1 1 1 extra") == .invalid);
+    try std.testing.expect(parseBench("bench 1 1 1") == .invalid);
 }
 
 test "setoption registry normalizes names and enforces active ranges" {

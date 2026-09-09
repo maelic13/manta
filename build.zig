@@ -66,6 +66,11 @@ pub fn build(b: *std.Build) void {
         "singular-exclusion-horizon",
         "Enable the Step-6.5.5 singular-exclusion-horizon candidate in this build",
     ) orelse false;
+    const qsearch_tactical_generation = b.option(
+        bool,
+        "qsearch-tactical-generation",
+        "Enable the accepted Step-6.5.7 tactical-only non-check qsearch path",
+    ) orelse true;
     if (b.option([]const u8, "target", "Cross-compilation is not supported") != null or
         b.option([]const u8, "cpu", "Use -Dprofile instead of raw CPU features") != null)
     {
@@ -114,6 +119,7 @@ pub fn build(b: *std.Build) void {
     search_build_options.addOption(bool, "nonroot_check_extension", nonroot_check_extension);
     search_build_options.addOption(bool, "mate_distance_pruning", mate_distance_pruning);
     search_build_options.addOption(bool, "singular_exclusion_horizon", singular_exclusion_horizon);
+    search_build_options.addOption(bool, "qsearch_tactical_generation", qsearch_tactical_generation);
     const search_build_options_module = search_build_options.createModule();
     const omit_frame_pointer: ?bool = if (optimize == .ReleaseFast and
         target.result.cpu.arch == .x86_64) true else null;
@@ -271,6 +277,7 @@ pub fn build(b: *std.Build) void {
     transcript_search_build_options.addOption(bool, "nonroot_check_extension", nonroot_check_extension);
     transcript_search_build_options.addOption(bool, "mate_distance_pruning", mate_distance_pruning);
     transcript_search_build_options.addOption(bool, "singular_exclusion_horizon", singular_exclusion_horizon);
+    transcript_search_build_options.addOption(bool, "qsearch_tactical_generation", qsearch_tactical_generation);
     const transcript_manta = b.addModule("manta-transcript", .{
         .root_source_file = b.path("src/manta.zig"),
         .target = target,

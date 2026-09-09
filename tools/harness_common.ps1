@@ -385,7 +385,7 @@ function Assert-NoAffinityFailure {
 
 # Manta's bench holds the job until it completes, and both `quit` and EOF
 # cancel it (docs/UCI.md 4.2). Piping "bench`nquit" therefore returns nothing.
-# Feed `bench` and keep stdin OPEN until the total line arrives. Shared so the
+# Feed `bench` and keep stdin OPEN until the Rarog-compatible summary arrives. Shared so the
 # sidecar verifier and the search profiler drive the engine identically.
 function Invoke-MantaBench {
     param(
@@ -406,17 +406,25 @@ function Invoke-MantaBench {
     try {
         $proc.StandardInput.WriteLine("bench $Depth")
         $deadline = [datetime]::UtcNow.AddMilliseconds($TimeoutMs)
+        $summaryLines = [ordered]@{}
         while ([datetime]::UtcNow -lt $deadline) {
             $line = $proc.StandardOutput.ReadLine()
             if ($null -eq $line) { break }
-            if ($line -match '^\s*info string bench (total|summary)\b') {
+            if ($line -match '^Nodes searched\s*:') { $summaryLines.nodes = $line }
+            elseif ($line -match '^Geomean EBF\s*:') { $summaryLines.ebf = $line }
+            elseif ($line -match '^Total time \(ms\)\s*:') { $summaryLines.time = $line }
+            elseif ($line -match '^Nodes/second\s*:') {
+                $summaryLines.nps = $line
                 $proc.StandardInput.WriteLine("quit")
                 $proc.StandardInput.Close()
                 $proc.WaitForExit(10000) | Out-Null
-                return $line
+                if (-not $summaryLines.nodes -or -not $summaryLines.ebf -or -not $summaryLines.time) {
+                    throw "Incomplete bench summary from $BinaryPath."
+                }
+                return ($summaryLines.Values -join '; ')
             }
         }
-        throw "Timed out waiting for a 'bench $Depth' total line from $BinaryPath."
+        throw "Timed out waiting for the 'bench $Depth' summary from $BinaryPath."
     } finally {
         if (-not $proc.HasExited) { $proc.Kill($true) }
         $proc.Dispose()

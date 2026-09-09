@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted 2026-08-10.
+Accepted 2026-08-10; presentation amended 2026-09-09.
 
 ## Context
 
@@ -26,7 +26,11 @@ cancellable through the existing controller/worker ownership model.
   `9,135,205`; the bounded depth-one reset signature is `38,164`.
 - Typed completion records cross the worker boundary. Only the UCI presenter
   formats ordered position/run/summary or cancellation lines, and bench never
-  publishes `bestmove`.
+  publishes `bestmove`. The public form is `bench [depth] [repeats]`, matching
+  Rarog's argument order while retaining Manta's depth-six default. Single-run
+  position lines and the final aggregate block use the Rarog layout and fields,
+  including completed score/depth and the maximum-node position behind top
+  share.
 - Repeated fresh-reset/node-limit searches, duplicate short fixed-node self-play
   and tactical/mate/KQK/KBNK canaries are correctness diagnostics. Registered
   games remain the only playing-strength verdict.
@@ -38,6 +42,11 @@ and complete correctness evidence. Timing, NPS, EBF and concentration fields
 remain descriptive; speed claims require the separate controlled A/B method.
 The private table adds memory only while bench runs, and ordinary search hot
 paths gain no allocation, I/O, lock or runtime indirection.
+
+The presentation amendment changes no bench input or search behavior. The
+accepted MAN-S34 depth-six total remains `775,451`, with geomean EBF `4.821`,
+upper median `12,447` nodes and maximum-position share `16.9%` (`130,895`
+nodes). Wall time and NPS remain run-specific diagnostics.
 
 ## Verification
 

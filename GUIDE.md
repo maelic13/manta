@@ -12,11 +12,25 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 - Phases 0–6 and the Manta 1.0 release baseline are complete. Targeted
   pre-NNUE performance Phase 6.5 is current; Phase 7 remains blocked until the
   whole Phase 6.5 candidate and evidence sequence is complete.
-- Production is the MAN-E19 HCE, MAN-S29 search fit, MAN-T05 clock fit and
-  MAN-S30 live-history move ordering. The deterministic one-thread depth-6
-  fingerprint is `775,451` nodes.
-- Step 6.5.4 is prepared but open: profiler/SEE setup tooling is complete and
-  the frozen ten-capture comparison passes; qualified host baselines remain.
+- Production is the MAN-E19 HCE, MAN-S29 search fit, MAN-T05 clock fit,
+  MAN-S30 live-history move ordering and MAN-S34 tactical-only non-check
+  qsearch generation. The deterministic one-thread depth-6 fingerprint remains
+  `775,451` nodes.
+- Step 6.5.4 is complete. On the designated 5950X the six-cell board ratio is
+  `0.638`; depth 13 hit the frozen mate-position timeout, and routine bench 13
+  exceeded 30 seconds. These are open deficits, not accepted targets.
+- Step 6.5.5 is complete with no retained candidate. Common-path, cached-attack
+  and inline-slider formulations failed matched board/search timing, were
+  removed, and production remains unchanged.
+- Step 6.5.6 is complete with no retained candidate. Known-piece transition
+  updates helped only the isolated cell and slowed composite/search work; SEE
+  capture reuse crossed parity. Both were removed, so the board target remains
+  open and production stays at fingerprint `775,451`.
+- Step 6.5.7 is complete. `MAN-S34` removes unused quiet generation/ranking
+  from non-check qsearch while retaining a complete legal stalemate witness.
+  Its registered final 1T SPRT accepted H1 after 1,614 games without anomaly,
+  so the mechanism is production and the full-generation arm reconstructs
+  MAN-S30.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
@@ -73,7 +87,8 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 - [x] **4.2 — UCI baseline completion:** Connected real search, cancellation,
   limits and result handling to the protocol session.
 - [x] **4.3 — Bench and test suites:** Froze deterministic bench and full
-  correctness, safety and UCI gates.
+  correctness, safety and UCI gates; presentation and arguments match Rarog
+  while Manta retains its depth-six default.
 - [x] **4.4 — Experiment tooling:** Added checked match, SPRT, SPSA and artifact
   workflows; Colosseum remains parked until explicitly re-enabled.
 - [x] **4.5 — Test-host qualification:** Qualified the Ryzen 9 5950X harness
@@ -126,15 +141,18 @@ relationships, reimplemented in original Zig for Manta's contracts.
 - [x] **6.5.3 — Forcing-line selectivity:** MAN-S31 rejected by judgment, not
   formal H0. Historical MAN-S32 remains parked; MAN-S33 stopped inconclusive
   and unpromoted. No automatic retries.
-- [ ] **6.5.4 — Freeze the two targets and implementation contracts:** Bind
-  comparable baselines, target limits and bounded board tickets. Contracts and
-  tickets/tooling prepared; source-bound host timing data still needed.
-- [ ] **6.5.5 — Legal generation and attack/check backbone:** Faster exact
-  generation, pin/check facts and native attack paths.
-- [ ] **6.5.6 — State transitions, SEE and board parity checkpoint:** Faster
-  exact make/unmake and SEE; meet the six-cell board target.
-- [ ] **6.5.7 — Qsearch work proportional to tactical search:** Avoid discarded
-  quiet work while preserving stalemate, evasions and exact search behavior.
+- [x] **6.5.4 — Freeze the two targets and implementation contracts:** Bound
+  source/build identities, setup semantics, target limits and designated-host
+  baselines. Board and search targets currently fail.
+- [x] **6.5.5 — Legal generation and attack/check backbone:** Bounded exact
+  specializations were refuted by matched timing and removed; the generation
+  deficit remains visible for later residual-cost work.
+- [x] **6.5.6 — State transitions, SEE and board parity checkpoint:** Narrow
+  exact duplicate-work forms were refuted and removed. The `0.638` board
+  baseline remains open; residual attribution is explicitly owned by 6.5.13.
+- [x] **6.5.7 — Qsearch work proportional to tactical search:** MAN-S34 avoids
+  discarded quiet work while preserving stalemate, evasions and exact search
+  behavior; its final 1T SPRT accepted H1 and the mechanism is production.
 - [ ] **6.5.8 — Modern search design and one evidence/depth contract:** Specify
   the coordinated ordering, pruning, extension and verification pipeline.
 - [ ] **6.5.9 — Shared ordering and outcome-evidence substrate:** One reliable

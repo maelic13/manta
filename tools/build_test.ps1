@@ -109,6 +109,10 @@
     Build the default-off Step-6.5.5 singular-exclusion-horizon candidate arm.
     It changes only the depth of the same-position exclusion probe.
 
+.PARAMETER QsearchTacticalGeneration
+    Keep the accepted Step-6.5.7 tactical-only non-check qsearch path. It
+    defaults on; pass -QsearchTacticalGeneration:$false to reconstruct MAN-S30.
+
 .PARAMETER BenchDepth
     Depth for the verification bench. Default 6 (the manta-search-bench-v1
     default). Lower it for a quicker smoke test; the node count is only a
@@ -148,6 +152,7 @@ param(
     [switch]$NonrootCheckExtension,
     [switch]$MateDistancePruning,
     [switch]$SingularExclusionHorizon,
+    [switch]$QsearchTacticalGeneration,
     [switch]$BuildOnly,
     [int]$BenchDepth = 6,
     [string]$TestEnginesDir = "$PSScriptRoot\test_engines",
@@ -164,6 +169,11 @@ $integratedTimeEnabled = if ($PSBoundParameters.ContainsKey("IntegratedTime")) {
 }
 $liveHistoryStagingEnabled = if ($PSBoundParameters.ContainsKey("LiveHistoryStaging")) {
     [bool]$LiveHistoryStaging
+} else {
+    $true
+}
+$qsearchTacticalGenerationEnabled = if ($PSBoundParameters.ContainsKey("QsearchTacticalGeneration")) {
+    [bool]$QsearchTacticalGeneration
 } else {
     $true
 }
@@ -209,6 +219,7 @@ function Write-EngineManifest {
         [Parameter(Mandatory)][bool]$NonrootCheckExtension,
         [Parameter(Mandatory)][bool]$MateDistancePruning,
         [Parameter(Mandatory)][bool]$SingularExclusionHorizon,
+        [Parameter(Mandatory)][bool]$QsearchTacticalGeneration,
         [switch]$SkipBench
     )
 
@@ -225,7 +236,7 @@ function Write-EngineManifest {
     if (-not $SkipBench) {
         Write-Host "Verifying bench fingerprint of $([IO.Path]::GetFileName($BinaryPath)) (depth $Depth) ..."
         $benchLine = Invoke-MantaBench -BinaryPath $BinaryPath -Depth $Depth
-        if ($benchLine -notmatch '\bnodes\s+(?<nodes>\d+)') {
+        if ($benchLine -notmatch 'Nodes searched\s*:\s*(?<nodes>\d+)') {
             throw "Could not parse a bench node count from '$benchLine' - refusing to write a manifest for an unverified engine."
         }
         $nodes = [int64]$Matches['nodes']
@@ -251,6 +262,7 @@ function Write-EngineManifest {
         nonroot_check_extension = $NonrootCheckExtension
         mate_distance_pruning = $MateDistancePruning
         singular_exclusion_horizon = $SingularExclusionHorizon
+        qsearch_tactical_generation = $QsearchTacticalGeneration
         search_spsa_bake    = $false
         git_sha            = $sha
         git_tree           = $tree
@@ -300,7 +312,9 @@ try {
     $buildArgs += "-Dnonroot-check-extension=$nonrootCheckExtensionText"
     if ($MateDistancePruning) { $buildArgs += "-Dmate-distance-pruning=true" }
     if ($SingularExclusionHorizon) { $buildArgs += "-Dsingular-exclusion-horizon=true" }
-    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($MateDistancePruning) { '-mate-distance-pruning' } else { '' })$(if ($SingularExclusionHorizon) { '-singular-exclusion-horizon' } else { '' })"
+    $qsearchTacticalGenerationText = $qsearchTacticalGenerationEnabled.ToString().ToLowerInvariant()
+    $buildArgs += "-Dqsearch-tactical-generation=$qsearchTacticalGenerationText"
+    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($MateDistancePruning) { '-mate-distance-pruning' } else { '' })$(if ($SingularExclusionHorizon) { '-singular-exclusion-horizon' } else { '' })$(if ($qsearchTacticalGenerationEnabled) { '-qsearch-tacticals' } else { '-full-qsearch-generation' })"
 
     Write-Host ""
     Write-Host "Building Manta ($flavor) - suffix: $Suffix"
@@ -336,7 +350,8 @@ try {
         -LiveHistoryStaging $liveHistoryStagingEnabled `
         -NonrootCheckExtension $nonrootCheckExtensionEnabled `
         -MateDistancePruning ([bool]$MateDistancePruning) `
-        -SingularExclusionHorizon ([bool]$SingularExclusionHorizon) -SkipBench:$BuildOnly
+        -SingularExclusionHorizon ([bool]$SingularExclusionHorizon) `
+        -QsearchTacticalGeneration $qsearchTacticalGenerationEnabled -SkipBench:$BuildOnly
     Write-Host ""
     Write-Host "Done: $dest"
     Write-Host ""

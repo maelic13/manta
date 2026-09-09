@@ -276,6 +276,10 @@ pub const Features = struct {
     /// history; legality, score, bound, pruning and thread ownership remain
     /// unchanged. Disabling it reconstructs the archived MAN-S29 picker.
     live_history_staging: bool = true,
+    /// Accepted Step-6.5.7 exact-cost path. Non-check qsearch generates only the
+    /// tactical partition; when it is empty, the disjoint quiet partition is
+    /// generated only as a legal-move witness and is not ranked or searched.
+    qsearch_tactical_generation: bool = true,
     /// Archived rejected MAN-S14 switch, default off. Only an authoritative
     /// full-depth fail-low after an LMR false positive may add one negative
     /// reply-history update; history still has no reduction authority.
@@ -380,6 +384,7 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     // Step 6.5.1b is the first accepted default that changes the searched tree
     // since MAN-S22 froze this ledger, so its promotion is asserted here.
     try std.testing.expect(features.live_history_staging);
+    try std.testing.expect(features.qsearch_tactical_generation);
     try std.testing.expect(features.shallow_selectivity);
     try std.testing.expect(features.reverse_futility);
     try std.testing.expect(features.quiet_futility);

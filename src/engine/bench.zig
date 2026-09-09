@@ -18,6 +18,7 @@ pub const Spec = struct {
 };
 
 pub const PositionRecord = struct {
+    score: i32 = 0,
     nodes: u64 = 0,
     time_ms: u64 = 0,
     completed_depth: u16 = 0,
@@ -38,6 +39,7 @@ pub const Report = struct {
     fingerprint_nodes: u64 = 0,
     geomean_ebf_milli: u64 = 0,
     median_nodes: u64 = 0,
+    maximum_nodes: u64 = 0,
     top_share_million: u64 = 0,
     cancelled: bool = false,
     failed: bool = false,
@@ -61,6 +63,7 @@ pub const Report = struct {
                 ebf_count += 1;
             }
         }
+        self.maximum_nodes = maximum;
         std.mem.sort(u64, &sorted, {}, std.sort.asc(u64));
         self.median_nodes = sorted[sorted.len / 2];
         if (ebf_count != 0) {
@@ -86,6 +89,19 @@ pub fn positionEbfMilli(record: PositionRecord) u64 {
     return @intFromFloat(@round(value * 1000.0));
 }
 
+pub fn positionEbfCenti(record: PositionRecord) u64 {
+    if (record.nodes == 0 or record.completed_depth == 0) return 0;
+    const value = @exp(@log(@as(f64, @floatFromInt(record.nodes))) /
+        @as(f64, @floatFromInt(record.completed_depth)));
+    return @intFromFloat(@round(value * 100.0));
+}
+
+pub fn topShareTenthsPercent(report: *const Report) u64 {
+    if (report.fingerprint_nodes == 0) return 0;
+    const numerator = @as(u128, report.maximum_nodes) * 1000;
+    return @intCast((numerator + report.fingerprint_nodes / 2) / report.fingerprint_nodes);
+}
+
 /// Runs the real scalar search with caller-owned resources. `clock` affects
 /// descriptive timing only; `control` owns cancellation and neither can change
 /// the deterministic completed-search node fingerprint.
@@ -105,6 +121,7 @@ pub fn run(
             .nonroot_check_extension = search_build_options.nonroot_check_extension,
             .mate_distance_pruning = search_build_options.mate_distance_pruning,
             .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
+            .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
         },
         spec,
         clock,
@@ -189,6 +206,7 @@ pub fn runWithFeaturesAndParams(
 
             if (repeat == 0) {
                 report.positions[position_index] = .{
+                    .score = result.evidence.value.raw(),
                     .nodes = result.nodes,
                     .time_ms = elapsed_ms,
                     .completed_depth = if (result.completed) |completed| completed.depth else 0,

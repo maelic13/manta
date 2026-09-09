@@ -1975,9 +1975,14 @@ fn quiescenceNode(
 
     const in_check = value.current.checkers != 0;
     var moves = chess.position.MoveList.init();
-    chess.movegen.generate(.all, value, &moves);
-    context.observer.generated(moves.count);
-    if (moves.count == 0) {
+    const generation = generateQsearchMoves(
+        features.qsearch_tactical_generation,
+        value,
+        in_check,
+        &moves,
+    );
+    context.observer.generated(generation.generated_count);
+    if (!generation.has_legal_move) {
         const terminal = terminalNode(value, ply);
         storeTable(context, value.current.key, .none, terminal, null, 0, ply);
         return terminal;
@@ -2150,6 +2155,97 @@ fn quiescenceNode(
     if (table_evidence.chess_move) |tt_move|
         context.observer.ttBest(tt_move.raw() == best_move.raw());
     return result;
+}
+
+const QsearchGeneration = struct {
+    has_legal_move: bool,
+    generated_count: usize,
+};
+
+/// Produces exactly the moves qsearch can consume while retaining a complete
+/// terminal witness. In check, every legal evasion remains searchable. At an
+/// ordinary node, the exact tactical partition is sufficient unless empty;
+/// only then is the disjoint quiet partition generated into the same bounded
+/// storage to prove stalemate or its absence, and immediately discarded.
+fn generateQsearchMoves(
+    comptime tactical_only: bool,
+    value: *const chess.position.Position,
+    in_check: bool,
+    moves: *chess.position.MoveList,
+) QsearchGeneration {
+    std.debug.assert(moves.count == 0);
+    if (!tactical_only or in_check) {
+        chess.movegen.generate(.all, value, moves);
+        return .{
+            .has_legal_move = moves.count != 0,
+            .generated_count = moves.count,
+        };
+    }
+
+    chess.movegen.generate(.tacticals, value, moves);
+    if (moves.count != 0) {
+        return .{ .has_legal_move = true, .generated_count = moves.count };
+    }
+
+    chess.movegen.generate(.non_tactical_quiets, value, moves);
+    const quiet_count = moves.count;
+    moves.count = 0;
+    return .{
+        .has_legal_move = quiet_count != 0,
+        .generated_count = quiet_count,
+    };
+}
+
+test "qsearch tactical generation retains an exact terminal witness" {
+    // The independent full legal list is the oracle. Checked nodes must keep
+    // it verbatim; ordinary nodes either keep the filtered tactical order or,
+    // when that subset is empty, prove quiet mobility without exposing a move
+    // that qsearch would discard.
+    const fixtures = [_][]const u8{
+        "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", // stalemate
+        "4k2N/2Q1p3/2KN3B/8/8/8/8/4R3 b - - 0 1", // stalemate with pinned pseudo-capture
+        "7k/8/8/8/8/8/8/K7 w - - 0 1", // quiet-only mobility
+        "4k3/8/8/8/8/8/3q4/3RK3 w - - 0 1", // legal capture
+        "4k3/P7/8/8/8/8/8/4K3 w - - 0 1", // quiet promotions remain tactical
+        "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", // en passant remains tactical
+        "4r2k/8/8/8/8/8/8/4K3 w - - 0 1", // checked quiet evasions
+    };
+    for (fixtures) |fen_text| {
+        var root: chess.position.PositionState = .{};
+        const value = try chess.fen.parse(fen_text, &root);
+        const in_check = value.current.checkers != 0;
+
+        var all = chess.position.MoveList.init();
+        chess.movegen.generate(.all, &value, &all);
+        var selected = chess.position.MoveList.init();
+        const result = generateQsearchMoves(true, &value, in_check, &selected);
+        try std.testing.expectEqual(all.count != 0, result.has_legal_move);
+
+        if (in_check) {
+            try std.testing.expectEqual(all.count, result.generated_count);
+            try std.testing.expectEqualSlices(chess.move.Move, all.slice(), selected.slice());
+            continue;
+        }
+
+        var tacticals = chess.position.MoveList.init();
+        chess.movegen.generate(.tacticals, &value, &tacticals);
+        if (tacticals.count != 0) {
+            try std.testing.expectEqual(tacticals.count, result.generated_count);
+            try std.testing.expectEqualSlices(chess.move.Move, tacticals.slice(), selected.slice());
+        } else {
+            try std.testing.expectEqual(@as(usize, 0), selected.count);
+            try std.testing.expectEqual(all.count, result.generated_count);
+        }
+    }
+
+    var pinned_root: chess.position.PositionState = .{};
+    const pinned_stalemate = try chess.fen.parse(
+        "4k2N/2Q1p3/2KN3B/8/8/8/8/4R3 b - - 0 1",
+        &pinned_root,
+    );
+    const pseudo_capture = chess.move.Move.normal(.e7, .d6);
+    try std.testing.expect(chess.movegen.isPseudoLegal(&pinned_stalemate, pseudo_capture));
+    try std.testing.expect(!chess.movegen.isLegal(&pinned_stalemate, pseudo_capture));
 }
 
 const TableEvidence = struct {

@@ -37,6 +37,7 @@ run directories.
 | Clock policy | MAN-T05 complete rounded time fit | H1 after 4,188 games at `+24.48 +/- 10.52` nElo, accepted by explicit maintainer judgment despite the wrapper's prospective zero-timeout rejection; candidate had one completed time forfeit and baseline five |
 | SMP | MAN-R03 main-authoritative lazy SMP | 4T versus 1T accepted H1 after 194 games at `+187.72 +/- 48.89` nElo; ADR-0064 |
 | Move ordering | MAN-S30 live-history staged picker | Accepted H1 over MAN-S29 after 8,752 games at `+13.19 +/- 7.28` nElo; ADR-0035 |
+| Qsearch generation | MAN-S34 tactical-only non-check generation | Accepted H1 over MAN-S30 after 1,614 games at `+59.77 +/- 16.95` nElo without anomaly; ADR-0069 |
 | Deterministic identity | One-thread depth-6 bench | `775,451` nodes |
 
 These measurements establish promotion decisions under their registered
@@ -67,6 +68,7 @@ Raw cumulative evidence is retained under
 | `MAN-R03` | Main-authoritative lazy SMP pool |
 | `MAN-T05` | Complete six-coordinate integrated time-management fit |
 | `MAN-S30` | Live-history staged move picker |
+| `MAN-S34` | Tactical-only non-check qsearch generation with a complete legal terminal witness |
 
 Acceptance of a bundle does not establish that every included term helped.
 Frozen baselines exist only for reconstruction and do not remain runtime
@@ -92,6 +94,13 @@ affinity faults, incomplete results and nonzero exits remain fatal. Other SPSA
 groups retain strict timeout handling.
 
 ## Phase 6.5 search evidence
+
+`MAN-S34` accepted H1 at the official 1,614-game decision snapshot. Candidate A
+enabled only `-Dqsearch-tactical-generation=true` against the same-source
+MAN-S30 reconstruction. The mechanism generates only captures/promotions at
+ordinary non-check qsearch nodes and generates the disjoint quiet subset solely
+when needed to distinguish quiet mobility from stalemate. The trusted harness
+boundary was unchanged, so setup-only validation replaced a pilot.
 
 MAN-S30 accepted H1 and remains production. MAN-S31 was **rejected by
 maintainer judgment**, not formal H0, after 7,958 games at
@@ -120,9 +129,24 @@ their original step labels; new numbered work lives in PLAN.
 
 | ID | Candidate and hypothesis | Registered gate | Result |
 |---|---|---|---|
+| `MAN-S34` | Phase-6.5.7 exact tactical-only non-check qsearch generation against production MAN-S30. Removing quiet generation/ranking that qsearch cannot consume will increase throughput without changing the searched tree or chess evidence. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `751289825`; completed time forfeits and every engine/protocol/affinity fault are fatal | Accepted H1 after 1,614 games at `+59.77 +/- 16.95` nElo (`+40.00 +/- 11.45` Elo, LLR `2.95`); no anomaly; promoted to production |
 | `MAN-S33` | Phase-6.5.5 half-depth singular exclusion horizon against production MAN-S30. A bounded shallower same-position proof will preserve useful singular decisions while spending less work on alternatives. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `1844484847` | Maintainer stopped inconclusive; supplied 6,640-game snapshot `+1.24 +/- 8.36` nElo, LLR `-0.39`; unpromoted, final artifacts pending reconciliation |
 | `MAN-S31` | Phase-6.5.3 non-root blanket check-extension ablation against production MAN-S30. Spending one extra ply at every checked interior node costs more time than its tactical protection earns. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `6533108` | Rejected by maintainer judgment after 7,958 games at `-3.08 +/- 7.63` nElo, LLR `-1.60`; candidate archived; production check extension stays on; new-policy review belongs to Step 6.5.10 |
 | `MAN-S30` | Phase-6.5.1b live-history staged picker against production MAN-S29. Delaying non-tactical quiet generation and consuming descendant-completed worker-local history will reduce abandoned generation and improve time-controlled play without changing chess or evidence authority. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `1445075129` | Accepted H1 after 8,752 games at `+13.19 +/- 7.28` nElo (`+8.93 +/- 4.93` Elo, LLR `2.95`); promoted to production |
+
+`MAN-S34` ran on the designated Ryzen 9 5950X from source revision
+`a500d6b3c37696b304c65a94d69bb1cf3b05d169`. Candidate SHA-256
+`7707EF8832650603C145A05C2CAB1DDC2C669BA4F3BDDE9A007938881F598B78` and
+baseline SHA-256
+`D73FA1D181BDDB8DB7E9AC16FCB053E9866D96707DB6C12D2FBFA36DAA1A03BC`
+both reported fingerprint `775,451`. The official boundary snapshot was
+W/L/D `505/320/789`, pentanomial `[23,150,321,245,68]`, points `899.5`
+(`55.73%`), pairs ratio `1.81`, draw ratio `39.78%`, LOS `100%`, and completed
+in `00:15:56`. There were no completed time forfeits, crashes, disconnects,
+illegal moves, protocol faults or affinity faults. Concurrency allowed two
+already-running games to finish after H1; therefore the final log and PGN at
+`tools/results/sprt_MAN-S34_vs_MAN-S30_20260909_082719.*` contain 1,616 games,
+while the prospective SPRT verdict remains the 1,614-game snapshot.
 
 `MAN-S30` ran on the separate designated Ryzen 9 5950X from candidate
 fingerprint `775,451` against baseline `799,610`, both clean native ReleaseFast

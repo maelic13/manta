@@ -66,7 +66,9 @@ test "bench aggregate metrics use upper median and fixed decimal scales" {
     report.finishFirstRun();
     try std.testing.expectEqual(@as(u64, 820), report.fingerprint_nodes);
     try std.testing.expectEqual(@as(u64, 21), report.median_nodes);
+    try std.testing.expectEqual(@as(u64, 40), report.maximum_nodes);
     try std.testing.expectEqual(@as(u64, 48_780), report.top_share_million);
+    try std.testing.expectEqual(@as(u64, 49), bench.topShareTenthsPercent(&report));
     try std.testing.expectEqual(@as(u64, 15_769), report.geomean_ebf_milli);
 }
 
@@ -96,7 +98,7 @@ test "bench repeats reset shared search state" {
     try std.testing.expectEqual(report.fingerprint_nodes, report.runs[1].nodes);
 }
 
-test "optimized safety and production modes preserve the accepted MAN-S30 fingerprint" {
+test "optimized safety and production modes preserve the accepted MAN-S34 fingerprint" {
     if (builtin.mode == .Debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,

@@ -11,8 +11,9 @@ Manta 1.0.0 is the release baseline. Phases 0–6 are closed, targeted pre-NNUE
 performance Phase 6.5 is current and Phase 7 has not started. Phase 7 remains
 blocked until all of Phase 6.5, including every retained candidate and evidence
 closeout below, is complete. The production
-engine combines MAN-E19 classical evaluation, MAN-S29 search parameters and
-MAN-T05 integrated clock parameters, MAN-S30 live-history move ordering.
+engine combines MAN-E19 classical evaluation, MAN-S29 search parameters,
+MAN-T05 integrated clock parameters, MAN-S30 live-history move ordering and
+MAN-S34 tactical-only non-check qsearch generation.
 One-thread depth-6 bench is `775,451` nodes. The release configuration supports portable 64-bit Windows x86-64,
 Linux x86-64/ARM64 and macOS x86-64/ARM64 artifacts.
 
@@ -196,7 +197,11 @@ Closed with real search limits, cancellation and publication wired to UCI.
 
 #### 4.3 — Bench and test suites
 
-Closed with deterministic bench and full correctness/safety/process gates.
+Closed with deterministic bench and full correctness/safety/process gates. The
+2026-09-09 presentation alignment uses Rarog's `bench [depth] [repeats]`
+argument order, per-position fields and aggregate layout over the already
+identical forty-position corpus. Manta retains its depth-six default and exact
+`775,451` production fingerprint; only the diagnostic interface changed.
 
 #### 4.4 — Experiment tooling
 
@@ -278,7 +283,7 @@ other, and neither is a substitute for playing strength:
 | Objective | Frozen comparison and exit target |
 |---|---|
 | Board backbone | On the idle designated 5950X, native optimized builds, identical `cross-engine-board-v1` inputs/work counts and SEE semantics: geometric mean of Manta/Basilisk throughput ratios across all six cells at least `1.00`, with no cell below `0.95`. Report every cell, not just the aggregate. These are maintainer-request-derived planning targets, not achieved measurements. |
-| Mature search | Same immutable forty positions, 1T, Hash 64 MiB, fresh-process/reset policy and nominal depth 13: Manta total elapsed time no more than `1.10x` Basilisk. Require the same ratio for the ordinary-position subset excluding the two already identified mate-heavy cases; retain both cases in the full result. Separately require routine `bench 13 1 1` (Hash 1 MiB) within a prospectively frozen absolute time limit. |
+| Mature search | Same immutable forty positions, 1T, Hash 64 MiB, fresh-process/reset policy and nominal depth 13: Manta total elapsed time no more than `1.10x` Basilisk. Require the same ratio for the ordinary-position subset excluding the two already identified mate-heavy cases; retain both cases in the full result. Separately require routine `bench 13 1` (Hash 1 MiB) within a prospectively frozen absolute time limit. |
 | Strength and safety | Legal results, correct terminal/draw/bound authority, unchanged hard time safety, each retained candidate's registered 1T H1, then cumulative H1 against immutable Manta 1.0.0. No inferred 4T strength improvement. |
 
 Step 6.5.4 binds reference revisions, tolerances, timing protocol and the
@@ -548,7 +553,7 @@ REQUIREMENTS and a relevant ADR only if their authority changes.
    identities. Verify the board profile's six denominators, reset behavior,
    SEE values, native backend and no hidden legality/evaluator work differences.
 2. Freeze the two target protocols above, baseline timings and an absolute
-   `bench 13 1 1` limit on the designated host. Reuse comparable retained
+   `bench 13 1` limit on the designated host. Reuse comparable retained
    measurements; request only missing baseline measurements from the maintainer.
    Depth-13 jobs have a predeclared timeout and incomplete is not a fast result.
 3. Rank board cells by gap and representative search cost, using existing
@@ -565,19 +570,19 @@ REQUIREMENTS and a relevant ADR only if their authority changes.
 5–7; documentation/policy and missing setup checks only. No candidate or SPRT.
 Uncertain cost attribution must be marked, not filled with guessed percentages.
 
-**2026-09-08 execution checkpoint — contracts prepared; gate still open.**
-Read-only source/artifact checks below passed; no benchmark, build of an engine,
-game or implementation of 5–7 was run. Missing source bindings, comparison
-semantics and host timings prevent claiming this step complete.
+**2026-09-08 execution checkpoint — complete.** The preparation pass froze the
+contracts below without engine or game work. The subsequent designated-host run
+bound fresh artifacts and followed the fixed stop rules. It establishes open
+performance deficits; it does not satisfy either Phase-6.5 exit target.
 
 Frozen identities (SHA-256 is over retained bytes, not a filename/version guess):
 
 | Input | Identity | Qualification status |
 |---|---|---|
-| Manta production source | `48a163ebfa3d0f928ecd0209004debcb2a59cc38`, tree `a826f9cdbdc1c8e518348ee69436793b006eecb4` | Current uncommitted changes are roadmap documents; engine source unchanged |
-| Production reconstruction | `tools/test_engines/manta-MAN-S33-base.exe`, SHA `7727BB4FCB50BE1972E8A45BDE3EFEFC05DAFB3E2C507D5FDEE248DC9632CBB8` | Hash verified against retained schema-9 sidecar; sidecar records clean source, Zig 0.16.0, native integrated-time/live-history/check-extension on, other candidates off, bench `775451` |
+| Manta production source | `a500d6b3c37696b304c65a94d69bb1cf3b05d169`, tree `232593be935860e98fa5ab9a5df63eaac7db6f99` | Clean checkout; roadmap/tool changes leave the production search mechanism unchanged |
+| Production reconstruction | `tools/test_engines/manta-phase65-baseline.exe`, SHA `7727BB4FCB50BE1972E8A45BDE3EFEFC05DAFB3E2C507D5FDEE248DC9632CBB8` | Fresh schema-9 sidecar records clean source, Zig 0.16.0, native integrated-time/live-history/check-extension on, other candidates off, bench `775451` |
 | Historical Basilisk search binary | `D:/code/basilisk/build/dist/basilisk-v1.10.0-dev-windows-x86_64-pext-pgo.exe`, SHA `1034DE95AE556B972878F91FF265FED2F4F5CD13F10AAC721D12B62282072906` | Matches attribution record; exact source/compiler/PGO binding is missing. Do not bind it to current checkout by assumption |
-| Inspected Basilisk source | `c378706a3465550341f750c1214e37837ddd57f4`, clean tracked checkout | Source-study pin only until a baseline build manifest binds executable bytes |
+| Basilisk production baseline | `tools/test_engines/basilisk-phase65-baseline-pext-pgo.exe`, SHA `A8A574B57C3D700958847C87067D14893E83891D62C7928E9C8E6BDEF04CB0C4` | Clean `d0f262765a198c61dc8fe9fdf09db6a733b61fec`; Clang 22.1.8, native PEXT, PGO-use, bench `12568898` |
 | Modern search reference | `edb0d9db6731067ec50ce619ff372b463bc4dd5d`; `src/search.cpp` SHA `A934524DD2F386EC38CDF95B7B2E41CECDC85C9B17E12C0668621E6AE16BE28A` | Source reference, no reference binary needed for either performance target |
 | Forty-position timing corpus | `tools/bench_positions.epd`, SHA `F7451A4E7750C6DE5A9AC37AA6E3631782A6932B784B89EEB714BE533E6E1862` | Freeze order and all forty positions; ordinary subset excludes zero-based indices 6 and 30 only |
 | Manta board workload | `tools/board_bench.zig`, SHA `F98BF51D355A193FDE42BC0C324CC1E823A60C191D45846FFD0E997281DA38B0` | Work/SEE setup contract inspected; future code edits preserve the input/denominator contract rather than this implementation hash |
@@ -626,7 +631,7 @@ follow after their cost is separated. HCE's historical 3.39M evaluations/s,
 Qsearch visibly generates/ranks quiets it discards; its marginal speed benefit
 still requires measurement. No emitted-code speed claim has been made.
 
-**Prospective timing/acceptance protocol.** Freeze routine `bench 13 1 1` at
+**Prospective timing/acceptance protocol.** Freeze routine `bench 13 1` at
 30 seconds on the idle designated 5950X: a usability budget, not a prediction
 from the old curve. All forty cases and completed depth must be accounted for.
 Keep the 64-MiB relative target and six-cell limits above unchanged.
@@ -713,12 +718,41 @@ cmake --build D:/code/basilisk/build/release-pext --target board_performance_tes
 ./tools/compare_board_see.ps1 -MantaBench ./zig-out/bin/manta-board-bench.exe -BasiliskBench D:/code/basilisk/build/release-pext/board_performance_test.exe -OutFile ./zig-out/phase65-see-setup.json
 ```
 
-The exact remaining work is maintainer-host baseline collection: create clean,
-source/build-bound production Manta and Basilisk search/board artifacts and run
-the frozen alternating six-cell and depth-13 protocols with profiler v2. Do not
-use the local smoke as performance evidence. Record the freshly built artifact
-hashes and reports in this checkpoint, then mark 6.5.4 complete and open 6.5.5.
-This is baseline measurement, not an SPRT pilot. No game harness is involved.
+**Designated-host baseline.** The idle Ryzen 9 5950X ran Windows 11 build 26200
+under the recorded Ultimate power plan, with each timed parent/process pinned to
+affinity mask `1`. Manta's native ReleaseFast board artifact is SHA
+`8ECE9988...C2FAFB`; Basilisk's Clang-22 release-pext board artifact is
+`BA8D8B5A...860DBD5`. The setup-only SEE comparison again passed 10/10.
+
+| Board cell | Manta median/s | Basilisk median/s | median pair ratio | target |
+|---|---:|---:|---:|---|
+| Legal generation | 393,644,600 | 615,801,720 | 0.636 | fail |
+| Legal captures | 93,144,489 | 114,560,960 | 0.814 | fail |
+| Make/unmake | 35,358,543 | 55,426,787 | 0.640 | fail |
+| Threshold SEE | 30,198,468 | 56,923,160 | 0.531 | fail |
+| Start-position perft(4) | 245,255,949 | 392,588,067 | 0.625 | fail |
+| Two-ply simulation | 322,450,289 | 524,301,686 | 0.615 | fail |
+
+The median-ratio geometric mean is `0.638`; all six cells miss the `0.95`
+individual floor. Pair ratios were wholly below the targets, so this is a
+resolved baseline deficit rather than timing noise. Generation feeds five
+cells, while threshold SEE is the largest isolated ratio gap; Steps 5 and 6
+retain that dependency order rather than optimizing SEE first in isolation.
+
+The first Manta profiler-v2 sweep completed depths 4–12. Depth 12 was
+`170,853,905` nodes / `133,704 ms` full and `69,374 ms` ordinary. At depth 13,
+positions 0–5 completed before mate-heavy position 6 exceeded the fixed 60 s
+position deadline; the report is explicitly incomplete. Per protocol, the
+remaining alternating sweeps were not run, so neither the full nor ordinary
+depth-13 ratio is claimed. The separate pinned `bench 13 1` check timed out at
+`30,034 ms` without a completed total. Both search targets therefore remain
+open failures; incomplete work is not credited as speed.
+
+Ignored raw evidence lives under `zig-out/phase65-baseline/`: board comparison
+SHA `1E28BD94...B2539`, incomplete search report SHA `D240B8E1...F0F26`, routine
+bench report SHA `6EC39CA9...1FF94`, and SEE setup SHA `E83F0389...B7F59`.
+Step 6.5.4 is complete because identities, targets, contracts and the baseline
+outcomes are now frozen. Step 6.5.5 is next; no candidate or SPRT was created.
 
 #### 6.5.5 — Legal generation and attack/check backbone
 
@@ -750,6 +784,34 @@ cost improvement and final 1T H1 under the common package rule.
 **Handoff to 6:** documented reusable facts and ownership, not a new search
 policy or a broad representation rewrite.
 
+**2026-09-08 execution checkpoint — complete, no retained candidate.** Four
+bounded forms of the same generation/attack-path hypothesis were measured in
+three pinned A/B, B/A, A/B pairs and removed after refutation:
+
+- A compile-time unpinned/non-check specialization removed redundant masks and
+  the pinned-pawn loop. Legal-generation ratios `1.002/0.965/1.015` crossed
+  parity. Although capture generation and perft medians were `1.048` and
+  `1.038`, make/unmake and two-ply simulation were `0.991` and `0.981`.
+  Fixed-tree depth-eight search kept exactly `4,565,886` nodes but elapsed
+  ratios were `1.012/1.011/1.026`; isolated cells did not translate to search.
+- Forcing that pawn specialization inline made legal generation `0.958` and
+  make/unmake `0.935`; it was immediately rejected as code-growth harm.
+- Reusing one immutable enemy piece-class set across king-destination queries
+  put every six-cell median below parity (`0.942` perft, `0.958` generation).
+- Directly inlining the native slider lookup into legal generation remained
+  unresolved/negative: generation `0.985`, perft `0.996`, simulation `0.992`,
+  with individual pairs crossing parity. No emitted-code assumption overruled
+  the measurements.
+
+Both feature-off and candidate builds passed `test-fast`; candidate search
+retained fingerprint `775451`, and the temporary direct-slider path also passed
+the exhaustive independent occupancy oracle. All experimental source/build
+switches were then removed, leaving production source unchanged. No candidate
+qualified for registration, so no SPRT was prepared or run. The result closes
+this bounded ticket without claiming the board target: generation remains a
+measured deficit, and Step 6.5.6 starts from unchanged production rather than
+from a locally attractive isolated benchmark result.
+
 #### 6.5.6 — State transitions, SEE and board parity checkpoint
 
 **Model:** GPT-5.6 Terra High; Astra High for SEE legality semantics.
@@ -778,6 +840,36 @@ ReleaseSafe, exact fingerprint/PV/results, controlled native A/B, final 1T H1.
 Exact changes sharing one derived-state invariant may form one preregistered
 package with 5; independent primitives are not bundled by default.
 
+**2026-09-09 execution checkpoint — complete, no retained candidate.** The
+bounded transition and SEE duplicate-work hypotheses were tested independently
+and removed after their end-to-end evidence failed:
+
+- Passing the already-known mover/victim into physical make/unmake updates
+  avoided mailbox rediscovery and improved the isolated make/unmake cell in all
+  three alternations (`1.018/1.089/1.084`). It did not transfer coherently:
+  perft's median ratio was `0.956`, other composite cells crossed parity, and an
+  exact-tree depth-six search alternation was about `1.021x` slower by elapsed
+  time. The node fingerprint remained `775451`.
+- Reusing the initial capture classification in threshold SEE preserved the
+  legal exchange oracle, but its paired threshold-cell ratios were
+  `0.964/1.028`. That unresolved interval provides no speed claim and did not
+  justify a whole-search candidate.
+
+ReleaseSafe `test-fast` passed while evaluating both exact forms. Final
+`transition.zig` and `see.zig` are byte-identical to the accepted production
+source; therefore the frozen designated-host board result remains authoritative:
+geometric mean `0.638`, with all six cells below the `0.95` floor. No candidate
+qualified for registration and no SPRT was prepared or run.
+
+The remaining deficit is not assigned to another speculative state rewrite.
+Generation still contributes to five composite cells, while threshold SEE is
+the largest isolated ratio gap; this benchmark also folds generation into both
+named cells and exercises SEE only at threshold zero. Step 6.5.13 must refresh
+the profile on the accepted search head, add transition-only and representative
+search-threshold attribution only if still needed, and select the single largest
+measured owner. This is the bounded board follow-up; the now-complete Step 6.5.7
+does not conceal the open board target behind reduced qsearch work.
+
 #### 6.5.7 — Qsearch work proportional to tactical search
 
 **Model:** GPT-5.6 Terra High. **Dependency:** accepted board head.
@@ -802,6 +894,52 @@ package with 5; independent primitives are not bundled by default.
 checks, promotions and EP; exact fingerprint/PV/results; controlled full-search
 speed gain and final 1T H1. Legal behavioral mismatches require diagnosis and
 a playing classification, not silent relaxation of this exact ticket.
+
+**2026-09-09 completion checkpoint — accepted and promoted.** `MAN-S34`
+implements the exact tactical-only non-check
+qsearch path specified by ADR-0069. It reuses the accepted `.tacticals` and
+`.non_tactical_quiets` partition in one `MoveList`: a tactical is immediately a
+legal witness; only an empty tactical list triggers quiet generation, whose
+count proves mobility before the list is reset without ranking. Checked nodes
+retain the complete `.all` evasion list. No pruning, score, bound, provenance,
+depth, history, allocation or thread authority changed.
+
+The independent full-legal-list test covers actual stalemate, quiet-only
+mobility, a legal capture and checked quiet evasions. Candidate-on and off
+ReleaseSafe gates pass, including the full suite and all 24 UCI process cases.
+Across the twelve frozen observation cohorts, both arms have identical best
+moves, scores, bounds, provenance, main/qsearch node split and total nodes.
+Generated moves fell from `6,974,800` to `3,023,797` (`-56.65%`). Three-order
+native ReleaseFast comparisons retained fingerprint `775451`; representative
+median NPS was about `1.34x` production (`1,572,922` versus `1,173,148` in the
+final recorded pair). This is exact-cost qualification, not strength evidence.
+
+Frozen setup identities:
+
+| Arm/input | Identity |
+|---|---|
+| Candidate A | `tools/test_engines/manta-MAN-S34-candidate.exe`, SHA-256 `7707EF8832650603C145A05C2CAB1DDC2C669BA4F3BDDE9A007938881F598B78`; native ReleaseFast Zig 0.16.0; qsearch tactical generation on; bench `775451` |
+| Baseline B | `tools/test_engines/manta-MAN-S34-baseline.exe`, SHA-256 `D73FA1D181BDDB8DB7E9AC16FCB053E9866D96707DB6C12D2FBFA36DAA1A03BC`; identical settings with qsearch tactical generation off; bench `775451` |
+| Source state | HEAD `a500d6b3c37696b304c65a94d69bb1cf3b05d169`, tree `232593be935860e98fa5ab9a5df63eaac7db6f99`, executable-source/tool diff identity `1a88898fdc26e737eee39ba3a3c9cf5d25f7f153`; both sidecars explicitly record the dirty state |
+| Harness/book | `sprt.ps1` SHA `487836C5068B1C3652A66D9D72EB886808F9F66451BE1F97AE629C9C45898BF1`; fastchess SHA `8444E73965AE44E716CDE1BB546A7D7C8C9FC7A442A44194A0C71A3BFFA7DD0D`; UHO book SHA `7A7F6470615A69C6CF23D565417701D38732876F480AF90D67B42ABADE35644A` |
+
+The unchanged trusted 5950X/fastchess boundary required no pilot. The final
+registered 1T `3+0.03`, 64-MiB, concurrency-14, normalized `[1,5]` SPRT with
+seed `751289825` accepted H1 at the official 1,614-game decision snapshot:
+W/L/D `505/320/789`, pentanomial `[23,150,321,245,68]`,
+`+59.77 +/- 16.95` nElo (`+40.00 +/- 11.45` Elo), LLR `2.95`, LOS `100%`.
+No completed time forfeit or engine, protocol or affinity anomaly occurred.
+Two already-running games completed after the boundary, so the retained PGN
+and full log contain 1,616 games; they are completion evidence, not a change
+to the 1,614-game SPRT verdict. The artifacts are
+`tools/results/sprt_MAN-S34_vs_MAN-S30_20260909_082719.{log,pgn}` with their
+candidate, baseline and run manifests.
+
+MAN-S34 is production by default. Explicit
+`-Dqsearch-tactical-generation=false` reconstructs MAN-S30's full qsearch
+generation for archived diagnostics. Both arms retain fingerprint `775451`.
+Step 6.5.7 is closed; Step 6.5.8 is next and remains a separately authorized
+design ticket.
 
 #### 6.5.8 — Modern search design and one evidence/depth contract
 
@@ -993,8 +1131,10 @@ retained package. Reference coverage alone never opens this optional experiment.
 **Files:** profile-owned board/search/eval hot path; `build.zig` and build
 support only if the compiler branch is justified.
 
-1. Refresh only the profile portions invalidated by tree changes. Confirm the
-   board target remains met and rank time in HCE, SEE, picker, TT and transition.
+1. Refresh only the profile portions invalidated by tree changes. Determine
+   whether the still-open board target is met and rank time in HCE, SEE, picker,
+   TT and transition. If necessary, isolate transition from generation and
+   sample the accepted search's actual SEE thresholds/capture distribution.
    Fix the largest evidenced residual owner, not all listed mechanisms.
 2. Compare occupied-piece traversal with HCE's 64-square placement/phase scan;
    inspect pawn-cache hit/collision/footprint and exact trace behavior before
@@ -1051,7 +1191,7 @@ causal/contract review. **Dependency:** all prior dispositions explicit.
    Do not subtract inconvenient cases, use observer timings, alter depth
    semantics or stop accounting after a search becomes expensive.
 3. Check both the 64-MiB Basilisk-relative depth-13 limits and the independent
-   routine `bench 13 1 1` absolute limit. Record the relation
+   routine `bench 13 1` absolute limit. Record the relation
    elapsed = counted nodes / measured NPS without treating it as chess quality.
    If either target misses, identify remaining cost/tree owners and request a
    bounded plan revision; no automatic phase advance or endless unguided tuning.

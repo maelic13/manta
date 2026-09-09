@@ -2,12 +2,22 @@
 @phase 4.3
 > Manta {{VERSION}} by Miloslav Macurek
 < setoption name Hash value 1
-< bench 1 1 1
+< bench 1 1
+> {{EMPTY}}
 > {{BENCH_POSITION_LINES}}
-> info string bench total depth 1 repeats 1 threads 1 nodes {{U64}} time_ms {{POSITIVE_U64}} nps {{U64}} ebf {{DECIMAL}} median_nodes {{U64}} top_share {{DECIMAL}}
+> {{EMPTY}}
+> =========================
+> Nodes searched  : {{U64}}
+> Geomean EBF     : {{DECIMAL}}
+> Median nodes    : {{U64}}
+> Top-pos share   : {{DECIMAL}}%  ({{U64}} nodes)
+> Total time (ms) : {{U64}}
+> Nodes/second    : {{U64}}
 ! silence 100ms
 < bench invalid
 > info string invalid bench: depth must be a positive integer
+< bench 1 1 1
+> info string invalid bench: expected at most depth and repeats
 < quit
 ! exit 0 within 1000ms
 
@@ -16,10 +26,17 @@
 # Multiple repeats omit per-position detail and preserve run-one identity.
 @phase 4.3
 > Manta {{VERSION}} by Miloslav Macurek
-< bench 1 2 1
-> info string bench run 1/2 depth 1 threads 1 nodes {{U64}} time_ms {{U64}} nps {{U64}}
-> info string bench run 2/2 depth 1 threads 1 nodes {{U64}} time_ms {{U64}} nps {{U64}}
-> info string bench summary depth 1 repeats 2 threads 1 fingerprint_nodes {{U64}} best_nps {{U64}} median_nps {{U64}}
+< bench 1 2
+> {{EMPTY}}
+> run 1/2  nodes {{U64}}  time {{U64}}ms  nps {{U64}}
+> run 2/2  nodes {{U64}}  time {{U64}}ms  nps {{U64}}
+> {{EMPTY}}
+> =========================
+> Nodes searched  : {{U64}}
+> Geomean EBF     : {{DECIMAL}}
+> Median nodes    : {{U64}}
+> Top-pos share   : {{DECIMAL}}%  ({{U64}} nodes)
+> Nodes/second    : {{U64}}   (best of 2; median {{U64}}, min {{U64}})
 ! silence 100ms
 < quit
 ! exit 0 within 1000ms
@@ -29,7 +46,7 @@
 # Controller-side cancellation closes the queued bench/stop epoch race.
 @phase 4.3
 > Manta {{VERSION}} by Miloslav Macurek
-< bench 6 1 1
+< bench 6 1
 < stop
 > info string bench cancelled run 1/1 positions {{U64}}/40 nodes {{U64}}
 ! silence 100ms
