@@ -1003,6 +1003,10 @@ Implement these bounded sub-tickets in order, as one behavior-neutral step.
 Names, fields and admission rules are in ADR-0070; no coefficient fitting or
 new production consumer is part of this work.
 
+**Implementation complete; required Astra High review remains open.** The
+implementation is frozen at the commit closing this implementation pass and must not advance
+to 6.5.10 until that review accepts the authority and lifetime boundaries.
+
 1. **6.5.9.1 — Exact fact adapters (`types`, `baseline`).** Add `StaticFacts`,
    `TtFacts`, `WindowFacts` and `MoveFacts` views at existing producers. Preserve
    raw/refined separation, original TT producer and unknown PV-origin. Trend
@@ -1020,8 +1024,8 @@ new production consumer is part of this work.
 3. **6.5.9.3 — Paired shadow outcomes (`ordering`, `types`, `baseline`).**
    Define ADR-0070's signed value/saturating-support cell and once-only eligible
    update packet. Add `-Dsearch-evidence-observation=false` as the default,
-   with no public UCI option. Compile-time-disabled shadows may use existing main/reply/
-   continuation keys only; keep current live staging and production updates
+   with no public UCI option. Compile-time-disabled shadows may use existing
+   main/reply/continuation keys only; keep current live staging and production updates
    exact. Pair values/counts from identical admitted outcomes. Test searched
    sibling filtering, reset/saturation, root/null boundaries and shared-key
    aliasing. No capture-history revival, new table family or periodic aging.
@@ -1036,6 +1040,42 @@ equivalence, synthetic outcome/reset/chain-boundary tests, allocation and lifeti
 checks. Disabled substrate needs no games. Stop and diagnose any mismatch;
 do not conceal a playing change in this step. Richer support is not calibrated
 confidence and has no initial production consumer in 10.2.
+
+Implementation evidence before review:
+
+- `types.zig` now owns optional static/TT/window/move facts, explicit node/move
+  depth plans, scoped outcomes and a bounded signed value/support cell. The TT
+  adapter keeps the original producer, generation/freshness and unknown PV
+  origin. Static trends require uninterrupted real-move chains.
+- `baseline.zig` observes the accepted check/IIR, shallow omission, LMR/PVS,
+  null/exclusion and qsearch routes without replacing their formulas. Selected
+  ordinal and actually searched count are separate. Final source/scope and
+  verification facts are retained; no result, PV, TT or root publication reads
+  the observation.
+- The `search-evidence-observation` build selector defaults false and maps only
+  to a compile-time search feature. The default `SearchEvidenceObservation` is
+  zero bytes. Its enabled bounded worker-local storage is at most 128 KiB and
+  adds no UCI option. Shadow values/support use exact existing relation keys,
+  admit only completed ordinary exact/cutoff quiet outcomes, ignore unsearched
+  siblings and avoid double-counting identical shared continuation contexts.
+- Default and enabled ReleaseFast `bench 6 1` each produced identical per-case
+  scores/nodes and the accepted aggregate fingerprint `775451`, geomean EBF
+  `4.821`, median `12447` and top share `16.9% (130895)`. Wall time/NPS are
+  descriptive single runs and make no throughput claim.
+- Default and enabled Debug `test-fast` each ran `222/222` executable tests.
+  The command remains nonzero only because the unchanged three bench-reference
+  policy violations recorded under 6.5.8 still fail the repository-wide policy
+  dependency. The final enabled full Debug `zig build test` passed, including
+  all 24 UCI process cases; `zig build check` compiled the default and enabled
+  configurations, and `git diff --check` passes. No games, pilot or experiment
+  registration applies.
+
+The Astra review owns 6.5.9.4 closure. It must verify that table collisions are
+diagnostic drops rather than merged samples; support is lifetime count rather
+than probability/recency; shadow reset matches its per-search owner; qsearch,
+null, exclusion and restricted-root scope cannot acquire ordinary feedback/TT
+authority; and the default-off code is genuinely erased. Review findings are
+fixed inside 6.5.9 before marking it complete. Step 6.5.10 remains blocked.
 
 #### 6.5.10 — Integrated ordering, aspiration and selective depth
 

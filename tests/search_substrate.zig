@@ -2053,3 +2053,153 @@ test "a nonzero halfmove clock suppresses probing at that node" {
         prober.probeWdl(&position),
     );
 }
+
+test "search evidence observation preserves the accepted search result" {
+    // Step 6.5.9 is diagnostic substrate: enabling it may populate typed facts
+    // and paired shadow outcomes, but cannot change nodes, result, PV or the
+    // restored root. The test runs only in the explicitly enabled build.
+    if (comptime !search.types.search_evidence_observation_compiled)
+        return error.SkipZigTest;
+
+    const fen_text = "r2qr1k1/p4ppp/1pn1bn2/2b1p3/4P3/1BN1BN2/PPP2PPP/R2QR1K1 b - - 6 10";
+    var observed_root: chess.position.PositionState = .{};
+    var control_root: chess.position.PositionState = .{};
+    var observed_position = try chess.fen.parse(fen_text, &observed_root);
+    var control_position = try chess.fen.parse(fen_text, &control_root);
+    const observed_key = observed_position.current.key;
+    const control_key = control_position.current.key;
+    var observed_harness: Harness = .{};
+    var control_harness: Harness = .{};
+    var observed_ordering: search.ordering.State = .{};
+    var control_ordering: search.ordering.State = .{};
+    var observed_observer: search.diagnostics.Disabled = .{};
+    var control_observer: search.diagnostics.Disabled = .{};
+    var observed_control: search.types.NeverStop = .{};
+    var plain_control: search.types.NeverStop = .{};
+
+    const observed = search.baseline.runWithFeatures(
+        .{ .search_evidence_observation = true },
+        &observed_position,
+        observed_harness.binding(),
+        .{ .depth = 5 },
+        &observed_control,
+        &observed_harness.thread,
+        null,
+        &observed_ordering,
+        &observed_observer,
+    );
+    const plain = search.baseline.runWithFeatures(
+        .{},
+        &control_position,
+        control_harness.binding(),
+        .{ .depth = 5 },
+        &plain_control,
+        &control_harness.thread,
+        null,
+        &control_ordering,
+        &control_observer,
+    );
+
+    try std.testing.expectEqual(plain.nodes, observed.nodes);
+    try std.testing.expectEqual(plain.evidence.value.raw(), observed.evidence.value.raw());
+    try std.testing.expectEqual(plain.evidence.bound, observed.evidence.bound);
+    try std.testing.expectEqual(plain.evidence.provenance, observed.evidence.provenance);
+    try std.testing.expectEqual(plain.best_move.?.raw(), observed.best_move.?.raw());
+    try std.testing.expectEqualSlices(
+        chess.move.Move,
+        plain.completed.?.pv.slice(),
+        observed.completed.?.pv.slice(),
+    );
+    try std.testing.expectEqual(observed_key, observed_position.current.key);
+    try std.testing.expectEqual(control_key, control_position.current.key);
+    try std.testing.expect(chess.state.isConsistent(&observed_position));
+    try expectLegalPv(fen_text, observed.completed.?.pv.slice());
+
+    const summary = observed_harness.thread.search_evidence.summary();
+    try std.testing.expect(summary.static_facts != 0);
+    try std.testing.expect(summary.tt_facts != 0);
+    try std.testing.expect(summary.windows != 0);
+    try std.testing.expect(summary.node_plans != 0);
+    try std.testing.expect(summary.move_plans != 0);
+    try std.testing.expect(summary.outcomes != 0);
+    try std.testing.expect(summary.updates != 0);
+    const snapshot = observed_harness.thread.search_evidence.snapshot();
+    try std.testing.expect(snapshot.static_facts != null);
+    try std.testing.expect(snapshot.tt_facts != null);
+    try std.testing.expect(snapshot.window != null);
+    try std.testing.expect(snapshot.node_plan != null);
+    try std.testing.expect(snapshot.move_facts != null);
+    try std.testing.expect(snapshot.move_plan != null);
+    try std.testing.expect(snapshot.outcome != null);
+    try std.testing.expectEqual(@as(?bool, null), snapshot.tt_facts.?.pv_origin);
+    try std.testing.expect(snapshot.move_facts.?.chess_move.isChessMove());
+    try std.testing.expect(snapshot.move_facts.?.searched_before <= snapshot.move_facts.?.selected_ordinal);
+}
+
+test "shadow evidence pairs value and support for one exact relation" {
+    // A key represents one existing ordering relation. Value and support are
+    // updated together; identical continuation contexts intentionally alias
+    // because production uses one table across distances.
+    if (comptime !search.types.search_evidence_observation_compiled)
+        return error.SkipZigTest;
+
+    var root: chess.position.PositionState = .{};
+    const position = try chess.fen.parse(chess.fen.start_position, &root);
+    const chess_move = chess.move.Move.normal(.e2, .e4);
+    const quiet_key = search.ordering.quietEvidenceKey(.white, chess_move);
+    const context = search.ordering.ContinuationContext{
+        .previous_piece = .knight,
+        .previous_to = .f6,
+        .from_check = false,
+        .tactical = false,
+    };
+    try std.testing.expectEqual(
+        search.ordering.continuationEvidenceKey(&position, context, chess_move),
+        search.ordering.continuationEvidenceKey(&position, context, chess_move),
+    );
+
+    var observation: search.types.SearchEvidenceObservation = .{};
+    observation.record(quiet_key, 9);
+    observation.record(quiet_key, -4);
+    const sample = observation.sample(quiet_key).?;
+    try std.testing.expectEqual(@as(u8, 2), sample.support);
+    try std.testing.expect(sample.value < 9);
+    observation.reset();
+    try std.testing.expectEqual(@as(?search.types.OutcomeSupportCell, null), observation.sample(quiet_key));
+}
+
+test "cancelled search records an incomplete outcome without publishing it" {
+    // Cancellation is not searched evidence. The observer may record the
+    // interrupted route, while Result retains the legal fallback/completed
+    // authority owned by the normal search contract.
+    if (comptime !search.types.search_evidence_observation_compiled)
+        return error.SkipZigTest;
+
+    var root: chess.position.PositionState = .{};
+    var position = try chess.fen.parse(chess.fen.start_position, &root);
+    const root_key = position.current.key;
+    var harness: Harness = .{};
+    var heuristics: search.ordering.State = .{};
+    var observer: search.diagnostics.Disabled = .{};
+    var control: search.types.NeverStop = .{};
+    const result = search.baseline.runWithFeatures(
+        .{ .search_evidence_observation = true },
+        &position,
+        harness.binding(),
+        .{ .depth = 6, .nodes = 3 },
+        &control,
+        &harness.thread,
+        null,
+        &heuristics,
+        &observer,
+    );
+
+    try std.testing.expectEqual(search.types.Termination.node_limit, result.termination);
+    try std.testing.expect(result.best_move != null);
+    try std.testing.expect(chess.movegen.isLegal(&position, result.best_move.?));
+    try std.testing.expectEqual(root_key, position.current.key);
+    try std.testing.expect(chess.state.isConsistent(&position));
+    const outcome = harness.thread.search_evidence.snapshot().outcome.?;
+    try std.testing.expect(!outcome.complete);
+    try std.testing.expectEqual(@as(?search.types.OutcomeAttribution, null), outcome.attribution);
+}

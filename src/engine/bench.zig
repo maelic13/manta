@@ -122,6 +122,7 @@ pub fn run(
             .mate_distance_pruning = search_build_options.mate_distance_pruning,
             .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
             .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
+            .search_evidence_observation = search_build_options.search_evidence_observation,
         },
         spec,
         clock,

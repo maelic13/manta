@@ -2,6 +2,7 @@
 const std = @import("std");
 const chess = @import("../chess/root.zig");
 const score = @import("../score.zig");
+const search_build_options = @import("search_build_options");
 
 pub const Bound = enum {
     exact,
@@ -210,10 +211,305 @@ pub const OutcomeAttribution = struct {
     }
 };
 
+/// Locality carried by searched evidence. A numeric bound never widens this
+/// scope when it is returned, negated, or stored.
+pub const EvidenceScope = enum {
+    ordinary,
+    restricted_root,
+    exclusion,
+    null_probe,
+    null_verification,
+    probcut,
+    history_local,
+    quiescence,
+};
+
+pub const EvalTrend = struct {
+    current: i32,
+    previous: i32,
+
+    pub fn improving(self: EvalTrend) bool {
+        return self.current > self.previous;
+    }
+};
+
+/// Behavior-neutral view of values which existing static consumers currently
+/// derive independently. Missing evidence remains optional rather than zero.
+pub const StaticFacts = struct {
+    raw_hce: ?i32 = null,
+    raw_hce_cached: bool = false,
+    ordinary_tt_refinement: ?i32 = null,
+    corrected: ?i32 = null,
+    own_trend: ?EvalTrend = null,
+    opponent_trend: ?EvalTrend = null,
+};
+
+/// Authenticated TT facts retain the stored producer. The present TT format
+/// has no independent PV-origin bit, so `pv_origin` is deliberately unknown.
+pub const TtFacts = struct {
+    authenticated: bool = false,
+    chess_move: ?chess.move.Move = null,
+    value: ?score.Score = null,
+    static_eval: ?score.Score = null,
+    bound: ?Bound = null,
+    producer: ?Provenance = null,
+    stored_depth: ?u8 = null,
+    generation: ?u8 = null,
+    current_generation: ?u8 = null,
+    fresh: ?bool = null,
+    scope_compatible: bool = false,
+    cutoff_authorized: bool = false,
+    pv_origin: ?bool = null,
+};
+
+pub const WindowFacts = struct {
+    alpha: i32,
+    beta: i32,
+    width: u32,
+    root_reference_width: ?u32,
+    expectation: NodeExpectation,
+
+    pub fn init(alpha: i32, beta: i32, root_reference_width: ?u32, expectation: NodeExpectation) WindowFacts {
+        std.debug.assert(alpha < beta);
+        return .{
+            .alpha = alpha,
+            .beta = beta,
+            .width = @intCast(@as(i64, beta) - alpha),
+            .root_reference_width = root_reference_width,
+            .expectation = expectation,
+        };
+    }
+};
+
+pub const MoveFacts = struct {
+    chess_move: chess.move.Move,
+    resulting_piece: chess.types.PieceType,
+    victim: chess.types.PieceType,
+    tactical: bool,
+    tt_move: bool,
+    evasion: bool,
+    gives_check: bool,
+    selected_ordinal: u16,
+    searched_before: u16,
+};
+
+pub const NodeDepthPlan = struct {
+    requested: DepthIntent,
+    active: DepthIntent,
+    admitted_check_extension: u16,
+    admitted_iir_reduction: u16,
+    ply_capacity: u16,
+};
+
+/// Observes the horizons selected by the accepted search. It does not yet
+/// replace any depth, pruning, or dispatch formula.
+pub const MoveDepthPlan = struct {
+    full: DepthIntent,
+    probe: DepthIntent,
+    prune_depth: u16,
+    selected_ordinal: u16,
+    searched_before: u16,
+    singular_extension: u16,
+    proposed_reduction: u16,
+    shallow_omitted: bool,
+};
+
+pub const Verification = enum { not_required, reduced_only, completed };
+
+pub const SearchOutcome = struct {
+    attribution: ?OutcomeAttribution,
+    scope: EvidenceScope,
+    requested_horizon: u16,
+    searched_horizon: u16,
+    verification: Verification,
+    omitted_siblings: bool,
+    complete: bool,
+};
+
+/// Signed outcome and support are updated as one diagnostic sample. Support is
+/// a saturated admitted-update count, not a probability or recency estimate.
+pub const OutcomeSupportCell = struct {
+    value: i16 = 0,
+    support: u8 = 0,
+
+    pub const limit: i32 = 16 * 1024;
+
+    pub fn apply(self: *OutcomeSupportCell, bonus_unbounded: i32) void {
+        const bonus = std.math.clamp(bonus_unbounded, -limit, limit);
+        const magnitude: i32 = @intCast(@abs(bonus));
+        const current: i32 = self.value;
+        const next = current + bonus - @divTrunc(current * magnitude, limit);
+        std.debug.assert(next >= -limit and next <= limit);
+        self.value = @intCast(next);
+        self.support +|= 1;
+    }
+};
+
+pub const search_evidence_observation_compiled = search_build_options.search_evidence_observation;
+const observation_slot_count = 4096;
+
+const ObservationStorage = if (search_evidence_observation_compiled) struct {
+    const Entry = struct {
+        key: u64 = 0,
+        sample: OutcomeSupportCell = .{},
+    };
+
+    entries: [observation_slot_count]Entry = @splat(.{}),
+    static_facts: u64 = 0,
+    tt_facts: u64 = 0,
+    windows: u64 = 0,
+    node_plans: u64 = 0,
+    move_plans: u64 = 0,
+    outcomes: u64 = 0,
+    updates: u64 = 0,
+    dropped: u64 = 0,
+    last_static: ?StaticFacts = null,
+    last_tt: ?TtFacts = null,
+    last_window: ?WindowFacts = null,
+    last_node_plan: ?NodeDepthPlan = null,
+    last_move_facts: ?MoveFacts = null,
+    last_move_plan: ?MoveDepthPlan = null,
+    last_outcome: ?SearchOutcome = null,
+} else struct {};
+
+pub const SearchEvidenceSummary = struct {
+    static_facts: u64 = 0,
+    tt_facts: u64 = 0,
+    windows: u64 = 0,
+    node_plans: u64 = 0,
+    move_plans: u64 = 0,
+    outcomes: u64 = 0,
+    updates: u64 = 0,
+    dropped: u64 = 0,
+};
+
+pub const SearchEvidenceSnapshot = struct {
+    static_facts: ?StaticFacts = null,
+    tt_facts: ?TtFacts = null,
+    window: ?WindowFacts = null,
+    node_plan: ?NodeDepthPlan = null,
+    move_facts: ?MoveFacts = null,
+    move_plan: ?MoveDepthPlan = null,
+    outcome: ?SearchOutcome = null,
+};
+
+/// Build-time-erased worker-local Step-6.5.9 observation state. Keys are
+/// produced by ordering from already validated chess/context facts.
+pub const SearchEvidenceObservation = struct {
+    storage: ObservationStorage = .{},
+
+    pub fn reset(self: *SearchEvidenceObservation) void {
+        self.* = .{};
+    }
+
+    pub fn observeStatic(self: *SearchEvidenceObservation, facts: StaticFacts) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.static_facts += 1;
+            self.storage.last_static = facts;
+        }
+    }
+
+    pub fn observeTt(self: *SearchEvidenceObservation, facts: TtFacts) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.tt_facts += 1;
+            self.storage.last_tt = facts;
+        }
+    }
+
+    pub fn observeWindow(self: *SearchEvidenceObservation, facts: WindowFacts) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.windows += 1;
+            self.storage.last_window = facts;
+        }
+    }
+
+    pub fn observeNodePlan(self: *SearchEvidenceObservation, plan: NodeDepthPlan) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.node_plans += 1;
+            self.storage.last_node_plan = plan;
+        }
+    }
+
+    pub fn observeMovePlan(self: *SearchEvidenceObservation, facts: MoveFacts, plan: MoveDepthPlan) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.move_plans += 1;
+            self.storage.last_move_facts = facts;
+            self.storage.last_move_plan = plan;
+        }
+    }
+
+    pub fn observeOutcome(self: *SearchEvidenceObservation, outcome: SearchOutcome) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.outcomes += 1;
+            self.storage.last_outcome = outcome;
+        }
+    }
+
+    pub fn record(self: *SearchEvidenceObservation, key: u64, bonus: i32) void {
+        if (comptime search_evidence_observation_compiled) {
+            std.debug.assert(key != 0);
+            const start: usize = @intCast((key *% 0x9e3779b97f4a7c15) & (observation_slot_count - 1));
+            for (0..8) |offset| {
+                const entry = &self.storage.entries[(start + offset) & (observation_slot_count - 1)];
+                if (entry.key == 0) entry.key = key;
+                if (entry.key == key) {
+                    entry.sample.apply(bonus);
+                    self.storage.updates += 1;
+                    return;
+                }
+            }
+            self.storage.dropped += 1;
+        }
+    }
+
+    pub fn sample(self: *const SearchEvidenceObservation, key: u64) ?OutcomeSupportCell {
+        if (comptime search_evidence_observation_compiled) {
+            if (key == 0) return null;
+            const start: usize = @intCast((key *% 0x9e3779b97f4a7c15) & (observation_slot_count - 1));
+            for (0..8) |offset| {
+                const entry = self.storage.entries[(start + offset) & (observation_slot_count - 1)];
+                if (entry.key == key) return entry.sample;
+                if (entry.key == 0) return null;
+            }
+        }
+        return null;
+    }
+
+    pub fn summary(self: *const SearchEvidenceObservation) SearchEvidenceSummary {
+        if (comptime search_evidence_observation_compiled) return .{
+            .static_facts = self.storage.static_facts,
+            .tt_facts = self.storage.tt_facts,
+            .windows = self.storage.windows,
+            .node_plans = self.storage.node_plans,
+            .move_plans = self.storage.move_plans,
+            .outcomes = self.storage.outcomes,
+            .updates = self.storage.updates,
+            .dropped = self.storage.dropped,
+        };
+        return .{};
+    }
+
+    pub fn snapshot(self: *const SearchEvidenceObservation) SearchEvidenceSnapshot {
+        if (comptime search_evidence_observation_compiled) return .{
+            .static_facts = self.storage.last_static,
+            .tt_facts = self.storage.last_tt,
+            .window = self.storage.last_window,
+            .node_plan = self.storage.last_node_plan,
+            .move_facts = self.storage.last_move_facts,
+            .move_plan = self.storage.last_move_plan,
+            .outcome = self.storage.last_outcome,
+        };
+        return .{};
+    }
+};
+
 /// Compile-time switches keep each playing mechanism independently ablatable
 /// without adding policy branches to recursive search.
 pub const Features = struct {
     search_context: bool = true,
+    /// Step-6.5.9 compile-time-only observation. It has no policy consumer and
+    /// defaults off in both the feature ledger and the build configuration.
+    search_evidence_observation: bool = false,
     depth_authority: bool = true,
     check_extension: bool = true,
     /// MAN-S31 disables only the non-root blanket increment. Root check
@@ -362,6 +658,7 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     const features: Features = .{};
 
     try std.testing.expect(features.search_context);
+    try std.testing.expect(!features.search_evidence_observation);
     try std.testing.expect(features.depth_authority);
     try std.testing.expect(features.check_extension);
     try std.testing.expect(features.nonroot_check_extension);
@@ -702,6 +999,7 @@ pub const ThreadState = struct {
     selective_depth: u16,
     abort_reason: ?Termination,
     root_confidence: RootConfidence,
+    search_evidence: SearchEvidenceObservation,
 
     pub fn init() ThreadState {
         // SAFETY: search initializes a state slot before makeMove consumes it,
@@ -717,6 +1015,7 @@ pub const ThreadState = struct {
             .selective_depth = 0,
             .abort_reason = null,
             .root_confidence = RootConfidence.init(),
+            .search_evidence = .{},
         };
     }
 
@@ -728,6 +1027,7 @@ pub const ThreadState = struct {
         self.selective_depth = 0;
         self.abort_reason = null;
         self.root_confidence.reset();
+        self.search_evidence.reset();
     }
 };
 
@@ -737,6 +1037,35 @@ test "depth intent composes extensions and reductions without underflow" {
     try std.testing.expectEqual(@as(u16, 3), DepthIntent.reduced(5, 2).searched());
     try std.testing.expectEqual(@as(u16, 6), DepthIntent.extended(5, 1).searched());
     try std.testing.expectEqual(@as(u16, 0), DepthIntent.reduced(1, 2).searched());
+}
+
+test "search evidence values preserve unknown authority and bounded arithmetic" {
+    // Step 6.5.9: missing PV/trend evidence remains optional, depth components
+    // stay distinct, and paired support saturates without escaping its domain.
+    const tt_facts: TtFacts = .{ .authenticated = true };
+    try std.testing.expectEqual(@as(?bool, null), tt_facts.pv_origin);
+    const window = WindowFacts.init(-10, 21, null, .principal);
+    try std.testing.expectEqual(@as(u32, 31), window.width);
+
+    var cell: OutcomeSupportCell = .{};
+    cell.apply(OutcomeSupportCell.limit);
+    try std.testing.expectEqual(@as(i16, 16 * 1024), cell.value);
+    for (0..300) |_| cell.apply(-OutcomeSupportCell.limit);
+    try std.testing.expectEqual(@as(i16, -16 * 1024), cell.value);
+    try std.testing.expectEqual(std.math.maxInt(u8), cell.support);
+}
+
+test "disabled search evidence storage has zero worker footprint" {
+    // The production build must not allocate the diagnostic shadow table.
+    if (comptime !search_evidence_observation_compiled)
+        try std.testing.expectEqual(@as(usize, 0), @sizeOf(SearchEvidenceObservation));
+}
+
+test "enabled search evidence storage is explicitly bounded" {
+    // The diagnostic remains worker-local and small beside the existing
+    // ordering state; growth requires an intentional allocation review.
+    if (comptime search_evidence_observation_compiled)
+        try std.testing.expect(@sizeOf(SearchEvidenceObservation) <= 128 * 1024);
 }
 
 test "ply context preserves special-move identity without chess authority" {

@@ -21,6 +21,7 @@ const NodeValue = struct {
 const NodeResolution = struct {
     value: NodeValue,
     depth: types.DepthIntent,
+    omitted_siblings: bool = false,
 };
 
 fn Context(comptime Observer: type, comptime Prober: type) type {
@@ -30,6 +31,7 @@ fn Context(comptime Observer: type, comptime Prober: type) type {
         table: ?*tt.Table,
         heuristics: ?*ordering.State,
         root_moves: ?[]const chess.move.Move,
+        root_reference_width: ?u32,
         root_iteration: *types.RootIterationEvidence,
         params: params.Values,
         observer: *Observer,
@@ -305,6 +307,13 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
     search_params: params.Values,
     execution: WorkerExecution,
 ) types.Result {
+    if (comptime features.search_evidence_observation and
+        !types.search_evidence_observation_compiled)
+    {
+        @compileError("search evidence observation requires -Dsearch-evidence-observation=true");
+    }
+    if (comptime features.search_evidence_observation and !features.search_context)
+        @compileError("search evidence observation requires search context");
     thread.reset();
     observer.reset();
     if (execution.advance_table_generation) if (table) |active| active.nextGeneration();
@@ -386,6 +395,7 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
         .table = table,
         .heuristics = heuristics,
         .root_moves = effective_root_restriction,
+        .root_reference_width = null,
         .root_iteration = &root_iteration,
         .params = search_params,
         .observer = observer,
@@ -404,6 +414,7 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
                 }
             }
         }
+        context.root_reference_width = if (window.isFull()) null else window.width();
         const iteration = while (true) {
             root_iteration.reset();
             observer.rootSearch(!window.isFull());
@@ -493,6 +504,11 @@ const AspirationWindow = struct {
 
     fn isFull(self: AspirationWindow) bool {
         return self.alpha == -score.infinity_raw and self.beta == score.infinity_raw;
+    }
+
+    fn width(self: AspirationWindow) u32 {
+        std.debug.assert(self.alpha < self.beta);
+        return @intCast(@as(i64, self.beta) - self.alpha);
     }
 
     fn widen(self: *AspirationWindow) void {
@@ -603,7 +619,7 @@ fn negamax(
             context.observer.extension(.check);
         }
     }
-    const result = try negamaxNode(
+    const result = negamaxNode(
         features,
         allow_null,
         context,
@@ -616,7 +632,53 @@ fn negamax(
         beta,
         expectation,
         route,
-    );
+    ) catch |err| {
+        if (comptime features.search_evidence_observation)
+            observeIncompleteOutcome(
+                context,
+                route,
+                active_depth,
+                ply,
+                context.root_moves != null,
+            );
+        return err;
+    };
+    if (comptime features.search_evidence_observation) {
+        const admitted_check = result.depth.extension -| depth_intent.extension;
+        const admitted_iir = result.depth.reduction -| depth_intent.reduction;
+        context.thread.search_evidence.observeWindow(types.WindowFacts.init(
+            alpha_initial,
+            beta,
+            context.root_reference_width,
+            expectation,
+        ));
+        context.thread.search_evidence.observeNodePlan(.{
+            .requested = depth_intent,
+            .active = result.depth,
+            .admitted_check_extension = admitted_check,
+            .admitted_iir_reduction = admitted_iir,
+            .ply_capacity = @intCast(chess.types.max_ply - 1 - @min(ply, chess.types.max_ply - 1)),
+        });
+        const attribution = types.OutcomeAttribution.init(
+            route,
+            result.depth,
+            expectation,
+            evidence(result.value.raw, result.value.bound, result.value.provenance),
+        );
+        context.thread.search_evidence.observeOutcome(.{
+            .attribution = attribution,
+            .scope = evidenceScope(route, ply, context.root_moves != null),
+            .requested_horizon = depth_intent.searched(),
+            .searched_horizon = result.depth.searched(),
+            .verification = switch (route) {
+                .reduced_probe => .reduced_only,
+                .reduction_research, .pv_research, .null_verification => .completed,
+                else => .not_required,
+            },
+            .omitted_siblings = result.omitted_siblings,
+            .complete = true,
+        });
+    }
     if (comptime features.search_context)
         context.observer.nodeOutcome(types.OutcomeAttribution.init(
             route,
@@ -677,10 +739,16 @@ fn negamaxNode(
         }
     }
 
-    const table_evidence = if (exclusion_node)
+    var table_evidence = if (exclusion_node)
         TableEvidence{}
     else
         probeTable(context, value, depth, ply, alpha_initial, beta);
+    if (comptime features.tt_rule_fifty_guard) {
+        if (value.current.rule50 >= tt_rule_fifty_guard_clock)
+            table_evidence.facts.cutoff_authorized = false;
+    }
+    if (comptime features.search_evidence_observation)
+        context.thread.search_evidence.observeTt(table_evidence.facts);
     if (table_evidence.cutoff) |cutoff| {
         // A transposition value was proven under whatever halfmove clock the
         // storing visit had, and the key records no clock. Close to the
@@ -782,6 +850,8 @@ fn negamaxNode(
         shallowEvidence(features, false, context, value, binding, ply, value.current.checkers != 0, exclusion_node, table_evidence.record)
     else
         .{};
+    if (comptime features.search_evidence_observation)
+        context.thread.search_evidence.observeStatic(staticFacts(context.thread, ply, shallow));
     // Shared zugzwang guard: a position with no non-pawn material for the
     // side to move can reverse under a single tempo, so no shallow-
     // selectivity consumer below may treat a quiet move as safely futile.
@@ -1134,6 +1204,7 @@ fn negamaxNode(
     var best_reduction: u16 = 1;
     var best_move: chess.move.Move = .none;
     var searched_move_count: usize = 0;
+    var actually_searched_count: usize = 0;
     var pruned_late_move = false;
     var searched_quiets: [
         if (features.search_context and features.contextual_history)
@@ -1190,6 +1261,7 @@ fn negamaxNode(
         const is_capture = chess.movegen.isCapture(value, chess_move);
         const is_promotion = chess_move.kind() == .promotion;
         const quiet = !is_capture and !is_promotion;
+        const move_identity = moveIdentity(value, chess_move);
         if (comptime features.capture_history and @TypeOf(context.observer.*).observes_capture_history) {
             if (is_capture) if (context.heuristics) |heuristics|
                 context.observer.captureHistorySelection(
@@ -1365,6 +1437,18 @@ fn negamaxNode(
                 value.current.checkers != 0,
             );
         const gives_check = value.current.checkers != 0;
+        const move_facts = types.MoveFacts{
+            .chess_move = chess_move,
+            .resulting_piece = move_identity.resulting_piece,
+            .victim = move_identity.victim,
+            .tactical = move_identity.tactical,
+            .tt_move = table_evidence.chess_move != null and
+                table_evidence.chess_move.?.raw() == chess_move.raw(),
+            .evasion = in_check,
+            .gives_check = gives_check,
+            .selected_ordinal = @intCast(search_index),
+            .searched_before = @intCast(actually_searched_count),
+        };
         if (main_see_candidate)
             context.observer.mainSeePruning(shallow_cause == .see and !gives_check);
         if (capture_futility_candidate)
@@ -1374,6 +1458,17 @@ fn negamaxNode(
             );
         if (shallow_cause) |cause| {
             if (!gives_check) {
+                if (comptime features.search_evidence_observation)
+                    context.thread.search_evidence.observeMovePlan(move_facts, .{
+                        .full = types.DepthIntent.full(depth - 1),
+                        .probe = types.DepthIntent.full(depth - 1),
+                        .prune_depth = depth -| 1,
+                        .selected_ordinal = @intCast(search_index),
+                        .searched_before = @intCast(actually_searched_count),
+                        .singular_extension = 0,
+                        .proposed_reduction = 0,
+                        .shallow_omitted = true,
+                    });
                 unmake(value, binding, context.thread, ply, chess_move);
                 context.observer.prune(cause);
                 pruned_late_move = true;
@@ -1418,6 +1513,7 @@ fn negamaxNode(
             value.current.checkers != 0,
             history_confident,
         );
+        actually_searched_count += 1;
         if (reduce) {
             reduction = synchronizedLateMoveReduction(
                 features,
@@ -1434,6 +1530,17 @@ fn negamaxNode(
                 context.observer,
             );
             context.observer.lmrProbe(reduction);
+            if (comptime features.search_evidence_observation)
+                context.thread.search_evidence.observeMovePlan(move_facts, .{
+                    .full = full_child_depth,
+                    .probe = types.DepthIntent.reduced(depth - 1, reduction),
+                    .prune_depth = (depth -| 1) -| reduction,
+                    .selected_ordinal = @intCast(search_index),
+                    .searched_before = @intCast(actually_searched_count - 1),
+                    .singular_extension = singular_extension_plies,
+                    .proposed_reduction = reduction,
+                    .shallow_omitted = false,
+                });
             child = negamax(
                 features,
                 true,
@@ -1479,6 +1586,17 @@ fn negamaxNode(
                 context.observer.lmrAccepted();
             }
         } else if (search_index == 0 or !pv_node) {
+            if (comptime features.search_evidence_observation)
+                context.thread.search_evidence.observeMovePlan(move_facts, .{
+                    .full = full_child_depth,
+                    .probe = full_child_depth,
+                    .prune_depth = full_child_depth.searched(),
+                    .selected_ordinal = @intCast(search_index),
+                    .searched_before = @intCast(actually_searched_count - 1),
+                    .singular_extension = singular_extension_plies,
+                    .proposed_reduction = 0,
+                    .shallow_omitted = false,
+                });
             child = negamax(
                 features,
                 true,
@@ -1498,6 +1616,17 @@ fn negamaxNode(
             };
             candidate = negated(child);
         } else {
+            if (comptime features.search_evidence_observation)
+                context.thread.search_evidence.observeMovePlan(move_facts, .{
+                    .full = full_child_depth,
+                    .probe = full_child_depth,
+                    .prune_depth = full_child_depth.searched(),
+                    .selected_ordinal = @intCast(search_index),
+                    .searched_before = @intCast(actually_searched_count - 1),
+                    .singular_extension = singular_extension_plies,
+                    .proposed_reduction = 0,
+                    .shallow_omitted = false,
+                });
             child = negamax(
                 features,
                 true,
@@ -1619,6 +1748,8 @@ fn negamaxNode(
                     if (comptime features.search_context and features.contextual_history) {
                         if (reply_context) |reply|
                             recordContextualQuietOutcome(
+                                features.search_evidence_observation,
+                                &context.thread.search_evidence,
                                 heuristics,
                                 value,
                                 reply,
@@ -1693,6 +1824,8 @@ fn negamaxNode(
         {
             if (reply_context) |reply| if (context.heuristics) |heuristics|
                 recordContextualQuietOutcome(
+                    features.search_evidence_observation,
+                    &context.thread.search_evidence,
                     heuristics,
                     value,
                     reply,
@@ -1742,7 +1875,7 @@ fn negamaxNode(
     if (!exclusion_node) if (table_evidence.chess_move) |tt_move|
         context.observer.ttBest(tt_move.raw() == best_move.raw());
     recordCorrectionEvidence(features, context, value, shallow, result, depth, exclusion_node, pruned_late_move);
-    return resolved(result, active_depth);
+    return resolvedWithOmission(result, active_depth, pruned_late_move);
 }
 
 fn continuationSet(
@@ -1788,6 +1921,8 @@ fn continuationAt(
 }
 
 fn recordContextualQuietOutcome(
+    comptime observe_search_evidence: bool,
+    search_evidence: *types.SearchEvidenceObservation,
     heuristics: *ordering.State,
     value: *const chess.position.Position,
     reply: ordering.ReplyContext,
@@ -1802,6 +1937,18 @@ fn recordContextualQuietOutcome(
     std.debug.assert(disposition == .exact or disposition == .cutoff);
     std.debug.assert(!chess.movegen.isCapture(value, winner) and winner.kind() != .promotion);
     const winner_pretrained = containsMove(pretrained_winners, winner);
+    if (comptime observe_search_evidence) {
+        if (!winner_pretrained)
+            recordShadowQuietOutcome(
+                search_evidence,
+                value,
+                reply,
+                continuations,
+                winner,
+                searched_quiets,
+                depth,
+            );
+    }
     var winner_seen = winner_pretrained;
     var penalty_count: usize = 0;
     for (searched_quiets) |candidate| {
@@ -1836,6 +1983,49 @@ fn recordContextualQuietOutcome(
             continuation_penalties,
             !winner_pretrained,
         );
+    }
+}
+
+fn recordShadowQuietOutcome(
+    search_evidence: *types.SearchEvidenceObservation,
+    value: *const chess.position.Position,
+    reply: ordering.ReplyContext,
+    continuations: ordering.ContinuationSet,
+    winner: chess.move.Move,
+    searched_quiets: []const chess.move.Move,
+    depth: u16,
+) void {
+    const bonus = ordering.shadowOutcomeBonus(depth);
+    search_evidence.record(ordering.quietEvidenceKey(value.side_to_move, winner), bonus);
+    search_evidence.record(ordering.replyEvidenceKey(value, reply, winner), bonus);
+    for (searched_quiets) |candidate| {
+        if (candidate.raw() == winner.raw()) continue;
+        search_evidence.record(ordering.quietEvidenceKey(value.side_to_move, candidate), -bonus);
+        if (!sameReplyMoveKey(value, winner, candidate))
+            search_evidence.record(ordering.replyEvidenceKey(value, reply, candidate), -bonus);
+    }
+
+    for (continuations.items, 0..) |maybe_continuation, slot| {
+        const continuation = maybe_continuation orelse continue;
+        const winner_key = ordering.continuationEvidenceKey(value, continuation, winner);
+        var duplicate = false;
+        for (continuations.items[0..slot]) |earlier| {
+            const prior = earlier orelse continue;
+            if (ordering.continuationEvidenceKey(value, prior, winner) == winner_key) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (duplicate) continue;
+        search_evidence.record(winner_key, bonus);
+        for (searched_quiets) |candidate| {
+            if (candidate.raw() == winner.raw() or sameReplyMoveKey(value, winner, candidate))
+                continue;
+            search_evidence.record(
+                ordering.continuationEvidenceKey(value, continuation, candidate),
+                -bonus,
+            );
+        }
     }
 }
 
@@ -1909,6 +2099,31 @@ fn sameReplyMoveKey(
     return first_piece.pieceType() == second_piece.pieceType() and first.to() == second.to();
 }
 
+const MoveIdentity = struct {
+    resulting_piece: chess.types.PieceType,
+    victim: chess.types.PieceType,
+    tactical: bool,
+};
+
+/// Derives stable move-class facts before make. En passant identifies the pawn
+/// removed off-destination; promotions identify the resulting promoted piece.
+fn moveIdentity(value: *const chess.position.Position, chess_move: chess.move.Move) MoveIdentity {
+    const moving = value.physical.pieceOn(chess_move.from());
+    std.debug.assert(moving != .none and moving.color() == value.side_to_move);
+    const is_capture = chess.movegen.isCapture(value, chess_move);
+    const is_promotion = chess_move.kind() == .promotion;
+    return .{
+        .resulting_piece = if (is_promotion) chess_move.promotionPiece() else moving.pieceType(),
+        .victim = if (!is_capture)
+            .none
+        else if (chess_move.kind() == .en_passant)
+            .pawn
+        else
+            value.physical.pieceOn(chess_move.to()).pieceType(),
+        .tactical = is_capture or is_promotion,
+    };
+}
+
 fn quiescence(
     comptime features: types.Features,
     context: anytype,
@@ -1920,7 +2135,7 @@ fn quiescence(
     beta: i32,
     expectation: types.NodeExpectation,
 ) Abort!NodeValue {
-    const result = try quiescenceNode(
+    const result = quiescenceNode(
         features,
         context,
         value,
@@ -1930,7 +2145,47 @@ fn quiescence(
         alpha_initial,
         beta,
         expectation,
-    );
+    ) catch |err| {
+        if (comptime features.search_evidence_observation)
+            observeIncompleteOutcome(
+                context,
+                .quiescence,
+                types.DepthIntent.full(0),
+                ply,
+                context.root_moves != null,
+            );
+        return err;
+    };
+    if (comptime features.search_evidence_observation) {
+        const attribution = types.OutcomeAttribution.init(
+            .quiescence,
+            types.DepthIntent.full(0),
+            expectation,
+            evidence(result.raw, result.bound, result.provenance),
+        );
+        context.thread.search_evidence.observeWindow(types.WindowFacts.init(
+            alpha_initial,
+            beta,
+            context.root_reference_width,
+            expectation,
+        ));
+        context.thread.search_evidence.observeNodePlan(.{
+            .requested = types.DepthIntent.full(0),
+            .active = types.DepthIntent.full(0),
+            .admitted_check_extension = 0,
+            .admitted_iir_reduction = 0,
+            .ply_capacity = @intCast(chess.types.max_ply - 1 - @min(ply, chess.types.max_ply - 1)),
+        });
+        context.thread.search_evidence.observeOutcome(.{
+            .attribution = attribution,
+            .scope = .quiescence,
+            .requested_horizon = 0,
+            .searched_horizon = 0,
+            .verification = .not_required,
+            .omitted_siblings = false,
+            .complete = true,
+        });
+    }
     if (comptime features.search_context)
         context.observer.nodeOutcome(types.OutcomeAttribution.init(
             .quiescence,
@@ -1971,6 +2226,8 @@ fn quiescenceNode(
         return .{ .raw = binding.evaluate(value).raw(), .bound = .exact, .provenance = .static_eval };
 
     const table_evidence = probeTable(context, value, 0, ply, alpha_initial, beta);
+    if (comptime features.search_evidence_observation)
+        context.thread.search_evidence.observeTt(table_evidence.facts);
     if (table_evidence.cutoff) |cutoff| return cutoff;
 
     const in_check = value.current.checkers != 0;
@@ -2020,6 +2277,8 @@ fn quiescenceNode(
             false,
             table_evidence.record,
         );
+        if (comptime features.search_evidence_observation)
+            context.thread.search_evidence.observeStatic(staticFacts(context.thread, ply, static_evidence));
         // Step 5.4.1 gives correction history evaluation authority only. The
         // corrected value is therefore the qsearch stand-pat score, while
         // delta/SEE pruning below continues to consume `pruning_eval`, which
@@ -2040,6 +2299,7 @@ fn quiescenceNode(
         const chess_move = selection.chess_move;
         const is_capture = chess.movegen.isCapture(value, chess_move);
         const is_promotion = chess_move.kind() == .promotion;
+        const move_identity = moveIdentity(value, chess_move);
         if (comptime features.capture_history and @TypeOf(context.observer.*).observes_capture_history) {
             if (is_capture) if (context.heuristics) |heuristics|
                 context.observer.captureHistorySelection(
@@ -2093,11 +2353,55 @@ fn quiescenceNode(
             if (negative_see_candidate) context.observer.qsearchSee(gives_check);
             if (delta_candidate) context.observer.qsearchDelta(gives_check);
             if (!gives_check) {
+                if (comptime features.search_evidence_observation)
+                    context.thread.search_evidence.observeMovePlan(.{
+                        .chess_move = chess_move,
+                        .resulting_piece = move_identity.resulting_piece,
+                        .victim = move_identity.victim,
+                        .tactical = move_identity.tactical,
+                        .tt_move = table_evidence.chess_move != null and
+                            table_evidence.chess_move.?.raw() == chess_move.raw(),
+                        .evasion = in_check,
+                        .gives_check = false,
+                        .selected_ordinal = @intCast(selection.index),
+                        .searched_before = @intCast(searched_index),
+                    }, .{
+                        .full = types.DepthIntent.full(0),
+                        .probe = types.DepthIntent.full(0),
+                        .prune_depth = 0,
+                        .selected_ordinal = @intCast(selection.index),
+                        .searched_before = @intCast(searched_index),
+                        .singular_extension = 0,
+                        .proposed_reduction = 0,
+                        .shallow_omitted = true,
+                    });
                 context.observer.prune(if (negative_see_candidate) .see else .qsearch_delta);
                 unmake(value, binding, context.thread, ply, chess_move);
                 continue;
             }
         }
+        if (comptime features.search_evidence_observation)
+            context.thread.search_evidence.observeMovePlan(.{
+                .chess_move = chess_move,
+                .resulting_piece = move_identity.resulting_piece,
+                .victim = move_identity.victim,
+                .tactical = move_identity.tactical,
+                .tt_move = table_evidence.chess_move != null and
+                    table_evidence.chess_move.?.raw() == chess_move.raw(),
+                .evasion = in_check,
+                .gives_check = value.current.checkers != 0,
+                .selected_ordinal = @intCast(selection.index),
+                .searched_before = @intCast(searched_index),
+            }, .{
+                .full = types.DepthIntent.full(0),
+                .probe = types.DepthIntent.full(0),
+                .prune_depth = 0,
+                .selected_ordinal = @intCast(selection.index),
+                .searched_before = @intCast(searched_index),
+                .singular_extension = 0,
+                .proposed_reduction = 0,
+                .shallow_omitted = false,
+            });
         context.observer.searched(.quiescence);
         context.observer.moveSource(move_source);
         const child = quiescence(
@@ -2252,6 +2556,7 @@ const TableEvidence = struct {
     chess_move: ?chess.move.Move = null,
     record: ?tt.Record = null,
     cutoff: ?NodeValue = null,
+    facts: types.TtFacts = .{},
 };
 
 fn probeTable(
@@ -2281,7 +2586,9 @@ fn probeTable(
         chess_move = record.chess_move;
     } else {
         context.observer.ttLookup(.illegal_move);
-        return .{};
+        var invalid = tableFacts(record, table.generation, null, false);
+        invalid.scope_compatible = false;
+        return .{ .facts = invalid };
     }
     const sufficient_depth = record.depth >= depth;
     const usable_bound = switch (record.bound) {
@@ -2297,7 +2604,11 @@ fn probeTable(
         .bound_rejected
     else
         .usable);
-    if (!usable) return .{ .chess_move = chess_move, .record = record };
+    if (!usable) return .{
+        .chess_move = chess_move,
+        .record = record,
+        .facts = tableFacts(record, table.generation, chess_move, false),
+    };
     // A TT record owns only its stored move, not a continuation. The next PV
     // row may still describe an earlier sibling because no child search ran
     // for this cutoff. Copying that row can splice two individually legal
@@ -2306,11 +2617,35 @@ fn probeTable(
     return .{
         .chess_move = chess_move,
         .record = record,
+        .facts = tableFacts(record, table.generation, chess_move, true),
         .cutoff = .{
             .raw = record.value.raw(),
             .bound = record.bound,
             .provenance = if (record.bound == .exact) .tt_exact else .tt_bound,
         },
+    };
+}
+
+fn tableFacts(
+    record: tt.Record,
+    current_generation: u8,
+    chess_move: ?chess.move.Move,
+    cutoff_authorized: bool,
+) types.TtFacts {
+    return .{
+        .authenticated = true,
+        .chess_move = chess_move,
+        .value = record.value,
+        .static_eval = record.static_eval,
+        .bound = record.bound,
+        .producer = record.producer,
+        .stored_depth = record.depth,
+        .generation = record.generation,
+        .current_generation = current_generation,
+        .fresh = record.generation == current_generation,
+        .scope_compatible = true,
+        .cutoff_authorized = cutoff_authorized,
+        .pv_origin = null,
     };
 }
 
@@ -2639,6 +2974,40 @@ fn probCutStoreDepth(depth: u16) u16 {
 
 fn resolved(value: NodeValue, depth: types.DepthIntent) NodeResolution {
     return .{ .value = value, .depth = depth };
+}
+
+fn resolvedWithOmission(value: NodeValue, depth: types.DepthIntent, omitted_siblings: bool) NodeResolution {
+    return .{ .value = value, .depth = depth, .omitted_siblings = omitted_siblings };
+}
+
+fn evidenceScope(route: types.EntryRoute, ply: usize, restricted_root: bool) types.EvidenceScope {
+    if (ply == 0 and restricted_root) return .restricted_root;
+    return switch (route) {
+        .singular_probe => .exclusion,
+        .null_probe => .null_probe,
+        .null_verification => .null_verification,
+        .probcut_probe => .probcut,
+        .quiescence => .quiescence,
+        else => .ordinary,
+    };
+}
+
+fn observeIncompleteOutcome(
+    context: anytype,
+    route: types.EntryRoute,
+    depth: types.DepthIntent,
+    ply: usize,
+    restricted_root: bool,
+) void {
+    context.thread.search_evidence.observeOutcome(.{
+        .attribution = null,
+        .scope = evidenceScope(route, ply, restricted_root),
+        .requested_horizon = depth.searched(),
+        .searched_horizon = depth.searched(),
+        .verification = .not_required,
+        .omitted_siblings = false,
+        .complete = false,
+    });
 }
 
 fn checkExtensionEligible(in_check: bool, depth: types.DepthIntent, ply: usize) bool {
@@ -3100,6 +3469,7 @@ const ShallowEvidence = struct {
     /// the transposition table ever stores: a corrected evaluation written back
     /// would be corrected again on every reuse, compounding without bound.
     table_eval: i32 = 0,
+    corrected_eval: i32 = 0,
     pruning_eval: i32 = 0,
     improving: bool = false,
     known: bool = false,
@@ -3171,11 +3541,41 @@ fn shallowEvidence(
     return .{
         .static_eval = static_eval,
         .table_eval = table_eval,
+        .corrected_eval = corrected_eval,
         .pruning_eval = pruning_eval,
         .improving = improving,
         .known = true,
         .cached = cached_value != null,
         .refined = refined,
+    };
+}
+
+fn staticFacts(thread: *const types.ThreadState, ply: usize, shallow: ShallowEvidence) types.StaticFacts {
+    if (!shallow.known) return .{};
+    const own_previous = if (ply >= 2) thread.static_evals[ply - 2] else types.static_eval_unknown;
+    const opponent_previous = if (ply >= 1) thread.static_evals[ply - 1] else types.static_eval_unknown;
+    const own_chain = ply >= 2 and thread.ply_contexts[ply - 1].arrival == .move and
+        thread.ply_contexts[ply].arrival == .move;
+    const opponent_chain = ply >= 1 and thread.ply_contexts[ply].arrival == .move;
+    return .{
+        .raw_hce = shallow.table_eval,
+        .raw_hce_cached = shallow.cached,
+        .ordinary_tt_refinement = if (shallow.pruning_eval != shallow.table_eval)
+            shallow.pruning_eval
+        else
+            null,
+        .corrected = if (shallow.corrected_eval != shallow.table_eval)
+            shallow.corrected_eval
+        else
+            null,
+        .own_trend = if (own_chain and own_previous != types.static_eval_unknown)
+            .{ .current = shallow.table_eval, .previous = own_previous }
+        else
+            null,
+        .opponent_trend = if (opponent_chain and opponent_previous != types.static_eval_unknown)
+            .{ .current = shallow.table_eval, .previous = -opponent_previous }
+        else
+            null,
     };
 }
 
@@ -4174,6 +4574,81 @@ test "main-search SEE pruning excludes promotions, wide windows, PV and pawn-onl
     const search_params: params.Values = .{};
     try std.testing.expectEqual(-search_params.see_pruning_unit, seePruningThreshold(search_params, 1));
     try std.testing.expectEqual(-3 * search_params.see_pruning_unit, seePruningThreshold(search_params, 3));
+}
+
+test "search fact adapters preserve special moves, TT origin, and real-move trend chains" {
+    // Step 6.5.9 facts are observations of independent chess/search producers;
+    // they cannot reconstruct EP victims, promotions, freshness, or history
+    // continuity from a convenient but false default.
+    var ep_root: chess.position.PositionState = .{};
+    const ep = try chess.fen.parse("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", &ep_root);
+    const ep_identity = moveIdentity(&ep, chess.move.Move.enPassant(.e5, .d6));
+    try std.testing.expectEqual(chess.types.PieceType.pawn, ep_identity.resulting_piece);
+    try std.testing.expectEqual(chess.types.PieceType.pawn, ep_identity.victim);
+    try std.testing.expect(ep_identity.tactical);
+
+    var promotion_root: chess.position.PositionState = .{};
+    const promotion = try chess.fen.parse("4k3/P7/8/8/8/8/8/4K3 w - - 0 1", &promotion_root);
+    const promotion_identity = moveIdentity(
+        &promotion,
+        chess.move.Move.promotion(.a7, .a8, .queen),
+    );
+    try std.testing.expectEqual(chess.types.PieceType.queen, promotion_identity.resulting_piece);
+    try std.testing.expectEqual(chess.types.PieceType.none, promotion_identity.victim);
+    try std.testing.expect(promotion_identity.tactical);
+
+    const record = tt.Record{
+        .chess_move = chess.move.Move.normal(.e2, .e4),
+        .value = score.Score.fromOrdinary(12).?,
+        .static_eval = score.Score.fromOrdinary(9),
+        .depth = 5,
+        .bound = .lower,
+        .generation = 3,
+        .producer = .full_search,
+    };
+    const stale = tableFacts(record, 4, record.chess_move, false);
+    try std.testing.expect(stale.authenticated);
+    try std.testing.expectEqual(@as(?bool, false), stale.fresh);
+    try std.testing.expectEqual(types.Provenance.full_search, stale.producer.?);
+    try std.testing.expectEqual(@as(?bool, null), stale.pv_origin);
+    try std.testing.expect(!stale.cutoff_authorized);
+
+    var thread = types.ThreadState.init();
+    thread.static_evals[0] = 5;
+    thread.static_evals[1] = -10;
+    thread.ply_contexts[1] = types.PlyContext.afterMove(
+        chess.move.Move.normal(.e7, .e5),
+        .pawn,
+        false,
+        false,
+        false,
+    );
+    thread.ply_contexts[2] = types.PlyContext.afterMove(
+        chess.move.Move.normal(.g1, .f3),
+        .knight,
+        false,
+        false,
+        false,
+    );
+    const connected = staticFacts(&thread, 2, .{
+        .static_eval = 20,
+        .table_eval = 20,
+        .corrected_eval = 20,
+        .pruning_eval = 20,
+        .known = true,
+    });
+    try std.testing.expect(connected.own_trend.?.improving());
+    try std.testing.expect(connected.opponent_trend.?.improving());
+    thread.ply_contexts[2] = types.PlyContext.afterNull(false);
+    const broken = staticFacts(&thread, 2, .{
+        .static_eval = 20,
+        .table_eval = 20,
+        .corrected_eval = 20,
+        .pruning_eval = 20,
+        .known = true,
+    });
+    try std.testing.expectEqual(@as(?types.EvalTrend, null), broken.own_trend);
+    try std.testing.expectEqual(@as(?types.EvalTrend, null), broken.opponent_trend);
 }
 
 /// Extends the current PV with the continuation produced by the child search

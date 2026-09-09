@@ -81,6 +81,30 @@ or interpret three lookups as independent support. Paired outcome/support stays
 disabled until a distinct consumer is qualified. Neither this design nor the
 positive MAN-S34 strength result closes the board or depth-13 performance target.
 
+### Step 6.5.9 implementation map — awaiting Astra review
+
+The behavior-neutral substrate is implemented but not reviewed or closed. Its
+default and observation-enabled builds reproduce fingerprint `775451`; neither
+configuration changes a search consumer. Actual ownership is:
+
+| Interface | Producer / storage | Current consumer |
+|---|---|---|
+| `StaticFacts` | `baseline.zig:shallowEvidence` plus uninterrupted stack context | Enabled diagnostic snapshot/count only; existing pruning still reads `ShallowEvidence` |
+| `TtFacts` | `baseline.zig:probeTable`, retaining stored producer, generation/freshness and unknown PV origin | Enabled diagnostic snapshot/count only; existing TT predicates are unchanged |
+| `WindowFacts` | Every main/qsearch invocation; root reference width is frozen from the first finite aspiration attempt | Enabled diagnostic snapshot/count only; MAN-R02 remains off |
+| `MoveFacts` | Made legal main/qsearch candidate, including EP victim, promoted result, check/evasion and both ordinals | Enabled diagnostic snapshot/count only |
+| `NodeDepthPlan` / `MoveDepthPlan` | Existing check/IIR and current shallow/LMR/PVS/qsearch dispatch decisions | Enabled diagnostic snapshot/count only; no shared-depth consumer yet |
+| `SearchOutcome` | Completed main/qsearch return with route, scope, horizon, verification and omitted-sibling fact | Enabled diagnostic snapshot/count only; ordinary publication remains unchanged |
+| `OutcomeSupportCell` | Completed non-root ordinary quiet exact/cutoff update packet under existing main/reply/shared-continuation keys | Bounded shadow table only; no ordering, pruning, LMR, TT or feedback consumer |
+
+The selector `-Dsearch-evidence-observation=true` compiles bounded worker-local
+observation storage; false is the default and leaves a zero-byte state. Hash
+collisions are reported as dropped samples after bounded probing and never
+merged. Value/support clear together at the start of their owning search run;
+support is lifetime admitted-update count for that run, not confidence or
+recency. Required GPT-6 Astra High review must accept these authority/lifetime
+semantics before 6.5.9 closes or any 6.5.10 consumer is implemented.
+
 ### Reduction and pruning are a coordinated depth decision
 
 Manta `src/search/baseline.zig:lateMoveEligible` currently limits ordinary LMR

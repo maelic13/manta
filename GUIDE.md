@@ -31,8 +31,9 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   Its registered final 1T SPRT accepted H1 after 1,614 games without anomaly,
   so the mechanism is production and the full-generation arm reconstructs
   MAN-S30.
-- Step 6.5.8's shared search design is complete in ADR-0070. Next is 6.5.9's
-  behavior-neutral substrate (Terra High; Astra High review). Three pre-existing
+- Step 6.5.8's shared search design is complete in ADR-0070. Step 6.5.9's
+  behavior-neutral substrate is implemented with exact default/enabled
+  fingerprint parity; its required Astra High review is next. Three pre-existing
   bench-document policy violations remain; PLAN records the separate repair.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
@@ -159,8 +160,8 @@ relationships, reimplemented in original Zig for Manta's contracts.
 - [x] **6.5.8 — Modern search design and one evidence/depth contract:** ADR-0070
   freezes the shared pipeline, authority and independently gated packages.
 - [ ] **6.5.9 — Shared ordering and outcome-evidence substrate:** One reliable
-  history/TT/move-evidence model for ordering and selective search. **Next:**
-  behavior-neutral adapters and disabled observation; Terra High, Astra review.
+  history/TT/move-evidence model for ordering and selective search.
+  **Implemented; next:** required GPT-6 Astra High authority review.
 - [ ] **6.5.10 — Integrated ordering, aspiration and selective depth:** Connect
   mate bounds, root windows, contextual LMR, shallow pruning and forcing depth.
 - [ ] **6.5.11 — Forward proofs matched to the accepted depth policy:** Derive

@@ -105,6 +105,11 @@ count check/IIR/extension depth once, and verify reduced alpha rises at its
 declared authoritative horizon before winner publication or learning. Source,
 scope and bound restrictions shall survive return/negation and TT handling.
 `SCORE-031` live staging and `SCORE-032` qsearch terminal witnesses remain intact.
+The Step-6.5.9 implementation selector shall be compile-time-only, default off,
+and absent from UCI. Its disabled worker storage shall be zero bytes. Enabled
+observation shall preserve the accepted result, legal PV and `775451` node
+fingerprint while bounding worker-local storage and reporting collision drops
+without merging unrelated samples. It shall not require games or a pilot.
 
 This is a future-candidate contract, not a declaration that the new interfaces
 already exist or permission to replace accepted policies. Any incompatible

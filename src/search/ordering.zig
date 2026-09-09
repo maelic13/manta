@@ -346,6 +346,13 @@ pub const State = struct {
     }
 };
 
+/// The shadow outcome uses the accepted history scale only as a bounded sample
+/// encoding. It has no ordering or depth consumer in Step 6.5.9.
+pub fn shadowOutcomeBonus(depth: u16) i32 {
+    const bounded: i32 = @intCast(@min(depth, 128));
+    return @max(@as(i32, 1), @min(bounded * bounded, 16 * 1024));
+}
+
 pub const HistoryConfidence = enum { negative, neutral, positive };
 
 fn countHistoryVote(value: i16, positive: *u3, negative: *u3) void {
@@ -440,6 +447,46 @@ pub fn replyContext(
 
 fn normalizeSquare(side: chess.types.Color, square: chess.types.Square) chess.types.Square {
     return if (side == .white) square else square.flipRank();
+}
+
+/// Stable diagnostic keys for Step-6.5.9 shadow outcomes. They encode the
+/// existing relations exactly; continuation distance is intentionally absent
+/// because all three distances read one shared production table.
+pub fn quietEvidenceKey(side: chess.types.Color, chess_move: chess.move.Move) u64 {
+    std.debug.assert(chess_move.isChessMove());
+    return (@as(u64, 1) << 62) |
+        (@as(u64, side.index()) << 16) |
+        chess_move.raw();
+}
+
+pub fn replyEvidenceKey(
+    value: *const chess.position.Position,
+    reply: ReplyContext,
+    chess_move: chess.move.Move,
+) u64 {
+    const current_piece = value.physical.pieceOn(chess_move.from());
+    std.debug.assert(current_piece != .none and current_piece.color() == value.side_to_move);
+    return (@as(u64, 2) << 62) |
+        (@as(u64, @intFromEnum(reply.previous_piece)) << 24) |
+        (@as(u64, reply.previous_to.index()) << 18) |
+        (@as(u64, @intFromEnum(current_piece.pieceType())) << 12) |
+        (@as(u64, normalizeSquare(value.side_to_move, chess_move.to()).index()) << 6);
+}
+
+pub fn continuationEvidenceKey(
+    value: *const chess.position.Position,
+    continuation: ContinuationContext,
+    chess_move: chess.move.Move,
+) u64 {
+    const current_piece = value.physical.pieceOn(chess_move.from());
+    std.debug.assert(current_piece != .none and current_piece.color() == value.side_to_move);
+    return (@as(u64, 3) << 62) |
+        (@as(u64, @intFromBool(continuation.from_check)) << 31) |
+        (@as(u64, @intFromBool(continuation.tactical)) << 30) |
+        (@as(u64, @intFromEnum(continuation.previous_piece)) << 24) |
+        (@as(u64, continuation.previous_to.index()) << 18) |
+        (@as(u64, @intFromEnum(current_piece.pieceType())) << 12) |
+        (@as(u64, normalizeSquare(value.side_to_move, chess_move.to()).index()) << 6);
 }
 
 fn pieceIndex(piece_type: chess.types.PieceType) usize {
