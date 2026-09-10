@@ -31,10 +31,12 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   Its registered final 1T SPRT accepted H1 after 1,614 games without anomaly,
   so the mechanism is production and the full-generation arm reconstructs
   MAN-S30.
-- Step 6.5.8's shared search design is complete in ADR-0070. Step 6.5.9's
-  behavior-neutral substrate is implemented with exact default/enabled
-  fingerprint parity; its required Astra High review is next. Three pre-existing
-  bench-document policy violations remain; PLAN records the separate repair.
+- Step 6.5.8's shared search design is complete in ADR-0070. Step 6.5.9's first
+  Astra review found authority, lifetime and missing-history-adapter defects.
+  The bounded repairs are implemented, but verification is deferred while the
+  shared PC runs a Basilisk SPRT; the repeated Astra High review follows only
+  after the idle-PC gate. Step 6.5.10 remains blocked. Three pre-existing bench-
+  document policy violations remain; PLAN records the separate repair.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 

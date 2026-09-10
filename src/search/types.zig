@@ -293,12 +293,29 @@ pub const MoveFacts = struct {
     searched_before: u16,
 };
 
+/// One live ordering relation and its optional observation-only outcome cell.
+/// The key names the exact production table cell; missing context remains null.
+pub const HistoryRelation = struct {
+    key: u64,
+    value: i16,
+    shadow: ?OutcomeSupportCell = null,
+};
+
+/// Per-move history snapshot taken from the same worker-local state used to
+/// rank the move. Continuation slots retain their shared-table aliases.
+pub const HistoryFacts = struct {
+    main: HistoryRelation,
+    reply: ?HistoryRelation = null,
+    continuations: [3]?HistoryRelation = @splat(null),
+};
+
 pub const NodeDepthPlan = struct {
     requested: DepthIntent,
     active: DepthIntent,
     admitted_check_extension: u16,
     admitted_iir_reduction: u16,
     ply_capacity: u16,
+    scope: EvidenceScope = .ordinary,
 };
 
 /// Observes the horizons selected by the accepted search. It does not yet
@@ -310,6 +327,7 @@ pub const MoveDepthPlan = struct {
     selected_ordinal: u16,
     searched_before: u16,
     singular_extension: u16,
+    child_check_extension: u16 = 0,
     proposed_reduction: u16,
     shallow_omitted: bool,
 };
@@ -324,6 +342,7 @@ pub const SearchOutcome = struct {
     verification: Verification,
     omitted_siblings: bool,
     complete: bool,
+    original_producer: ?Provenance = null,
 };
 
 /// Signed outcome and support are updated as one diagnostic sample. Support is
@@ -348,6 +367,19 @@ pub const OutcomeSupportCell = struct {
 pub const search_evidence_observation_compiled = search_build_options.search_evidence_observation;
 const observation_slot_count = 4096;
 
+fn observationIndex(key: u64) u64 {
+    // Mix every encoded relation component before taking the bounded-table
+    // index. Linear probing still drops after eight occupied, unequal keys;
+    // it never merges their samples.
+    var mixed = key;
+    mixed ^= mixed >> 30;
+    mixed *%= 0xbf58476d1ce4e5b9;
+    mixed ^= mixed >> 27;
+    mixed *%= 0x94d049bb133111eb;
+    mixed ^= mixed >> 31;
+    return mixed & (observation_slot_count - 1);
+}
+
 const ObservationStorage = if (search_evidence_observation_compiled) struct {
     const Entry = struct {
         key: u64 = 0,
@@ -360,6 +392,7 @@ const ObservationStorage = if (search_evidence_observation_compiled) struct {
     windows: u64 = 0,
     node_plans: u64 = 0,
     move_plans: u64 = 0,
+    history_facts: u64 = 0,
     outcomes: u64 = 0,
     updates: u64 = 0,
     dropped: u64 = 0,
@@ -369,6 +402,7 @@ const ObservationStorage = if (search_evidence_observation_compiled) struct {
     last_node_plan: ?NodeDepthPlan = null,
     last_move_facts: ?MoveFacts = null,
     last_move_plan: ?MoveDepthPlan = null,
+    last_history: ?HistoryFacts = null,
     last_outcome: ?SearchOutcome = null,
 } else struct {};
 
@@ -378,6 +412,7 @@ pub const SearchEvidenceSummary = struct {
     windows: u64 = 0,
     node_plans: u64 = 0,
     move_plans: u64 = 0,
+    history_facts: u64 = 0,
     outcomes: u64 = 0,
     updates: u64 = 0,
     dropped: u64 = 0,
@@ -390,6 +425,7 @@ pub const SearchEvidenceSnapshot = struct {
     node_plan: ?NodeDepthPlan = null,
     move_facts: ?MoveFacts = null,
     move_plan: ?MoveDepthPlan = null,
+    history: ?HistoryFacts = null,
     outcome: ?SearchOutcome = null,
 };
 
@@ -438,6 +474,13 @@ pub const SearchEvidenceObservation = struct {
         }
     }
 
+    pub fn observeHistory(self: *SearchEvidenceObservation, facts: HistoryFacts) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.history_facts += 1;
+            self.storage.last_history = facts;
+        }
+    }
+
     pub fn observeOutcome(self: *SearchEvidenceObservation, outcome: SearchOutcome) void {
         if (comptime search_evidence_observation_compiled) {
             self.storage.outcomes += 1;
@@ -448,7 +491,7 @@ pub const SearchEvidenceObservation = struct {
     pub fn record(self: *SearchEvidenceObservation, key: u64, bonus: i32) void {
         if (comptime search_evidence_observation_compiled) {
             std.debug.assert(key != 0);
-            const start: usize = @intCast((key *% 0x9e3779b97f4a7c15) & (observation_slot_count - 1));
+            const start: usize = @intCast(observationIndex(key));
             for (0..8) |offset| {
                 const entry = &self.storage.entries[(start + offset) & (observation_slot_count - 1)];
                 if (entry.key == 0) entry.key = key;
@@ -465,7 +508,7 @@ pub const SearchEvidenceObservation = struct {
     pub fn sample(self: *const SearchEvidenceObservation, key: u64) ?OutcomeSupportCell {
         if (comptime search_evidence_observation_compiled) {
             if (key == 0) return null;
-            const start: usize = @intCast((key *% 0x9e3779b97f4a7c15) & (observation_slot_count - 1));
+            const start: usize = @intCast(observationIndex(key));
             for (0..8) |offset| {
                 const entry = self.storage.entries[(start + offset) & (observation_slot_count - 1)];
                 if (entry.key == key) return entry.sample;
@@ -482,6 +525,7 @@ pub const SearchEvidenceObservation = struct {
             .windows = self.storage.windows,
             .node_plans = self.storage.node_plans,
             .move_plans = self.storage.move_plans,
+            .history_facts = self.storage.history_facts,
             .outcomes = self.storage.outcomes,
             .updates = self.storage.updates,
             .dropped = self.storage.dropped,
@@ -497,6 +541,7 @@ pub const SearchEvidenceObservation = struct {
             .node_plan = self.storage.last_node_plan,
             .move_facts = self.storage.last_move_facts,
             .move_plan = self.storage.last_move_plan,
+            .history = self.storage.last_history,
             .outcome = self.storage.last_outcome,
         };
         return .{};
@@ -1066,6 +1111,28 @@ test "enabled search evidence storage is explicitly bounded" {
     // ordering state; growth requires an intentional allocation review.
     if (comptime search_evidence_observation_compiled)
         try std.testing.expect(@sizeOf(SearchEvidenceObservation) <= 128 * 1024);
+}
+
+test "search evidence collisions drop rather than merge samples" {
+    if (comptime !search_evidence_observation_compiled) return error.SkipZigTest;
+    var colliding: [9]u64 = undefined;
+    var count: usize = 0;
+    var candidate: u64 = 1;
+    const target = observationIndex(candidate);
+    while (count < colliding.len) : (candidate += 1) {
+        if (observationIndex(candidate) != target) continue;
+        colliding[count] = candidate;
+        count += 1;
+    }
+    var observation: SearchEvidenceObservation = .{};
+    for (colliding) |key| observation.record(key, 7);
+    for (colliding[0..8]) |key| {
+        const sample_value = observation.sample(key).?;
+        try std.testing.expectEqual(@as(u8, 1), sample_value.support);
+        try std.testing.expectEqual(@as(i16, 7), sample_value.value);
+    }
+    try std.testing.expectEqual(@as(?OutcomeSupportCell, null), observation.sample(colliding[8]));
+    try std.testing.expectEqual(@as(u64, 1), observation.summary().dropped);
 }
 
 test "ply context preserves special-move identity without chess authority" {

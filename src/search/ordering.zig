@@ -456,7 +456,8 @@ pub fn quietEvidenceKey(side: chess.types.Color, chess_move: chess.move.Move) u6
     std.debug.assert(chess_move.isChessMove());
     return (@as(u64, 1) << 62) |
         (@as(u64, side.index()) << 16) |
-        chess_move.raw();
+        (@as(u64, chess_move.from().index()) << 6) |
+        @as(u64, chess_move.to().index());
 }
 
 pub fn replyEvidenceKey(

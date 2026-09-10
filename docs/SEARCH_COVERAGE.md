@@ -93,6 +93,7 @@ configuration changes a search consumer. Actual ownership is:
 | `TtFacts` | `baseline.zig:probeTable`, retaining stored producer, generation/freshness and unknown PV origin | Enabled diagnostic snapshot/count only; existing TT predicates are unchanged |
 | `WindowFacts` | Every main/qsearch invocation; root reference width is frozen from the first finite aspiration attempt | Enabled diagnostic snapshot/count only; MAN-R02 remains off |
 | `MoveFacts` | Made legal main/qsearch candidate, including EP victim, promoted result, check/evasion and both ordinals | Enabled diagnostic snapshot/count only |
+| `HistoryFacts` | Live worker-local main/reply/shared-continuation values and exact keys captured for each ranked quiet move, with optional paired shadows | Enabled diagnostic snapshot/count only; no ranking consumer |
 | `NodeDepthPlan` / `MoveDepthPlan` | Existing check/IIR and current shallow/LMR/PVS/qsearch dispatch decisions | Enabled diagnostic snapshot/count only; no shared-depth consumer yet |
 | `SearchOutcome` | Completed main/qsearch return with route, scope, horizon, verification and omitted-sibling fact | Enabled diagnostic snapshot/count only; ordinary publication remains unchanged |
 | `OutcomeSupportCell` | Completed non-root ordinary quiet exact/cutoff update packet under existing main/reply/shared-continuation keys | Bounded shadow table only; no ordering, pruning, LMR, TT or feedback consumer |
@@ -102,8 +103,9 @@ observation storage; false is the default and leaves a zero-byte state. Hash
 collisions are reported as dropped samples after bounded probing and never
 merged. Value/support clear together at the start of their owning search run;
 support is lifetime admitted-update count for that run, not confidence or
-recency. Required GPT-6 Astra High review must accept these authority/lifetime
-semantics before 6.5.9 closes or any 6.5.10 consumer is implemented.
+recency. The first GPT-6 Astra High review found scope, horizon, admission and
+missing-adapter defects. Their bounded repair awaits its idle-PC functional gate
+and a repeated Astra review before 6.5.9 closes or any 6.5.10 consumer is implemented.
 
 ### Reduction and pruning are a coordinated depth decision
 

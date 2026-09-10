@@ -12,16 +12,28 @@ const types = @import("types.zig");
 
 const Abort = error{Stopped};
 
+const NodeObservationAuthority = if (types.search_evidence_observation_compiled) struct {
+    producer: ?types.Provenance = null,
+    searched_horizon: u16 = 0,
+    scope: types.EvidenceScope = .ordinary,
+    verification: types.Verification = .not_required,
+} else struct {};
+
 const NodeValue = struct {
     raw: i32,
     bound: types.Bound,
     provenance: types.Provenance,
+    observation: NodeObservationAuthority = .{},
 };
 
 const NodeResolution = struct {
     value: NodeValue,
     depth: types.DepthIntent,
     omitted_siblings: bool = false,
+    searched_horizon: ?u16 = null,
+    original_producer: ?types.Provenance = null,
+    verification: types.Verification = .not_required,
+    scope_override: ?types.EvidenceScope = null,
 };
 
 fn Context(comptime Observer: type, comptime Prober: type) type {
@@ -431,6 +443,7 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
                 window.beta,
                 .principal,
                 .root,
+                .ordinary,
             ) catch {
                 result.termination = thread.abort_reason orelse .stopped;
                 result.nodes = thread.nodes;
@@ -609,7 +622,9 @@ fn negamax(
     beta: i32,
     expectation: types.NodeExpectation,
     route: types.EntryRoute,
+    inherited_scope: types.EvidenceScope,
 ) Abort!NodeValue {
+    const node_scope = evidenceScope(inherited_scope, route, ply, context.root_moves != null);
     var active_depth = depth_intent;
     if (comptime features.search_context and features.depth_authority and features.check_extension) {
         if ((features.nonroot_check_extension or ply == 0) and
@@ -632,14 +647,13 @@ fn negamax(
         beta,
         expectation,
         route,
+        node_scope,
     ) catch |err| {
         if (comptime features.search_evidence_observation)
             observeIncompleteOutcome(
                 context,
-                route,
+                node_scope,
                 active_depth,
-                ply,
-                context.root_moves != null,
             );
         return err;
     };
@@ -658,6 +672,7 @@ fn negamax(
             .admitted_check_extension = admitted_check,
             .admitted_iir_reduction = admitted_iir,
             .ply_capacity = @intCast(chess.types.max_ply - 1 - @min(ply, chess.types.max_ply - 1)),
+            .scope = node_scope,
         });
         const attribution = types.OutcomeAttribution.init(
             route,
@@ -665,18 +680,22 @@ fn negamax(
             expectation,
             evidence(result.value.raw, result.value.bound, result.value.provenance),
         );
+        const verification_status = if (result.verification != .not_required)
+            result.verification
+        else switch (route) {
+            .reduced_probe => .reduced_only,
+            .reduction_research, .pv_research, .null_verification => .completed,
+            else => .not_required,
+        };
         context.thread.search_evidence.observeOutcome(.{
             .attribution = attribution,
-            .scope = evidenceScope(route, ply, context.root_moves != null),
+            .scope = result.scope_override orelse node_scope,
             .requested_horizon = depth_intent.searched(),
-            .searched_horizon = result.depth.searched(),
-            .verification = switch (route) {
-                .reduced_probe => .reduced_only,
-                .reduction_research, .pv_research, .null_verification => .completed,
-                else => .not_required,
-            },
+            .searched_horizon = result.searched_horizon orelse result.depth.searched(),
+            .verification = verification_status,
             .omitted_siblings = result.omitted_siblings,
             .complete = true,
+            .original_producer = result.original_producer orelse result.value.provenance,
         });
     }
     if (comptime features.search_context)
@@ -686,7 +705,22 @@ fn negamax(
             expectation,
             evidence(result.value.raw, result.value.bound, result.value.provenance),
         ));
-    return result.value;
+    var returned = result.value;
+    if (comptime types.search_evidence_observation_compiled) {
+        returned.observation = .{
+            .producer = result.original_producer orelse result.value.provenance,
+            .searched_horizon = result.searched_horizon orelse result.depth.searched(),
+            .scope = result.scope_override orelse node_scope,
+            .verification = if (result.verification != .not_required)
+                result.verification
+            else switch (route) {
+                .reduced_probe => .reduced_only,
+                .reduction_research, .pv_research, .null_verification => .completed,
+                else => .not_required,
+            },
+        };
+    }
+    return returned;
 }
 
 fn negamaxNode(
@@ -702,6 +736,7 @@ fn negamaxNode(
     beta: i32,
     expectation: types.NodeExpectation,
     route: types.EntryRoute,
+    node_scope: types.EvidenceScope,
 ) Abort!NodeResolution {
     const pv_node = expectation.isPrincipal();
     std.debug.assert(pv_node or beta == alpha_initial + 1);
@@ -756,9 +791,25 @@ fn negamaxNode(
         // verdict is refused and the node is searched for real.
         if (comptime features.tt_rule_fifty_guard) {
             if (value.current.rule50 < tt_rule_fifty_guard_clock)
-                return resolved(cutoff, active_depth);
+                return resolvedWithAuthority(
+                    cutoff,
+                    active_depth,
+                    @intCast(table_evidence.record.?.depth),
+                    table_evidence.record.?.producer,
+                    .not_required,
+                    node_scope,
+                    false,
+                );
         } else {
-            return resolved(cutoff, active_depth);
+            return resolvedWithAuthority(
+                cutoff,
+                active_depth,
+                @intCast(table_evidence.record.?.depth),
+                table_evidence.record.?.producer,
+                .not_required,
+                node_scope,
+                false,
+            );
         }
     }
 
@@ -843,6 +894,7 @@ fn negamaxNode(
             alpha_initial,
             beta,
             expectation,
+            node_scope,
         ), active_depth);
 
     const shallow: ShallowEvidence = if (comptime features.shallow_selectivity or features.probcut or
@@ -851,7 +903,7 @@ fn negamaxNode(
     else
         .{};
     if (comptime features.search_evidence_observation)
-        context.thread.search_evidence.observeStatic(staticFacts(context.thread, ply, shallow));
+        context.thread.search_evidence.observeStatic(staticFacts(context.thread, ply, shallow, node_scope));
     // Shared zugzwang guard: a position with no non-pawn material for the
     // side to move can reverse under a single tempo, so no shallow-
     // selectivity consumer below may treat a quiet move as safely futile.
@@ -903,6 +955,7 @@ fn negamaxNode(
                     alpha_initial,
                     beta,
                     expectation,
+                    node_scope,
                 ), active_depth);
             }
         }
@@ -948,6 +1001,7 @@ fn negamaxNode(
                 -beta + 1,
                 .all,
                 .null_probe,
+                node_scope,
             ) catch |err| {
                 unmakeNull(value, binding);
                 return err;
@@ -956,7 +1010,8 @@ fn negamaxNode(
             unmakeNull(value, binding);
             if ((null_value.bound == .lower or null_value.bound == .exact) and null_value.raw >= beta) {
                 context.observer.nullMoveFailHigh();
-                const verification = try negamax(
+                const saved_static_eval = context.thread.static_evals[ply];
+                const verification = negamax(
                     features,
                     false,
                     context,
@@ -969,7 +1024,12 @@ fn negamaxNode(
                     beta,
                     expectation,
                     .null_verification,
-                );
+                    node_scope,
+                ) catch |err| {
+                    context.thread.static_evals[ply] = saved_static_eval;
+                    return err;
+                };
+                context.thread.static_evals[ply] = saved_static_eval;
                 const verified = (verification.bound == .lower or verification.bound == .exact) and
                     verification.raw >= beta;
                 context.observer.nullMoveVerification(verified);
@@ -978,7 +1038,15 @@ fn negamaxNode(
                     const cutoff = NodeValue{ .raw = beta, .bound = .lower, .provenance = .null_move };
                     if (!exclusion_node)
                         storeTable(context, value.current.key, .none, cutoff, tableStaticEval(features, shallow), depth, ply);
-                    return resolved(cutoff, active_depth);
+                    return resolvedWithAuthority(
+                        cutoff,
+                        active_depth,
+                        types.DepthIntent.reduced(depth, null_reduction).searched(),
+                        .null_move,
+                        .completed,
+                        .null_verification,
+                        false,
+                    );
                 }
             }
         }
@@ -1000,7 +1068,25 @@ fn negamaxNode(
             shallow,
             shallow_has_non_pawn_material,
             table_evidence,
-        )) |cutoff| return resolved(cutoff, active_depth);
+            node_scope,
+        )) |cutoff| {
+            const original_producer = if (comptime features.main_selectivity_sync and features.probcut_tt)
+                if (probCutTableDecision(table_evidence.record, depth, probCutThreshold(context.params, beta).?) == .cutoff)
+                    table_evidence.record.?.producer
+                else
+                    types.Provenance.probcut
+            else
+                types.Provenance.probcut;
+            return resolvedWithAuthority(
+                cutoff,
+                active_depth,
+                probCutStoreDepth(depth),
+                original_producer,
+                .completed,
+                .probcut,
+                false,
+            );
+        }
     }
 
     var moves = chess.position.MoveList.init();
@@ -1058,6 +1144,7 @@ fn negamaxNode(
             const record = table_evidence.record.?;
             const threshold = singularThreshold(record.value);
             const saved_context = context.thread.ply_contexts[ply];
+            const saved_static_eval = context.thread.static_evals[ply];
             context.thread.ply_contexts[ply] = saved_context.withExcluded(tt_move);
             context.observer.singularAttempt();
             // The exclusion search re-enters this ply, so the observer's
@@ -1078,14 +1165,17 @@ fn negamaxNode(
                 threshold,
                 .all,
                 .singular_probe,
+                node_scope,
             ) catch |err| {
                 context.observer.exclusionExit(ply);
                 context.thread.ply_contexts[ply] = saved_context;
+                context.thread.static_evals[ply] = saved_static_eval;
                 context.thread.pv_lengths[ply] = 0;
                 return err;
             };
             context.observer.exclusionExit(ply);
             context.thread.ply_contexts[ply] = saved_context;
+            context.thread.static_evals[ply] = saved_static_eval;
             context.thread.pv_lengths[ply] = 0;
             singular_extension_plies = singularExtensionPlies(
                 features,
@@ -1119,6 +1209,7 @@ fn negamaxNode(
                     if (record.value.raw() >= beta) {
                         const verification_depth = @max(@as(u16, 1), (depth + 1) / 2);
                         context.thread.ply_contexts[ply] = saved_context.withExcluded(tt_move);
+                        const saved_multi_cut_static_eval = context.thread.static_evals[ply];
                         context.observer.singularMultiCutProbe();
                         context.observer.exclusionEnter(ply);
                         const verification = negamax(
@@ -1134,14 +1225,17 @@ fn negamaxNode(
                             beta,
                             .cut,
                             .singular_probe,
+                            node_scope,
                         ) catch |err| {
                             context.observer.exclusionExit(ply);
                             context.thread.ply_contexts[ply] = saved_context;
+                            context.thread.static_evals[ply] = saved_multi_cut_static_eval;
                             context.thread.pv_lengths[ply] = 0;
                             return err;
                         };
                         context.observer.exclusionExit(ply);
                         context.thread.ply_contexts[ply] = saved_context;
+                        context.thread.static_evals[ply] = saved_multi_cut_static_eval;
                         context.thread.pv_lengths[ply] = 0;
                         const cutoff = exclusionProvesAtLeast(verification, beta);
                         context.observer.singularMultiCut(cutoff);
@@ -1201,6 +1295,8 @@ fn negamaxNode(
     var alpha = alpha_initial;
     var best = -score.infinity_raw;
     var best_provenance: types.Provenance = .full_search;
+    var best_shadow_authorized = false;
+    var best_original_producer: ?types.Provenance = null;
     var best_reduction: u16 = 1;
     var best_move: chess.move.Move = .none;
     var searched_move_count: usize = 0;
@@ -1213,6 +1309,10 @@ fn negamaxNode(
             0
     ]chess.move.Move = undefined;
     var searched_quiet_count: usize = 0;
+    var shadow_quiets: [
+        if (features.search_evidence_observation) chess.types.move_capacity else 0
+    ]chess.move.Move = undefined;
+    var shadow_quiet_count: usize = 0;
     var lmr_positive_feedback: [
         if (features.search_context and features.contextual_history and features.lmr_synchronization)
             chess.types.move_capacity
@@ -1427,6 +1527,17 @@ fn negamaxNode(
             }
         }
 
+        if (comptime features.search_evidence_observation) {
+            if (quiet) if (context.heuristics) |heuristics|
+                context.thread.search_evidence.observeHistory(historyFacts(
+                    &context.thread.search_evidence,
+                    heuristics,
+                    value,
+                    reply_context,
+                    continuation_contexts,
+                    chess_move,
+                ));
+        }
         make(value, binding, context.thread, ply, chess_move);
         if (comptime features.search_context)
             context.thread.ply_contexts[ply + 1] = types.PlyContext.afterMove(
@@ -1437,6 +1548,16 @@ fn negamaxNode(
                 value.current.checkers != 0,
             );
         const gives_check = value.current.checkers != 0;
+        const singular = singular_move.isChessMove() and chess_move.raw() == singular_move.raw();
+        const full_child_depth = if (singular)
+            types.DepthIntent.extended(depth - 1, singular_extension_plies)
+        else
+            types.DepthIntent.full(depth - 1);
+        const child_check_extension: u16 = @intFromBool(
+            features.search_context and features.depth_authority and features.check_extension and
+                features.nonroot_check_extension and
+                checkExtensionEligible(gives_check, full_child_depth, ply + 1),
+        );
         const move_facts = types.MoveFacts{
             .chess_move = chess_move,
             .resulting_piece = move_identity.resulting_piece,
@@ -1460,12 +1581,13 @@ fn negamaxNode(
             if (!gives_check) {
                 if (comptime features.search_evidence_observation)
                     context.thread.search_evidence.observeMovePlan(move_facts, .{
-                        .full = types.DepthIntent.full(depth - 1),
-                        .probe = types.DepthIntent.full(depth - 1),
-                        .prune_depth = depth -| 1,
+                        .full = full_child_depth,
+                        .probe = full_child_depth,
+                        .prune_depth = depth,
                         .selected_ordinal = @intCast(search_index),
                         .searched_before = @intCast(actually_searched_count),
-                        .singular_extension = 0,
+                        .singular_extension = if (singular) singular_extension_plies else 0,
+                        .child_check_extension = child_check_extension,
                         .proposed_reduction = 0,
                         .shallow_omitted = true,
                     });
@@ -1498,12 +1620,7 @@ fn negamaxNode(
         var reduction: u16 = 0;
         var lmr_full_depth_fail_low = false;
         var lmr_researched = false;
-        const singular = singular_move.isChessMove() and chess_move.raw() == singular_move.raw();
         if (singular) context.observer.extension(.singular);
-        const full_child_depth = if (singular)
-            types.DepthIntent.extended(depth - 1, singular_extension_plies)
-        else
-            types.DepthIntent.full(depth - 1);
         const reduce = !singular and shouldReduceLateMove(
             features,
             depth,
@@ -1534,10 +1651,11 @@ fn negamaxNode(
                 context.thread.search_evidence.observeMovePlan(move_facts, .{
                     .full = full_child_depth,
                     .probe = types.DepthIntent.reduced(depth - 1, reduction),
-                    .prune_depth = (depth -| 1) -| reduction,
+                    .prune_depth = depth,
                     .selected_ordinal = @intCast(search_index),
                     .searched_before = @intCast(actually_searched_count - 1),
-                    .singular_extension = singular_extension_plies,
+                    .singular_extension = if (singular) singular_extension_plies else 0,
+                    .child_check_extension = child_check_extension,
                     .proposed_reduction = reduction,
                     .shallow_omitted = false,
                 });
@@ -1554,6 +1672,7 @@ fn negamaxNode(
                 -alpha,
                 expectation.child(false),
                 .reduced_probe,
+                node_scope,
             ) catch |err| {
                 unmake(value, binding, context.thread, ply, chess_move);
                 return err;
@@ -1575,6 +1694,7 @@ fn negamaxNode(
                     -alpha,
                     expectation.child(false),
                     .reduction_research,
+                    node_scope,
                 ) catch |err| {
                     unmake(value, binding, context.thread, ply, chess_move);
                     return err;
@@ -1590,10 +1710,11 @@ fn negamaxNode(
                 context.thread.search_evidence.observeMovePlan(move_facts, .{
                     .full = full_child_depth,
                     .probe = full_child_depth,
-                    .prune_depth = full_child_depth.searched(),
+                    .prune_depth = depth,
                     .selected_ordinal = @intCast(search_index),
                     .searched_before = @intCast(actually_searched_count - 1),
-                    .singular_extension = singular_extension_plies,
+                    .singular_extension = if (singular) singular_extension_plies else 0,
+                    .child_check_extension = child_check_extension,
                     .proposed_reduction = 0,
                     .shallow_omitted = false,
                 });
@@ -1610,6 +1731,7 @@ fn negamaxNode(
                 -alpha,
                 expectation.child(search_index == 0 and pv_node),
                 if (search_index == 0) .first_move else .scout,
+                node_scope,
             ) catch |err| {
                 unmake(value, binding, context.thread, ply, chess_move);
                 return err;
@@ -1620,10 +1742,11 @@ fn negamaxNode(
                 context.thread.search_evidence.observeMovePlan(move_facts, .{
                     .full = full_child_depth,
                     .probe = full_child_depth,
-                    .prune_depth = full_child_depth.searched(),
+                    .prune_depth = depth,
                     .selected_ordinal = @intCast(search_index),
                     .searched_before = @intCast(actually_searched_count - 1),
-                    .singular_extension = singular_extension_plies,
+                    .singular_extension = if (singular) singular_extension_plies else 0,
+                    .child_check_extension = child_check_extension,
                     .proposed_reduction = 0,
                     .shallow_omitted = false,
                 });
@@ -1640,6 +1763,7 @@ fn negamaxNode(
                 -alpha,
                 expectation.child(false),
                 .scout,
+                node_scope,
             ) catch |err| {
                 unmake(value, binding, context.thread, ply, chess_move);
                 return err;
@@ -1661,6 +1785,7 @@ fn negamaxNode(
                 -alpha,
                 expectation.child(true),
                 .pv_research,
+                node_scope,
             ) catch |err| {
                 unmake(value, binding, context.thread, ply, chess_move);
                 return err;
@@ -1727,6 +1852,12 @@ fn negamaxNode(
             }
         }
 
+        if (comptime features.search_evidence_observation) {
+            if (quiet and !exclusion_node and !reduced_only) {
+                shadow_quiets[shadow_quiet_count] = chess_move;
+                shadow_quiet_count += 1;
+            }
+        }
         if (candidate.raw > best) {
             best = candidate.raw;
             best_move = chess_move;
@@ -1737,6 +1868,9 @@ fn negamaxNode(
             else
                 .pvs_probe;
             best_reduction = if (reduced_only) reduction else 1;
+            best_shadow_authorized = !reduced_only and ordinarySearchedProducer(candidate.provenance);
+            if (comptime types.search_evidence_observation_compiled)
+                best_original_producer = candidate.observation.producer orelse candidate.provenance;
             if (!reduced_only and !exclusion_node) extendPv(context.thread, ply, chess_move);
         }
         if (candidate.raw > alpha) alpha = candidate.raw;
@@ -1756,6 +1890,14 @@ fn negamaxNode(
                                 continuation_contexts,
                                 chess_move,
                                 searched_quiets[0..searched_quiet_count],
+                                shadow_quiets[0..shadow_quiet_count],
+                                shadowOutcomeEligible(
+                                    node_scope,
+                                    ply,
+                                    best,
+                                    .lower,
+                                    best_shadow_authorized,
+                                ),
                                 lmr_positive_feedback[0..lmr_positive_feedback_count],
                                 depth,
                                 .cutoff,
@@ -1803,7 +1945,10 @@ fn negamaxNode(
             if (!exclusion_node) if (table_evidence.chess_move) |tt_move|
                 context.observer.ttBest(tt_move.raw() == best_move.raw());
             recordCorrectionEvidence(features, context, value, shallow, cutoff, depth, exclusion_node, false);
-            return resolved(cutoff, active_depth);
+            var resolution = resolvedWithOmission(cutoff, active_depth, pruned_late_move);
+            if (comptime types.search_evidence_observation_compiled)
+                resolution.original_producer = best_original_producer orelse cutoff.provenance;
+            return resolution;
         }
     }
     if (exclusion_node and searched_move_count == 0) {
@@ -1832,6 +1977,14 @@ fn negamaxNode(
                     continuation_contexts,
                     best_move,
                     searched_quiets[0..searched_quiet_count],
+                    shadow_quiets[0..shadow_quiet_count],
+                    shadowOutcomeEligible(
+                        node_scope,
+                        ply,
+                        result.raw,
+                        result.bound,
+                        best_shadow_authorized,
+                    ),
                     lmr_positive_feedback[0..lmr_positive_feedback_count],
                     depth,
                     .exact,
@@ -1875,7 +2028,10 @@ fn negamaxNode(
     if (!exclusion_node) if (table_evidence.chess_move) |tt_move|
         context.observer.ttBest(tt_move.raw() == best_move.raw());
     recordCorrectionEvidence(features, context, value, shallow, result, depth, exclusion_node, pruned_late_move);
-    return resolvedWithOmission(result, active_depth, pruned_late_move);
+    var resolution = resolvedWithOmission(result, active_depth, pruned_late_move);
+    if (comptime types.search_evidence_observation_compiled)
+        resolution.original_producer = best_original_producer orelse result.provenance;
+    return resolution;
 }
 
 fn continuationSet(
@@ -1920,6 +2076,26 @@ fn continuationAt(
     );
 }
 
+fn ordinarySearchedProducer(producer: types.Provenance) bool {
+    return switch (producer) {
+        .full_search, .pvs_probe => true,
+        else => false,
+    };
+}
+
+fn shadowOutcomeEligible(
+    scope: types.EvidenceScope,
+    ply: usize,
+    raw: i32,
+    bound: types.Bound,
+    winner_authorized: bool,
+) bool {
+    if (scope != .ordinary or ply == 0 or !winner_authorized) return false;
+    if (bound != .exact and bound != .lower) return false;
+    const searched_score = score.Score{ .raw_value = raw };
+    return searched_score.isOrdinary() and raw != 0;
+}
+
 fn recordContextualQuietOutcome(
     comptime observe_search_evidence: bool,
     search_evidence: *types.SearchEvidenceObservation,
@@ -1929,6 +2105,8 @@ fn recordContextualQuietOutcome(
     continuations: ordering.ContinuationSet,
     winner: chess.move.Move,
     searched_quiets: []const chess.move.Move,
+    shadow_quiets: []const chess.move.Move,
+    shadow_admitted: bool,
     pretrained_winners: []const chess.move.Move,
     depth: u16,
     disposition: types.NodeDisposition,
@@ -1938,14 +2116,14 @@ fn recordContextualQuietOutcome(
     std.debug.assert(!chess.movegen.isCapture(value, winner) and winner.kind() != .promotion);
     const winner_pretrained = containsMove(pretrained_winners, winner);
     if (comptime observe_search_evidence) {
-        if (!winner_pretrained)
+        if (shadow_admitted)
             recordShadowQuietOutcome(
                 search_evidence,
                 value,
                 reply,
                 continuations,
                 winner,
-                searched_quiets,
+                shadow_quiets,
                 depth,
             );
     }
@@ -1986,6 +2164,42 @@ fn recordContextualQuietOutcome(
     }
 }
 
+fn historyFacts(
+    observation: *const types.SearchEvidenceObservation,
+    heuristics: *const ordering.State,
+    value: *const chess.position.Position,
+    reply: ?ordering.ReplyContext,
+    continuations: ordering.ContinuationSet,
+    chess_move: chess.move.Move,
+) types.HistoryFacts {
+    const main_key = ordering.quietEvidenceKey(value.side_to_move, chess_move);
+    var facts = types.HistoryFacts{
+        .main = .{
+            .key = main_key,
+            .value = heuristics.quietScore(value.side_to_move, chess_move),
+            .shadow = observation.sample(main_key),
+        },
+    };
+    if (reply) |active_reply| {
+        const key = ordering.replyEvidenceKey(value, active_reply, chess_move);
+        facts.reply = .{
+            .key = key,
+            .value = heuristics.replyScore(value, active_reply, chess_move),
+            .shadow = observation.sample(key),
+        };
+    }
+    for (continuations.items, 0..) |maybe_context, index| {
+        const context = maybe_context orelse continue;
+        const key = ordering.continuationEvidenceKey(value, context, chess_move);
+        facts.continuations[index] = .{
+            .key = key,
+            .value = heuristics.continuationScore(value, context, chess_move),
+            .shadow = observation.sample(key),
+        };
+    }
+    return facts;
+}
+
 fn recordShadowQuietOutcome(
     search_evidence: *types.SearchEvidenceObservation,
     value: *const chess.position.Position,
@@ -1998,11 +2212,23 @@ fn recordShadowQuietOutcome(
     const bonus = ordering.shadowOutcomeBonus(depth);
     search_evidence.record(ordering.quietEvidenceKey(value.side_to_move, winner), bonus);
     search_evidence.record(ordering.replyEvidenceKey(value, reply, winner), bonus);
-    for (searched_quiets) |candidate| {
-        if (candidate.raw() == winner.raw()) continue;
-        search_evidence.record(ordering.quietEvidenceKey(value.side_to_move, candidate), -bonus);
-        if (!sameReplyMoveKey(value, winner, candidate))
-            search_evidence.record(ordering.replyEvidenceKey(value, reply, candidate), -bonus);
+    const winner_main_key = ordering.quietEvidenceKey(value.side_to_move, winner);
+    const winner_reply_key = ordering.replyEvidenceKey(value, reply, winner);
+    for (searched_quiets, 0..) |candidate, candidate_index| {
+        const main_key = ordering.quietEvidenceKey(value.side_to_move, candidate);
+        if (main_key != winner_main_key and !quietKeySeenEarlier(
+            value.side_to_move,
+            searched_quiets[0..candidate_index],
+            main_key,
+        )) search_evidence.record(main_key, -bonus);
+
+        const reply_key = ordering.replyEvidenceKey(value, reply, candidate);
+        if (reply_key != winner_reply_key and !replyKeySeenEarlier(
+            value,
+            reply,
+            searched_quiets[0..candidate_index],
+            reply_key,
+        )) search_evidence.record(reply_key, -bonus);
     }
 
     for (continuations.items, 0..) |maybe_continuation, slot| {
@@ -2018,15 +2244,49 @@ fn recordShadowQuietOutcome(
         }
         if (duplicate) continue;
         search_evidence.record(winner_key, bonus);
-        for (searched_quiets) |candidate| {
-            if (candidate.raw() == winner.raw() or sameReplyMoveKey(value, winner, candidate))
-                continue;
-            search_evidence.record(
-                ordering.continuationEvidenceKey(value, continuation, candidate),
-                -bonus,
-            );
+        for (searched_quiets, 0..) |candidate, candidate_index| {
+            const candidate_key = ordering.continuationEvidenceKey(value, continuation, candidate);
+            if (candidate_key == winner_key or continuationKeySeenEarlier(
+                value,
+                continuation,
+                searched_quiets[0..candidate_index],
+                candidate_key,
+            )) continue;
+            search_evidence.record(candidate_key, -bonus);
         }
     }
+}
+
+fn quietKeySeenEarlier(
+    side: chess.types.Color,
+    moves: []const chess.move.Move,
+    key: u64,
+) bool {
+    for (moves) |prior|
+        if (ordering.quietEvidenceKey(side, prior) == key) return true;
+    return false;
+}
+
+fn replyKeySeenEarlier(
+    value: *const chess.position.Position,
+    reply: ordering.ReplyContext,
+    moves: []const chess.move.Move,
+    key: u64,
+) bool {
+    for (moves) |prior|
+        if (ordering.replyEvidenceKey(value, reply, prior) == key) return true;
+    return false;
+}
+
+fn continuationKeySeenEarlier(
+    value: *const chess.position.Position,
+    continuation: ordering.ContinuationContext,
+    moves: []const chess.move.Move,
+    key: u64,
+) bool {
+    for (moves) |prior|
+        if (ordering.continuationEvidenceKey(value, continuation, prior) == key) return true;
+    return false;
 }
 
 fn recordLmrContextFeedback(
@@ -2134,7 +2394,12 @@ fn quiescence(
     alpha_initial: i32,
     beta: i32,
     expectation: types.NodeExpectation,
+    inherited_scope: types.EvidenceScope,
 ) Abort!NodeValue {
+    const q_scope: types.EvidenceScope = if (inherited_scope == .ordinary)
+        .quiescence
+    else
+        inherited_scope;
     const result = quiescenceNode(
         features,
         context,
@@ -2145,14 +2410,13 @@ fn quiescence(
         alpha_initial,
         beta,
         expectation,
+        q_scope,
     ) catch |err| {
         if (comptime features.search_evidence_observation)
             observeIncompleteOutcome(
                 context,
-                .quiescence,
+                q_scope,
                 types.DepthIntent.full(0),
-                ply,
-                context.root_moves != null,
             );
         return err;
     };
@@ -2175,15 +2439,17 @@ fn quiescence(
             .admitted_check_extension = 0,
             .admitted_iir_reduction = 0,
             .ply_capacity = @intCast(chess.types.max_ply - 1 - @min(ply, chess.types.max_ply - 1)),
+            .scope = q_scope,
         });
         context.thread.search_evidence.observeOutcome(.{
             .attribution = attribution,
-            .scope = .quiescence,
+            .scope = q_scope,
             .requested_horizon = 0,
             .searched_horizon = 0,
             .verification = .not_required,
             .omitted_siblings = false,
             .complete = true,
+            .original_producer = result.provenance,
         });
     }
     if (comptime features.search_context)
@@ -2206,6 +2472,7 @@ fn quiescenceNode(
     alpha_initial: i32,
     beta: i32,
     expectation: types.NodeExpectation,
+    q_scope: types.EvidenceScope,
 ) Abort!NodeValue {
     const pv_node = expectation.isPrincipal();
     std.debug.assert(pv_node or beta == alpha_initial + 1);
@@ -2278,7 +2545,7 @@ fn quiescenceNode(
             table_evidence.record,
         );
         if (comptime features.search_evidence_observation)
-            context.thread.search_evidence.observeStatic(staticFacts(context.thread, ply, static_evidence));
+            context.thread.search_evidence.observeStatic(staticFacts(context.thread, ply, static_evidence, q_scope));
         // Step 5.4.1 gives correction history evaluation authority only. The
         // corrected value is therefore the qsearch stand-pat score, while
         // delta/SEE pruning below continues to consume `pruning_eval`, which
@@ -2414,6 +2681,7 @@ fn quiescenceNode(
             -beta,
             -alpha,
             if (pv_node) .principal else expectation.child(false),
+            q_scope,
         ) catch |err| {
             unmake(value, binding, context.thread, ply, chess_move);
             return err;
@@ -2743,6 +3011,7 @@ fn tryProbCut(
     shallow: ShallowEvidence,
     has_non_pawn_material: bool,
     table_evidence: TableEvidence,
+    node_scope: types.EvidenceScope,
 ) Abort!?NodeValue {
     const threshold = probCutThreshold(context.params, beta) orelse return null;
     if (!probCutEligible(
@@ -2828,6 +3097,7 @@ fn tryProbCut(
             -threshold,
             -threshold + 1,
             .all,
+            node_scope,
         ) catch |err| {
             unmake(value, binding, context.thread, ply, chess_move);
             return err;
@@ -2854,6 +3124,7 @@ fn tryProbCut(
             -threshold + 1,
             .all,
             .probcut_probe,
+            node_scope,
         ) catch |err| {
             unmake(value, binding, context.thread, ply, chess_move);
             return err;
@@ -2973,14 +3244,66 @@ fn probCutStoreDepth(depth: u16) u16 {
 }
 
 fn resolved(value: NodeValue, depth: types.DepthIntent) NodeResolution {
-    return .{ .value = value, .depth = depth };
+    return .{
+        .value = value,
+        .depth = depth,
+        .searched_horizon = establishedHorizon(value.provenance, depth),
+        .original_producer = value.provenance,
+    };
 }
 
 fn resolvedWithOmission(value: NodeValue, depth: types.DepthIntent, omitted_siblings: bool) NodeResolution {
-    return .{ .value = value, .depth = depth, .omitted_siblings = omitted_siblings };
+    var result = resolved(value, depth);
+    result.omitted_siblings = omitted_siblings;
+    return result;
 }
 
-fn evidenceScope(route: types.EntryRoute, ply: usize, restricted_root: bool) types.EvidenceScope {
+fn establishedHorizon(producer: types.Provenance, depth: types.DepthIntent) u16 {
+    return switch (producer) {
+        .full_search, .pvs_probe, .reduced_search, .exclusion_search => depth.searched(),
+        .mate_distance,
+        .terminal,
+        .static_eval,
+        .stand_pat,
+        .qsearch_move,
+        .tt_exact,
+        .tt_bound,
+        .fallback,
+        .null_move,
+        .probcut,
+        .speculative_cutoff,
+        .tablebase,
+        => 0,
+    };
+}
+
+fn resolvedWithAuthority(
+    value: NodeValue,
+    depth: types.DepthIntent,
+    searched_horizon: u16,
+    original_producer: types.Provenance,
+    verification: types.Verification,
+    scope: types.EvidenceScope,
+    omitted_siblings: bool,
+) NodeResolution {
+    return .{
+        .value = value,
+        .depth = depth,
+        .omitted_siblings = omitted_siblings,
+        .searched_horizon = searched_horizon,
+        .original_producer = original_producer,
+        .verification = verification,
+        .scope_override = scope,
+    };
+}
+
+fn evidenceScope(
+    inherited: types.EvidenceScope,
+    route: types.EntryRoute,
+    ply: usize,
+    restricted_root: bool,
+) types.EvidenceScope {
+    if (inherited != .ordinary) return inherited;
     if (ply == 0 and restricted_root) return .restricted_root;
     return switch (route) {
         .singular_probe => .exclusion,
@@ -2994,19 +3317,18 @@ fn evidenceScope(route: types.EntryRoute, ply: usize, restricted_root: bool) typ
 
 fn observeIncompleteOutcome(
     context: anytype,
-    route: types.EntryRoute,
+    scope: types.EvidenceScope,
     depth: types.DepthIntent,
-    ply: usize,
-    restricted_root: bool,
 ) void {
     context.thread.search_evidence.observeOutcome(.{
         .attribution = null,
-        .scope = evidenceScope(route, ply, restricted_root),
+        .scope = scope,
         .requested_horizon = depth.searched(),
-        .searched_horizon = depth.searched(),
+        .searched_horizon = 0,
         .verification = .not_required,
         .omitted_siblings = false,
         .complete = false,
+        .original_producer = null,
     });
 }
 
@@ -3550,8 +3872,13 @@ fn shallowEvidence(
     };
 }
 
-fn staticFacts(thread: *const types.ThreadState, ply: usize, shallow: ShallowEvidence) types.StaticFacts {
-    if (!shallow.known) return .{};
+fn staticFacts(
+    thread: *const types.ThreadState,
+    ply: usize,
+    shallow: ShallowEvidence,
+    scope: types.EvidenceScope,
+) types.StaticFacts {
+    if (!shallow.known or scope != .ordinary) return .{};
     const own_previous = if (ply >= 2) thread.static_evals[ply - 2] else types.static_eval_unknown;
     const opponent_previous = if (ply >= 1) thread.static_evals[ply - 1] else types.static_eval_unknown;
     const own_chain = ply >= 2 and thread.ply_contexts[ply - 1].arrival == .move and
@@ -4636,7 +4963,7 @@ test "search fact adapters preserve special moves, TT origin, and real-move tren
         .corrected_eval = 20,
         .pruning_eval = 20,
         .known = true,
-    });
+    }, .ordinary);
     try std.testing.expect(connected.own_trend.?.improving());
     try std.testing.expect(connected.opponent_trend.?.improving());
     thread.ply_contexts[2] = types.PlyContext.afterNull(false);
@@ -4646,7 +4973,7 @@ test "search fact adapters preserve special moves, TT origin, and real-move tren
         .corrected_eval = 20,
         .pruning_eval = 20,
         .known = true,
-    });
+    }, .ordinary);
     try std.testing.expectEqual(@as(?types.EvalTrend, null), broken.own_trend);
     try std.testing.expectEqual(@as(?types.EvalTrend, null), broken.opponent_trend);
 }
@@ -4696,6 +5023,7 @@ fn negated(child: NodeValue) NodeValue {
             .upper => .lower,
         },
         .provenance = child.provenance,
+        .observation = child.observation,
     };
 }
 
@@ -4766,6 +5094,76 @@ test "mate-distance evidence never acquires ordinary search authority" {
     try std.testing.expect(!searchedEvalProvenance(.mate_distance));
     try std.testing.expect(!singularTableProvenance(.mate_distance));
     try std.testing.expect(!probCutTableProvenance(.mate_distance));
+}
+
+test "search evidence scope remains restrictive across nested routes" {
+    // A real move inside a null, exclusion, ProbCut or restricted-root probe
+    // cannot launder that ancestor's evidence into ordinary feedback.
+    try std.testing.expectEqual(
+        types.EvidenceScope.null_probe,
+        evidenceScope(.null_probe, .first_move, 3, false),
+    );
+    try std.testing.expectEqual(
+        types.EvidenceScope.exclusion,
+        evidenceScope(.exclusion, .scout, 4, false),
+    );
+    try std.testing.expectEqual(
+        types.EvidenceScope.probcut,
+        evidenceScope(.probcut, .quiescence, 5, false),
+    );
+    try std.testing.expectEqual(
+        types.EvidenceScope.restricted_root,
+        evidenceScope(.ordinary, .root, 0, true),
+    );
+}
+
+test "shadow outcomes require completed ordinary searched authority" {
+    // Draw/mate, root, restricted and reduced/TT-derived winners do not train
+    // the paired diagnostic relation.
+    try std.testing.expect(shadowOutcomeEligible(.ordinary, 2, 35, .exact, true));
+    try std.testing.expect(shadowOutcomeEligible(.ordinary, 2, 35, .lower, true));
+    try std.testing.expect(!shadowOutcomeEligible(.ordinary, 0, 35, .exact, true));
+    try std.testing.expect(!shadowOutcomeEligible(.null_verification, 2, 35, .lower, true));
+    try std.testing.expect(!shadowOutcomeEligible(.ordinary, 2, 0, .exact, true));
+    try std.testing.expect(!shadowOutcomeEligible(
+        .ordinary,
+        2,
+        score.Score.mateIn(3).?.raw(),
+        .lower,
+        true,
+    ));
+    try std.testing.expect(!shadowOutcomeEligible(.ordinary, 2, 35, .upper, true));
+    try std.testing.expect(!shadowOutcomeEligible(.ordinary, 2, 35, .exact, false));
+}
+
+test "shadow packet updates each aliased relation once" {
+    if (comptime !types.search_evidence_observation_compiled) return error.SkipZigTest;
+    var root: chess.position.PositionState = .{};
+    const value = try chess.fen.parse(chess.fen.start_position, &root);
+    const winner = chess.move.Move.normal(.e2, .e4);
+    const alternative = chess.move.Move.normal(.d2, .d4);
+    const reply = ordering.ReplyContext{ .previous_piece = .knight, .previous_to = .f6 };
+    var observation: types.SearchEvidenceObservation = .{};
+    recordShadowQuietOutcome(
+        &observation,
+        &value,
+        reply,
+        .{},
+        winner,
+        &.{ alternative, alternative },
+        6,
+    );
+    const sample = observation.sample(ordering.quietEvidenceKey(.white, alternative)).?;
+    try std.testing.expectEqual(@as(u8, 1), sample.support);
+}
+
+test "observed horizon distinguishes searched work from shortcuts" {
+    const depth = types.DepthIntent.reduced(8, 2);
+    try std.testing.expectEqual(@as(u16, 6), establishedHorizon(.full_search, depth));
+    try std.testing.expectEqual(@as(u16, 6), establishedHorizon(.exclusion_search, depth));
+    try std.testing.expectEqual(@as(u16, 0), establishedHorizon(.terminal, depth));
+    try std.testing.expectEqual(@as(u16, 0), establishedHorizon(.speculative_cutoff, depth));
+    try std.testing.expectEqual(@as(u16, 0), establishedHorizon(.tablebase, depth));
 }
 
 comptime {

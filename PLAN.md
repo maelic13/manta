@@ -1003,9 +1003,13 @@ Implement these bounded sub-tickets in order, as one behavior-neutral step.
 Names, fields and admission rules are in ADR-0070; no coefficient fitting or
 new production consumer is part of this work.
 
-**Implementation complete; required Astra High review remains open.** The
-implementation is frozen at the commit closing this implementation pass and must not advance
-to 6.5.10 until that review accepts the authority and lifetime boundaries.
+**Repair implementation complete; idle-host verification and the repeated Astra
+High review remain open.** The first Astra review rejected the initial substrate:
+shadow feedback inherited legacy admission, restrictive scopes did not survive
+descendant routes, several shortcuts overstated searched horizon, move plans did
+not exactly describe legacy depth use, and `HistoryFacts` was absent. The repair
+stays inside 6.5.9; do not advance to 6.5.10 until its deferred gate passes and
+the repeated review accepts the authority and lifetime boundaries.
 
 1. **6.5.9.1 — Exact fact adapters (`types`, `baseline`).** Add `StaticFacts`,
    `TtFacts`, `WindowFacts` and `MoveFacts` views at existing producers. Preserve
@@ -1058,6 +1062,16 @@ Implementation evidence before review:
   adds no UCI option. Shadow values/support use exact existing relation keys,
   admit only completed ordinary exact/cutoff quiet outcomes, ignore unsearched
   siblings and avoid double-counting identical shared continuation contexts.
+- The repair adds the missing per-move `HistoryFacts` view with separate live
+  main/reply/continuation values, exact production keys and optional paired
+  shadows. It propagates restricted-root/null/exclusion/ProbCut scope through
+  descendants, preserves original TT/search producers across negation, records
+  shortcut and verified horizons separately, restores same-ply static facts,
+  and admits one deduplicated shadow packet only after a completed non-root
+  ordinary exact/cutoff result whose winning child has searched authority.
+- `MoveDepthPlan` now records the legacy parent-depth pruning input separately
+  from nominal/probe child depth, grants singular depth only to the singular
+  move, and names the child wrapper's check grant without moving or consuming it.
 - Default and enabled ReleaseFast `bench 6 1` each produced identical per-case
   scores/nodes and the accepted aggregate fingerprint `775451`, geomean EBF
   `4.821`, median `12447` and top share `16.9% (130895)`. Wall time/NPS are
@@ -1069,6 +1083,13 @@ Implementation evidence before review:
   all 24 UCI process cases; `zig build check` compiled the default and enabled
   configurations, and `git diff --check` passes. No games, pilot or experiment
   registration applies.
+
+Those measurements predate the repair and are not its acceptance evidence. A
+Basilisk SPRT was active on the shared PC during this pass, so no post-repair
+build, test, bench or timing command was run. When the PC is idle, rerun focused
+authority/restoration tests, default and enabled compile checks, exact default/
+enabled `775451` bench parity, the owning full Debug gate once, and policy/diff
+checks. Timing observed during the overlapping SPRT must not be recorded.
 
 The Astra review owns 6.5.9.4 closure. It must verify that table collisions are
 diagnostic drops rather than merged samples; support is lifetime count rather

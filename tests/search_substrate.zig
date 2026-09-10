@@ -2121,6 +2121,7 @@ test "search evidence observation preserves the accepted search result" {
     try std.testing.expect(summary.windows != 0);
     try std.testing.expect(summary.node_plans != 0);
     try std.testing.expect(summary.move_plans != 0);
+    try std.testing.expect(summary.history_facts != 0);
     try std.testing.expect(summary.outcomes != 0);
     try std.testing.expect(summary.updates != 0);
     const snapshot = observed_harness.thread.search_evidence.snapshot();
@@ -2130,6 +2131,7 @@ test "search evidence observation preserves the accepted search result" {
     try std.testing.expect(snapshot.node_plan != null);
     try std.testing.expect(snapshot.move_facts != null);
     try std.testing.expect(snapshot.move_plan != null);
+    try std.testing.expect(snapshot.history != null);
     try std.testing.expect(snapshot.outcome != null);
     try std.testing.expectEqual(@as(?bool, null), snapshot.tt_facts.?.pv_origin);
     try std.testing.expect(snapshot.move_facts.?.chess_move.isChessMove());
@@ -2153,10 +2155,13 @@ test "shadow evidence pairs value and support for one exact relation" {
         .from_check = false,
         .tactical = false,
     };
+    // Main history is indexed by side/from/to, so special-move encoding cannot
+    // split a shadow cell that aliases one production cell.
     try std.testing.expectEqual(
-        search.ordering.continuationEvidenceKey(&position, context, chess_move),
-        search.ordering.continuationEvidenceKey(&position, context, chess_move),
+        search.ordering.quietEvidenceKey(.white, chess.move.Move.normal(.e1, .g1)),
+        search.ordering.quietEvidenceKey(.white, chess.move.Move.castling(.e1, .g1)),
     );
+    _ = search.ordering.continuationEvidenceKey(&position, context, chess_move);
 
     var observation: search.types.SearchEvidenceObservation = .{};
     observation.record(quiet_key, 9);

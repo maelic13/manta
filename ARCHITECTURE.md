@@ -447,14 +447,16 @@ freezes the future shared node/move depth plan and outcome-authority boundary.
 Board legality and raw evaluation remain inward producers; worker-local search
 owns contextual facts, prospective depth, verification and feedback. Root
 publication and the shared TT retain their separate authority. Step 6.5.9 now
-implements exact `StaticFacts`, `TtFacts`, `WindowFacts`, `MoveFacts`,
+implements exact `StaticFacts`, `TtFacts`, `WindowFacts`, `MoveFacts`, `HistoryFacts`,
 `NodeDepthPlan`, `MoveDepthPlan` and scoped `SearchOutcome` adapters. The
 `search-evidence-observation` build selector defaults off; its zero-sized
 production state and every update branch are removed at compile time. When
 enabled, bounded worker-local storage retains last facts, aggregate counts and
 paired outcome/support samples under existing ordering relation keys. No
 production ordering, depth, history update, TT/PV or root-publication path
-consumes them. Astra review remains required before 6.5.9 closes; later
+consumes them. The first review's scope/horizon/admission defects have a bounded
+repair, whose functional gate is deferred until the shared PC is idle. A
+repeated Astra review remains required before 6.5.9 closes; later
 consumers need separately approved implementation and playing gates.
 
 The Step-4.0 baseline realizes the single-worker subset with a borrowed root,
