@@ -1003,12 +1003,22 @@ Implement these bounded sub-tickets in order, as one behavior-neutral step.
 Names, fields and admission rules are in ADR-0070; no coefficient fitting or
 new production consumer is part of this work.
 
-**Repair implementation and verification complete; the repeated Astra High
-review remains open.** The first Astra review rejected the initial substrate:
-shadow feedback inherited legacy admission, restrictive scopes did not survive
-descendant routes, several shortcuts overstated searched horizon, move plans did
-not exactly describe legacy depth use, and `HistoryFacts` was absent. The repair
-stays inside 6.5.9; do not advance to 6.5.10 until the repeated review accepts
+**Second repair implementation and verification complete; the repeated Astra
+High review remains open.** The first Astra review rejected the initial
+substrate: shadow feedback inherited legacy admission, restrictive scopes did
+not survive descendant routes, several shortcuts overstated searched horizon,
+move plans did not exactly describe legacy depth use, and `HistoryFacts` was
+absent. The second Astra review rejected that repair on five remaining
+authority defects: shadow history still admitted alternatives and winners whose
+outcome source and scope were unchecked and could not distinguish an entry made
+as a reduced probe; restrictive scope was lost on return and draw results never
+carried `history_local`; reduced-only and null-verification results reported
+nominal rather than actual searched horizon; qsearch outcomes reported
+`omitted_siblings = false` despite SEE/delta omissions and lost the stored
+producer on a TT cutoff; and only the per-move snapshot existed where ADR-0070
+also requires a ranking-time history fact. Both were diagnostic-substrate
+defects, not evidence that production playing strength regressed. Both repairs
+stay inside 6.5.9; do not advance to 6.5.10 until the repeated review accepts
 the authority and lifetime boundaries.
 
 1. **6.5.9.1 — Exact fact adapters (`types`, `baseline`).** Add `StaticFacts`,
@@ -1072,27 +1082,55 @@ Implementation evidence before review:
 - `MoveDepthPlan` now records the legacy parent-depth pruning input separately
   from nominal/probe child depth, grants singular depth only to the singular
   move, and names the child wrapper's check grant without moving or consuming it.
+- The second repair carries one observation-only completion certificate through
+  negation and every recursive return: established producer, actual searched
+  horizon, restrictive scope, verification state and inherited omission. A
+  parent horizon is derived from that child certificate instead of its own
+  active depth, so a reduced-only winner, a null verification and a ProbCut
+  cutoff each report the horizon actually searched. Draw and empty-exclusion
+  returns take `history_local` and `exclusion` scope, and a stored-producer TT
+  cutoff takes the scope its producer implies, so a restriction cannot be
+  discarded by returning through an ordinary parent.
+- Shadow admission requires that certificate for the winner and for every
+  alternative, plus an ordinary main entry route. A reduced probe, restricted
+  scope, non-searched producer or short horizon is refused, so unverified or
+  speculative evidence cannot train the paired relation.
+- Qsearch completion records its own restrictive scope, original producer and
+  omitted-sibling fact. SEE/delta omissions and TT cutoffs no longer report a
+  complete result under generic returned provenance.
+- `HistoryFacts` carries an explicit `ranking`/`depth` observation point.
+  Ranking facts are captured when the picker is constructed and when the
+  delayed quiet stage is ranked, before any descendant can mutate worker-local
+  history; depth facts remain per selected move at its depth decision.
 Post-repair verification used a clean isolated Zig 0.16.0 installed by the
-repository's SHA-256-pinned `tools/ci/install-zig.ps1`; the WinGet installation's
-`lib/std/json/test.zig` was found truncated to one byte and was not modified.
-Default and observation-enabled Debug compile checks pass. Enabled `test-fast`
-passes `227/227` executable tests; default passes `225/227` with the two enabled-
-only tests skipped. Both commands remain nonzero solely because the unchanged
-three bench-reference policy violations listed under 6.5.8 still fail their
-policy dependency. The final enabled full Debug `zig build test` passes,
+repository's SHA-256-pinned `tools/ci/install-zig.ps1`. The earlier report of a
+truncated standard-library file was a host I/O/concurrency artifact of parallel
+compilation, not a damaged toolchain: the same files read intact on direct
+inspection and every gate below ran serially with `-j1`. No toolchain file was
+modified. Default and observation-enabled Debug compile checks pass. Enabled
+`test-fast` passes `229/229` executable tests; default passes `225/229` with the
+four enabled-only tests skipped. Both commands remain nonzero solely because the
+unchanged three bench-reference policy violations listed under 6.5.8 still fail
+their policy dependency. The full Debug `zig build test` passes in both arms,
 including all 24 UCI process cases. Default and enabled ReleaseFast `bench 6 1`
-each produced 40 identical depth/score/node records and the accepted aggregate
-fingerprint `775451`, geomean EBF `4.821`, median `12447` and top share `16.9%
-(130895)`. Single-run time/NPS differ as expected for enabled observation and
-make no throughput claim. `git diff --check` passes. No games, pilot or
-experiment registration applies.
+each produced 40 identical depth/score/node/EBF records and the accepted
+aggregate fingerprint `775451`, geomean EBF `4.821`, median `12447` and top
+share `16.9%` (`130895`). Single-run time/NPS differ as expected for enabled
+observation and make no throughput claim. `zig build fmt` and `git diff --check`
+pass. No games, pilot or experiment registration applies.
 
 The Astra review owns 6.5.9.4 closure. It must verify that table collisions are
 diagnostic drops rather than merged samples; support is lifetime count rather
 than probability/recency; shadow reset matches its per-search owner; qsearch,
 null, exclusion and restricted-root scope cannot acquire ordinary feedback/TT
-authority; and the default-off code is genuinely erased. Review findings are
-fixed inside 6.5.9 before marking it complete. Step 6.5.10 remains blocked.
+authority; and the default-off code is genuinely erased. The repeated review
+additionally owns the five repaired paths: no reduced, restricted or
+non-searched result reaches shadow admission by any entry route; every
+restriction, including `history_local` draws, survives recursive return and
+negation; every reported horizon is the horizon actually searched; qsearch
+reports its own omission and stored producer; and ranking-time history is
+observed before descendants can mutate it. Review findings are fixed inside
+6.5.9 before marking it complete. Step 6.5.10 remains blocked.
 
 #### 6.5.10 — Integrated ordering, aspiration and selective depth
 

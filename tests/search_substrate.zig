@@ -538,7 +538,11 @@ test "qsearch SEE rejects only losing nonchecking captures" {
     var disabled_control: search.types.NeverStop = .{};
 
     const enabled = search.baseline.runWithFeatures(
-        .{ .qsearch_see = true, .shallow_selectivity = false },
+        .{
+            .qsearch_see = true,
+            .shallow_selectivity = false,
+            .search_evidence_observation = search.types.search_evidence_observation_compiled,
+        },
         &enabled_position,
         enabled_harness.binding(),
         .{ .depth = 5 },
@@ -570,6 +574,10 @@ test "qsearch SEE rejects only losing nonchecking captures" {
         enabled_counters.qsearch_see_prunes,
         enabled_counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.see)],
     );
+    if (comptime search.types.search_evidence_observation_compiled)
+        try std.testing.expect(
+            enabled_harness.thread.search_evidence.summary().qsearch_outcomes_with_omissions != 0,
+        );
     try std.testing.expectEqual(@as(u64, 0), disabled_counters.qsearch_see_candidates);
     try std.testing.expectEqual(@as(u64, 0), disabled_counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.see)]);
     try std.testing.expectEqual(search.types.Bound.exact, enabled.evidence.bound);
@@ -2122,8 +2130,13 @@ test "search evidence observation preserves the accepted search result" {
     try std.testing.expect(summary.node_plans != 0);
     try std.testing.expect(summary.move_plans != 0);
     try std.testing.expect(summary.history_facts != 0);
+    try std.testing.expect(summary.ranking_history_facts != 0);
+    try std.testing.expect(summary.depth_history_facts != 0);
     try std.testing.expect(summary.outcomes != 0);
+    try std.testing.expect(summary.reduced_only_outcomes != 0);
     try std.testing.expect(summary.updates != 0);
+    std.debug.print("REVIEWPROBE outcomes={d} reduced_only={d} updates={d} dropped={d} history={d} ranking={d} depthpt={d} nodes={d}\n", .{ summary.outcomes, summary.reduced_only_outcomes, summary.updates, summary.dropped, summary.history_facts, summary.ranking_history_facts, summary.depth_history_facts, observed.nodes }); // REVIEWPROBE
+    try std.testing.expect(false); // REVIEWPROBE2
     const snapshot = observed_harness.thread.search_evidence.snapshot();
     try std.testing.expect(snapshot.static_facts != null);
     try std.testing.expect(snapshot.tt_facts != null);
@@ -2132,6 +2145,8 @@ test "search evidence observation preserves the accepted search result" {
     try std.testing.expect(snapshot.move_facts != null);
     try std.testing.expect(snapshot.move_plan != null);
     try std.testing.expect(snapshot.history != null);
+    try std.testing.expectEqual(search.types.HistoryObservationPoint.ranking, snapshot.ranking_history.?.point);
+    try std.testing.expectEqual(search.types.HistoryObservationPoint.depth, snapshot.depth_history.?.point);
     try std.testing.expect(snapshot.outcome != null);
     try std.testing.expectEqual(@as(?bool, null), snapshot.tt_facts.?.pv_origin);
     try std.testing.expect(snapshot.move_facts.?.chess_move.isChessMove());

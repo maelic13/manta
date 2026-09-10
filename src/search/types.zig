@@ -301,9 +301,13 @@ pub const HistoryRelation = struct {
     shadow: ?OutcomeSupportCell = null,
 };
 
-/// Per-move history snapshot taken from the same worker-local state used to
-/// rank the move. Continuation slots retain their shared-table aliases.
+pub const HistoryObservationPoint = enum { ranking, depth };
+
+/// One history snapshot from either the instant a quiet is ranked or the
+/// later per-move depth decision. Continuation slots retain their shared-table
+/// aliases; the explicit point prevents the two lifetimes being conflated.
 pub const HistoryFacts = struct {
+    point: HistoryObservationPoint,
     main: HistoryRelation,
     reply: ?HistoryRelation = null,
     continuations: [3]?HistoryRelation = @splat(null),
@@ -393,7 +397,11 @@ const ObservationStorage = if (search_evidence_observation_compiled) struct {
     node_plans: u64 = 0,
     move_plans: u64 = 0,
     history_facts: u64 = 0,
+    ranking_history_facts: u64 = 0,
+    depth_history_facts: u64 = 0,
     outcomes: u64 = 0,
+    qsearch_outcomes_with_omissions: u64 = 0,
+    reduced_only_outcomes: u64 = 0,
     updates: u64 = 0,
     dropped: u64 = 0,
     last_static: ?StaticFacts = null,
@@ -403,6 +411,8 @@ const ObservationStorage = if (search_evidence_observation_compiled) struct {
     last_move_facts: ?MoveFacts = null,
     last_move_plan: ?MoveDepthPlan = null,
     last_history: ?HistoryFacts = null,
+    last_ranking_history: ?HistoryFacts = null,
+    last_depth_history: ?HistoryFacts = null,
     last_outcome: ?SearchOutcome = null,
 } else struct {};
 
@@ -413,7 +423,11 @@ pub const SearchEvidenceSummary = struct {
     node_plans: u64 = 0,
     move_plans: u64 = 0,
     history_facts: u64 = 0,
+    ranking_history_facts: u64 = 0,
+    depth_history_facts: u64 = 0,
     outcomes: u64 = 0,
+    qsearch_outcomes_with_omissions: u64 = 0,
+    reduced_only_outcomes: u64 = 0,
     updates: u64 = 0,
     dropped: u64 = 0,
 };
@@ -426,6 +440,8 @@ pub const SearchEvidenceSnapshot = struct {
     move_facts: ?MoveFacts = null,
     move_plan: ?MoveDepthPlan = null,
     history: ?HistoryFacts = null,
+    ranking_history: ?HistoryFacts = null,
+    depth_history: ?HistoryFacts = null,
     outcome: ?SearchOutcome = null,
 };
 
@@ -478,6 +494,16 @@ pub const SearchEvidenceObservation = struct {
         if (comptime search_evidence_observation_compiled) {
             self.storage.history_facts += 1;
             self.storage.last_history = facts;
+            switch (facts.point) {
+                .ranking => {
+                    self.storage.ranking_history_facts += 1;
+                    self.storage.last_ranking_history = facts;
+                },
+                .depth => {
+                    self.storage.depth_history_facts += 1;
+                    self.storage.last_depth_history = facts;
+                },
+            }
         }
     }
 
@@ -485,6 +511,11 @@ pub const SearchEvidenceObservation = struct {
         if (comptime search_evidence_observation_compiled) {
             self.storage.outcomes += 1;
             self.storage.last_outcome = outcome;
+            if (outcome.attribution != null and outcome.attribution.?.route == .quiescence and
+                outcome.omitted_siblings)
+                self.storage.qsearch_outcomes_with_omissions += 1;
+            if (outcome.verification == .reduced_only)
+                self.storage.reduced_only_outcomes += 1;
         }
     }
 
@@ -526,7 +557,11 @@ pub const SearchEvidenceObservation = struct {
             .node_plans = self.storage.node_plans,
             .move_plans = self.storage.move_plans,
             .history_facts = self.storage.history_facts,
+            .ranking_history_facts = self.storage.ranking_history_facts,
+            .depth_history_facts = self.storage.depth_history_facts,
             .outcomes = self.storage.outcomes,
+            .qsearch_outcomes_with_omissions = self.storage.qsearch_outcomes_with_omissions,
+            .reduced_only_outcomes = self.storage.reduced_only_outcomes,
             .updates = self.storage.updates,
             .dropped = self.storage.dropped,
         };
@@ -542,6 +577,8 @@ pub const SearchEvidenceObservation = struct {
             .move_facts = self.storage.last_move_facts,
             .move_plan = self.storage.last_move_plan,
             .history = self.storage.last_history,
+            .ranking_history = self.storage.last_ranking_history,
+            .depth_history = self.storage.last_depth_history,
             .outcome = self.storage.last_outcome,
         };
         return .{};

@@ -32,11 +32,13 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   so the mechanism is production and the full-generation arm reconstructs
   MAN-S30.
 - Step 6.5.8's shared search design is complete in ADR-0070. Step 6.5.9's first
-  Astra review found authority, lifetime and missing-history-adapter defects.
-  The bounded repairs and idle-PC verification are complete with exact default/
-  enabled fingerprint parity at `775,451`; the repeated Astra High review is
-  next. Step 6.5.10 remains blocked. Three pre-existing bench-document policy
-  violations remain; PLAN records the separate repair.
+  Astra review found authority, lifetime and missing-history-adapter defects,
+  and the second found five remaining ones in shadow admission, recursive scope,
+  reported horizon, qsearch outcome metadata and ranking-time history. Both
+  bounded repairs and their idle-PC verification are complete with exact
+  default/enabled fingerprint parity at `775,451`; the repeated Astra High
+  review is next. Step 6.5.10 remains blocked. Three pre-existing bench-document
+  policy violations remain; PLAN records the separate repair.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
@@ -163,7 +165,8 @@ relationships, reimplemented in original Zig for Manta's contracts.
   freezes the shared pipeline, authority and independently gated packages.
 - [ ] **6.5.9 — Shared ordering and outcome-evidence substrate:** One reliable
   history/TT/move-evidence model for ordering and selective search.
-  **Implemented; next:** required GPT-6 Astra High authority review.
+  **Implemented and twice repaired; next:** repeated GPT-6 Astra High authority
+  review.
 - [ ] **6.5.10 — Integrated ordering, aspiration and selective depth:** Connect
   mate bounds, root windows, contextual LMR, shallow pruning and forcing depth.
 - [ ] **6.5.11 — Forward proofs matched to the accepted depth policy:** Derive

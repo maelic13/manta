@@ -454,9 +454,15 @@ production state and every update branch are removed at compile time. When
 enabled, bounded worker-local storage retains last facts, aggregate counts and
 paired outcome/support samples under existing ordering relation keys. No
 production ordering, depth, history update, TT/PV or root-publication path
-consumes them. The first review's scope/horizon/admission defects have a bounded
-repair whose functional and deterministic parity gates pass. A repeated Astra
-review remains required before 6.5.9 closes; later
+consumes them. Each completed main and qsearch return carries one
+observation-only certificate: established producer, actually searched horizon,
+restrictive scope, verification state and inherited omission. A restriction
+or shortened horizon survives negation and recursive return, and shadow
+admission can refuse reduced, restricted or non-searched evidence. The first
+review's scope/horizon/admission defects and the second review's admission,
+scope, horizon, qsearch-metadata and ranking-time-history defects each have a
+bounded repair whose functional and deterministic parity gates pass. A repeated
+Astra review remains required before 6.5.9 closes; later
 consumers need separately approved implementation and playing gates.
 
 The Step-4.0 baseline realizes the single-worker subset with a borrowed root,
