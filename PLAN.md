@@ -1003,13 +1003,13 @@ Implement these bounded sub-tickets in order, as one behavior-neutral step.
 Names, fields and admission rules are in ADR-0070; no coefficient fitting or
 new production consumer is part of this work.
 
-**Repair implementation complete; idle-host verification and the repeated Astra
-High review remain open.** The first Astra review rejected the initial substrate:
+**Repair implementation and verification complete; the repeated Astra High
+review remains open.** The first Astra review rejected the initial substrate:
 shadow feedback inherited legacy admission, restrictive scopes did not survive
 descendant routes, several shortcuts overstated searched horizon, move plans did
 not exactly describe legacy depth use, and `HistoryFacts` was absent. The repair
-stays inside 6.5.9; do not advance to 6.5.10 until its deferred gate passes and
-the repeated review accepts the authority and lifetime boundaries.
+stays inside 6.5.9; do not advance to 6.5.10 until the repeated review accepts
+the authority and lifetime boundaries.
 
 1. **6.5.9.1 — Exact fact adapters (`types`, `baseline`).** Add `StaticFacts`,
    `TtFacts`, `WindowFacts` and `MoveFacts` views at existing producers. Preserve
@@ -1072,24 +1072,20 @@ Implementation evidence before review:
 - `MoveDepthPlan` now records the legacy parent-depth pruning input separately
   from nominal/probe child depth, grants singular depth only to the singular
   move, and names the child wrapper's check grant without moving or consuming it.
-- Default and enabled ReleaseFast `bench 6 1` each produced identical per-case
-  scores/nodes and the accepted aggregate fingerprint `775451`, geomean EBF
-  `4.821`, median `12447` and top share `16.9% (130895)`. Wall time/NPS are
-  descriptive single runs and make no throughput claim.
-- Default and enabled Debug `test-fast` each ran `222/222` executable tests.
-  The command remains nonzero only because the unchanged three bench-reference
-  policy violations recorded under 6.5.8 still fail the repository-wide policy
-  dependency. The final enabled full Debug `zig build test` passed, including
-  all 24 UCI process cases; `zig build check` compiled the default and enabled
-  configurations, and `git diff --check` passes. No games, pilot or experiment
-  registration applies.
-
-Those measurements predate the repair and are not its acceptance evidence. A
-Basilisk SPRT was active on the shared PC during this pass, so no post-repair
-build, test, bench or timing command was run. When the PC is idle, rerun focused
-authority/restoration tests, default and enabled compile checks, exact default/
-enabled `775451` bench parity, the owning full Debug gate once, and policy/diff
-checks. Timing observed during the overlapping SPRT must not be recorded.
+Post-repair verification used a clean isolated Zig 0.16.0 installed by the
+repository's SHA-256-pinned `tools/ci/install-zig.ps1`; the WinGet installation's
+`lib/std/json/test.zig` was found truncated to one byte and was not modified.
+Default and observation-enabled Debug compile checks pass. Enabled `test-fast`
+passes `227/227` executable tests; default passes `225/227` with the two enabled-
+only tests skipped. Both commands remain nonzero solely because the unchanged
+three bench-reference policy violations listed under 6.5.8 still fail their
+policy dependency. The final enabled full Debug `zig build test` passes,
+including all 24 UCI process cases. Default and enabled ReleaseFast `bench 6 1`
+each produced 40 identical depth/score/node records and the accepted aggregate
+fingerprint `775451`, geomean EBF `4.821`, median `12447` and top share `16.9%
+(130895)`. Single-run time/NPS differ as expected for enabled observation and
+make no throughput claim. `git diff --check` passes. No games, pilot or
+experiment registration applies.
 
 The Astra review owns 6.5.9.4 closure. It must verify that table collisions are
 diagnostic drops rather than merged samples; support is lifetime count rather

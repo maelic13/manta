@@ -680,7 +680,7 @@ fn negamax(
             expectation,
             evidence(result.value.raw, result.value.bound, result.value.provenance),
         );
-        const verification_status = if (result.verification != .not_required)
+        const verification_status: types.Verification = if (result.verification != .not_required)
             result.verification
         else switch (route) {
             .reduced_probe => .reduced_only,

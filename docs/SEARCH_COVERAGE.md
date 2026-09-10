@@ -104,8 +104,9 @@ collisions are reported as dropped samples after bounded probing and never
 merged. Value/support clear together at the start of their owning search run;
 support is lifetime admitted-update count for that run, not confidence or
 recency. The first GPT-6 Astra High review found scope, horizon, admission and
-missing-adapter defects. Their bounded repair awaits its idle-PC functional gate
-and a repeated Astra review before 6.5.9 closes or any 6.5.10 consumer is implemented.
+missing-adapter defects. Their bounded repair passes its idle-PC functional and
+deterministic parity gates; a repeated Astra review remains required before
+6.5.9 closes or any 6.5.10 consumer is implemented.
 
 ### Reduction and pruning are a coordinated depth decision
 

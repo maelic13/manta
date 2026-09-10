@@ -455,8 +455,8 @@ enabled, bounded worker-local storage retains last facts, aggregate counts and
 paired outcome/support samples under existing ordering relation keys. No
 production ordering, depth, history update, TT/PV or root-publication path
 consumes them. The first review's scope/horizon/admission defects have a bounded
-repair, whose functional gate is deferred until the shared PC is idle. A
-repeated Astra review remains required before 6.5.9 closes; later
+repair whose functional and deterministic parity gates pass. A repeated Astra
+review remains required before 6.5.9 closes; later
 consumers need separately approved implementation and playing gates.
 
 The Step-4.0 baseline realizes the single-worker subset with a borrowed root,
