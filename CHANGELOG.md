@@ -6,8 +6,21 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ## [Unreleased]
 
+Builds from this tree report version `1.1.0-dev`. The prerelease tag
+distinguishes them from the `1.0.0` release without claiming to be a release.
+
 ### Changed
 
+- Tactical-only quiescence generation at ordinary non-check nodes, keeping a
+  complete legal stalemate witness. Accepted after a 1,614-game one-thread
+  match.
+- Every non-root search node now clips its window to the mate distances the
+  rules still allow, replacing a test that only fired when the requested window
+  already lay outside them.
+- `bench` reports each position as it finishes instead of printing the whole
+  report at the end, so a long run gives progress feedback.
+- Measured games end only by the rules of chess. Resignation, draw-after-N-moves
+  and move-cap adjudication are removed from every harness.
 - Ordinary interior search nodes now generate captures and promotions first and
   delay non-tactical quiet generation until no transposition or good tactical
   move remains, ranking those quiets from history that descendant searches have

@@ -1,6 +1,6 @@
 .{
     .name = .manta,
-    .version = "1.0.0",
+    .version = "1.1.0-dev",
     .fingerprint = 0x17b5df91b1a2baf7, // Changing this has security and trust implications.
     .minimum_zig_version = "0.16.0",
     .dependencies = .{},
