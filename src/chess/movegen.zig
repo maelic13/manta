@@ -199,6 +199,49 @@ fn generateFor(
         checkers == 0) generateCastling(us, value, list);
 }
 
+/// The destinations from which `piece_type`, moving from `from`, attacks the
+/// enemy king directly.
+///
+/// Computed from the king outward: square `x` gives check exactly when a piece
+/// of that type placed on the king's square would attack `x` through the
+/// post-move occupancy. For a slider the mover's own origin must leave the
+/// occupancy first, because a piece can be the only thing blocking the ray it
+/// is about to arrive on. Pawn geometry does not depend on the origin: the
+/// squares a pawn of the mover's colour attacks the king from are the squares
+/// an enemy pawn standing on the king's square would attack.
+///
+/// Kings cannot give direct check, so they return the empty set. Discovered
+/// checks are not described here at all; ADR-0071 F and C both say so.
+pub fn directCheckSquares(
+    value: *const position.Position,
+    piece_type: types.PieceType,
+    from: types.Square,
+) types.Bitboard {
+    const them = value.side_to_move.opposite();
+    const enemy_king = queries.kingSquare(value, them);
+    const without_mover = value.physical.occupied() & ~from.bit();
+    return switch (piece_type) {
+        .pawn => attacks.pawn[them.index()][enemy_king.index()],
+        .knight => attacks.knight[enemy_king.index()],
+        .bishop => attacks.bishop(enemy_king, without_mover),
+        .rook => attacks.rook(enemy_king, without_mover),
+        .queen => attacks.queen(enemy_king, without_mover),
+        .king, .none => 0,
+    };
+}
+
+/// Whether a non-capture, non-promotion, non-castling move gives direct check.
+/// The move is not made. ADR-0071 C's late-move-count skip asks this before
+/// deciding to drop a quiet unmade; a discovered check answers false and may
+/// be dropped, exactly as the amended invariant states.
+pub fn givesDirectCheck(value: *const position.Position, chess_move: move.Move) bool {
+    if (chess_move.kind() != .normal) return false;
+    const mover = value.physical.pieceOn(chess_move.from());
+    if (mover == .none) return false;
+    const squares = directCheckSquares(value, mover.pieceType(), chess_move.from());
+    return squares & chess_move.to().bit() != 0;
+}
+
 /// ADR-0071 F's direct quiet checks.
 ///
 /// The check test is computed from the enemy king outward rather than from the
@@ -218,10 +261,8 @@ fn generateQuietChecks(
     check_mask: types.Bitboard,
     list: *position.MoveList,
 ) void {
-    const them = us.opposite();
     const physical = &value.physical;
     const occupied = physical.occupied();
-    const enemy_king = queries.kingSquare(value, them);
     const empty = ~occupied;
 
     inline for (.{ .knight, .bishop, .rook, .queen }) |piece_type| {
@@ -229,14 +270,7 @@ fn generateQuietChecks(
         if (piece_type == .knight) pieces &= ~pinned;
         while (pieces != 0) {
             const from = popSquare(&pieces);
-            const without_mover = occupied & ~from.bit();
-            const checking_squares = switch (piece_type) {
-                .knight => attacks.knight[enemy_king.index()],
-                .bishop => attacks.bishop(enemy_king, without_mover),
-                .rook => attacks.rook(enemy_king, without_mover),
-                .queen => attacks.queen(enemy_king, without_mover),
-                else => unreachable,
-            };
+            const checking_squares = directCheckSquares(value, piece_type, from);
             var destinations = switch (piece_type) {
                 .knight => attacks.knight[from.index()],
                 .bishop => attacks.bishop(from, occupied),
@@ -253,7 +287,7 @@ fn generateQuietChecks(
         }
     }
 
-    generateQuietPawnChecks(us, value, king, pinned, check_mask, enemy_king, list);
+    generateQuietPawnChecks(us, value, king, pinned, check_mask, list);
 }
 
 /// The squares a pawn of `us` must stand on to attack the enemy king are the
@@ -266,7 +300,6 @@ fn generateQuietPawnChecks(
     king: types.Square,
     pinned: types.Bitboard,
     check_mask: types.Bitboard,
-    enemy_king: types.Square,
     list: *position.MoveList,
 ) void {
     const push: i8 = if (us == .white) 8 else -8;
@@ -280,7 +313,8 @@ fn generateQuietPawnChecks(
         0x0000_0000_0000_ff00
     else
         0x00ff_0000_0000_0000;
-    const checking_squares = attacks.pawn[us.opposite().index()][enemy_king.index()];
+    // Origin-independent for pawns, so any square of the right colour serves.
+    const checking_squares = directCheckSquares(value, .pawn, types.Square.fromIndex(0));
     const free = pawns & ~pinned;
     const free_non_promotions = free & ~promotion_rank;
 

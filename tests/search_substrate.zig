@@ -1234,7 +1234,7 @@ test "first-ply quiescence checks are searched and the filter drops hanging ones
                 .{ .selective_core = true, .core_qs_checks = qs_checks },
                 &position,
                 harness.binding(),
-                .{ .depth = 6 },
+                .{ .depth = 2 },
                 &control,
                 &harness.thread,
                 &table,
@@ -1251,8 +1251,11 @@ test "first-ply quiescence checks are searched and the filter drops hanging ones
             try std.testing.expectEqual(original_key, position.current.key);
         }
     }
-    // Quiet checks are extra moves in the first quiescence ply, so the arm
-    // that generates them must search strictly more of them.
+    // Depth two keeps the comparison sound: every root child is a first-ply
+    // quiescence node, the root move list and its initial order are identical
+    // between the arms, so the only source of extra quiescence moves is the
+    // component itself. Comparing whole trees at a deeper depth would compare
+    // two different trees.
     try std.testing.expect(with > without);
 }
 

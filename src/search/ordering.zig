@@ -689,8 +689,15 @@ pub const LiveHistoryPicker = struct {
     /// quiets are dropped without being made. Bad tacticals keep being
     /// emitted: the count says the node has seen enough quiet alternatives,
     /// not that it has seen enough of everything.
+    ///
+    /// Amended by the third review: a quiet that gives direct check is kept and
+    /// emitted, so the post-make exemption can judge it. The trace found the
+    /// unamended skip dropping a mate in one unmade, where the per-move
+    /// exemption never ran because the move was never made. The board pointer
+    /// is read only between `next` calls, when the position is at this node.
     skip_quiets: bool = false,
     skipped_quiets: usize = 0,
+    skip_board: ?*const chess.position.Position = null,
 
     const Phase = enum { tactical, complete };
 
@@ -738,9 +745,16 @@ pub const LiveHistoryPicker = struct {
                 // A quiet TT move is emitted first and therefore always before
                 // any count can trigger, so it is never dropped here.
                 .primary_killer, .secondary_killer, .quiet_history => {
-                    _ = self.inner.takeAt(selected_index);
-                    self.skipped_quiets += 1;
-                    continue;
+                    const candidate = self.inner.moves.moves[selected_index];
+                    const keep = if (self.skip_board) |board|
+                        chess.movegen.givesDirectCheck(board, candidate)
+                    else
+                        false;
+                    if (!keep) {
+                        _ = self.inner.takeAt(selected_index);
+                        self.skipped_quiets += 1;
+                        continue;
+                    }
                 },
                 else => {},
             };
@@ -748,8 +762,12 @@ pub const LiveHistoryPicker = struct {
         }
     }
 
-    pub fn skipRemainingQuiets(self: *LiveHistoryPicker) void {
+    pub fn skipRemainingQuiets(
+        self: *LiveHistoryPicker,
+        board: *const chess.position.Position,
+    ) void {
         self.skip_quiets = true;
+        self.skip_board = board;
     }
 
     pub fn skippedQuiets(self: *const LiveHistoryPicker) usize {

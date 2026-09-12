@@ -967,7 +967,7 @@ fn negamaxNode(
             beta,
         )) {
             if (depth <= 8 and shallow.pruning_eval -
-                coreReverseFutilityMargin(context.params, depth, shallow.improving) >= beta)
+                coreReverseFutilityMargin(depth, shallow.improving) >= beta)
             {
                 context.observer.reverseFutility(true);
                 context.observer.prune(.reverse_futility);
@@ -976,8 +976,8 @@ fn negamaxNode(
                     active_depth,
                 );
             }
-            if (depth <= 3 and (score.Score{ .raw_value = alpha_initial }).isOrdinary() and
-                shallow.pruning_eval + coreRazoringMargin(depth) <= alpha_initial)
+            if (depth == 1 and (score.Score{ .raw_value = alpha_initial }).isOrdinary() and
+                shallow.pruning_eval + core_razoring_margin <= alpha_initial)
             {
                 context.observer.razoring(true);
                 context.observer.prune(.razoring);
@@ -1841,7 +1841,7 @@ fn negamaxNode(
         if (shallow_cause) |cause| {
             if (!gives_check) {
                 if (comptime features.coreMovePruning()) {
-                    if (core_skip_quiets) picker.skipRemainingQuiets();
+                    if (core_skip_quiets) picker.skipRemainingQuiets(value);
                 }
                 if (comptime features.search_evidence_observation)
                     context.thread.search_evidence.observeMovePlan(move_facts, .{
@@ -4351,14 +4351,21 @@ fn coreReductionUnits(inputs: CoreReductionInputs) i32 {
 
 const history_stat_limit: i32 = 16 * 1024;
 
-/// Plies, clamped to `[0, new_depth]`. Reaching `new_depth` sends the probe
-/// into quiescence through the existing depth-zero dispatch, which is the
-/// largest single lever in the package and is deliberate.
+/// Plies, clamped to `[0, new_depth - 1]`, and zero when there is no child
+/// depth to give away.
+///
+/// Amended by ADR-0071's third review: the probe keeps at least one
+/// main-search ply. A zero-depth probe hands the opponent a quiescence, and
+/// component F generates quiet checks only for the side to move at the first
+/// quiescence ply, so the side that just moved loses its own quiet mate
+/// threats there. The trace found exactly that: a mate in one invisible to a
+/// probe that had collapsed to quiescence.
 fn coreReduction(inputs: CoreReductionInputs, new_depth: u16) u16 {
+    if (new_depth == 0) return 0;
     const units = coreReductionUnits(inputs);
     if (units < 1024) return 0;
     const plies = @divFloor(units, 1024);
-    return @intCast(@min(plies, @as(i32, new_depth)));
+    return @intCast(@min(plies, @as(i32, new_depth) - 1));
 }
 
 /// Legality and class exemptions, evaluated identically before and after
@@ -4629,22 +4636,35 @@ fn coreNodeProofGate(
         has_non_pawn_material and (score.Score{ .raw_value = beta }).isOrdinary();
 }
 
-/// ADR-0071 D. The accepted margin fires only at depth one; the core extends
-/// the same claim to depth eight and widens it when the line is not improving,
-/// because a falling evaluation makes a static claim about the future less
-/// trustworthy and should cost more to act on.
-fn coreReverseFutilityMargin(search_params: params.Values, depth: u16, improving: bool) i32 {
+/// ADR-0071 D, amended by its third review. The accepted margin fires only at
+/// depth one; the core extends the same claim to depth eight and widens it
+/// when the line is not improving, because a falling evaluation makes a static
+/// claim about the future less trustworthy and should cost more to act on.
+///
+/// The first seed reused MAN-S29's fitted depth-one margin of `68` plus `50`
+/// per ply. Manta's evaluator swings by more than five pawns for an attacked
+/// queen, so at depth three that margin let a static claim override a mate in
+/// one; the trace is in PLAN 6.5.10.2. The margin now scales with the
+/// evaluator's own range rather than with a depth-one fit.
+const core_reverse_futility_unit: i32 = 150;
+const core_reverse_futility_falling: i32 = 60;
+
+fn coreReverseFutilityMargin(depth: u16, improving: bool) i32 {
     const plies: i32 = @intCast(depth);
-    const base = search_params.reverse_futility_margin * plies;
-    return base + if (improving) 0 else 50 * plies;
+    const unit = core_reverse_futility_unit +
+        if (improving) 0 else core_reverse_futility_falling;
+    return unit * plies;
 }
 
-/// ADR-0071 D. A node this far below alpha at this depth is claimed not to
-/// reach it with quiet play, so the tactical answer quiescence already gives is
+/// ADR-0071 D, amended by its third review. A node this far below alpha is
+/// claimed not to reach it with quiet play, so quiescence's tactical answer is
 /// accepted instead of a full search.
-fn coreRazoringMargin(depth: u16) i32 {
-    return 200 * @as(i32, @intCast(depth));
-}
+///
+/// Depth one only. At depth two or three this replaces a main-search ply in
+/// which the razored side's own quiet mate threats would be visible with a
+/// quiescence in which they are not, which is the same defect the probe floor
+/// above fixes.
+const core_razoring_margin: i32 = 300;
 
 /// ADR-0071 D. The reduction grows with depth and with how far the static
 /// evaluation already exceeds beta: both raise the confidence that the side to
@@ -6209,10 +6229,12 @@ test "each core reduction adjustment moves in the direction it argues for" {
     try std.testing.expectEqual(base - 1024, coreReductionUnits(root));
 }
 
-test "a core reduction never leaves its own child depth" {
-    // The clamp is the safety property: a probe may run in quiescence but may
-    // never ask for a negative depth, and it may never exceed the depth the
-    // move would otherwise have been searched at.
+test "a core reduction always leaves one main-search ply" {
+    // The clamp is the safety property, amended by ADR-0071's third review:
+    // the probe may be shallow but it is never zero-depth, because the side
+    // that just moved would then lose its own quiet mate threats in a
+    // quiescence that generates checks only for the side to move. A reduction
+    // equal to the child depth is exactly the collapse the trace found.
     for (2..40) |depth| {
         for (2..40) |index| {
             for ([_]i32{ -history_stat_limit, -4000, 0, 4000, history_stat_limit }) |stat| {
@@ -6228,11 +6250,23 @@ test "a core reduction never leaves its own child depth" {
                         .stat = stat,
                         .root = false,
                     }, new_depth);
-                    try std.testing.expect(reduction <= new_depth);
+                    try std.testing.expect(reduction < new_depth);
+                    try std.testing.expect(new_depth - reduction >= 1);
                 }
             }
         }
     }
+    // No child depth to give away: nothing is reduced at all.
+    try std.testing.expectEqual(@as(u16, 0), coreReduction(.{
+        .depth = 1,
+        .search_index = 40,
+        .pv_node = false,
+        .cut_node = true,
+        .improving = false,
+        .has_tt_move = true,
+        .stat = -history_stat_limit,
+        .root = false,
+    }, 0));
     // A strongly protected principal move at a shallow node is not reduced.
     try std.testing.expectEqual(@as(u16, 0), coreReduction(.{
         .depth = 2,
@@ -6266,6 +6300,43 @@ test "core reduction eligibility keeps every legality exemption" {
     try std.testing.expect(!coreReductionEligible(8, 9, false, false, false, false, false));
     // A losing capture is reducible on its own.
     try std.testing.expect(coreReductionEligible(8, 9, false, false, false, false, true));
+}
+
+test "the core node-proof margins scale with the evaluator's own range" {
+    // ADR-0071 D's amended seeds. The oracle is the defect the third review
+    // traced: at depth three the old margin was 354 centipawns while Manta's
+    // evaluator prices an attacked queen at over 500, so a static claim could
+    // outrank a mate in one. The replacement must exceed that swing by depth
+    // three and must grow when the line is not improving.
+    try std.testing.expectEqual(@as(i32, 150), coreReverseFutilityMargin(1, true));
+    try std.testing.expectEqual(@as(i32, 210), coreReverseFutilityMargin(1, false));
+
+    // The traced node: static eval 570 against beta 206 at depth three. The
+    // old margin cut (570 - 354 = 216 >= 206) and overrode a mate in one; the
+    // amended margin must refuse, whichever way the trend points.
+    const traced_eval: i32 = 570;
+    const traced_beta: i32 = 206;
+    inline for (.{ true, false }) |improving| {
+        try std.testing.expect(
+            traced_eval - coreReverseFutilityMargin(3, improving) < traced_beta,
+        );
+    }
+    try std.testing.expect(coreReverseFutilityMargin(3, false) > coreReverseFutilityMargin(3, true));
+
+    // Monotone in depth, and a falling line always costs more to cut.
+    var depth: u16 = 1;
+    while (depth <= 8) : (depth += 1) {
+        try std.testing.expect(
+            coreReverseFutilityMargin(depth, false) > coreReverseFutilityMargin(depth, true),
+        );
+        if (depth > 1) try std.testing.expect(
+            coreReverseFutilityMargin(depth, true) > coreReverseFutilityMargin(depth - 1, true),
+        );
+    }
+
+    // Razoring is a single fixed margin at depth one; there is no depth term
+    // left to scale, which is the point of restricting it back to one ply.
+    try std.testing.expectEqual(@as(i32, 300), core_razoring_margin);
 }
 
 test "the core omission gate refuses every unsafe node" {
@@ -6343,6 +6414,9 @@ test "prospective depth never exceeds the depth the move would be searched at" {
                 }, new_depth) else 0;
                 const prospective = new_depth -| estimate;
                 try std.testing.expect(prospective <= new_depth);
+                // The estimate shares the reduction's clamp, so a prospective
+                // depth of zero can only come from a node with no child depth.
+                if (new_depth >= 1) try std.testing.expect(prospective >= 1);
             }
         }
     }
