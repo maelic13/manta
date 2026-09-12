@@ -318,8 +318,9 @@ re-derived; never quietly activate a rejected umbrella. The sequence is:
 
 `4 contracts -> 5 legal generation -> 6 transitions/SEE -> 7 qsearch ->
 8 search design -> 9 evidence substrate -> 10 coordinated core ->
-11 core fit -> 12 second-order relationships -> 13 residual cost ->
-14 targets, cumulative gate and release decision` (resequenced 2026-09-12).
+11 core fit -> 12 evaluator calibration -> 13 second-order relationships ->
+14 residual cost -> 15 targets, cumulative gate and release decision`
+(resequenced 2026-09-12).
 
 **Common implementation ticket (applies to every open step).**
 
@@ -865,7 +866,7 @@ qualified for registration and no SPRT was prepared or run.
 The remaining deficit is not assigned to another speculative state rewrite.
 Generation still contributes to five composite cells, while threshold SEE is
 the largest isolated ratio gap; this benchmark also folds generation into both
-named cells and exercises SEE only at threshold zero. Step 6.5.13 must refresh
+named cells and exercises SEE only at threshold zero. Step 6.5.14 must refresh
 the profile on the accepted search head, add transition-only and representative
 search-threshold attribution only if still needed, and select the single largest
 measured owner. This is the bounded board follow-up; the now-complete Step 6.5.7
@@ -1184,7 +1185,7 @@ search work is one package, `MAN-S36`, designed in
 [ADR-0071](docs/adr/0071-coordinated-selective-search-core.md) and contracted
 by `SCORE-034`. The maintainer wants a large registered strength gain from this
 step; the step is not complete until that gate has run and the continue-or-
-release decision of 6.5.14 is recorded. **Model:** Claude Fable owns design,
+release decision of 6.5.15 is recorded. **Model:** Claude Fable owns design,
 review and every chess or authority question; Claude Opus implements each
 ticket below from the ADR text and reports; Fable reviews before the local
 diagnostic match and again before the SPRT is prepared. **Dependency:**
@@ -1797,7 +1798,7 @@ so the black node after `Qg6` runs in `[205, 206]` and must return at least
 | Arm | Node | What the trace shows |
 |---|---|---|
 | `core_move_pruning` + F | white after `1.Qg6 Nxe5`, depth 3, eval `-838` | `dxe5` searched; three king moves futility-pruned; the fourth quiet `a2a3` hit the late-move count and the picker skipped every remaining quiet **unmade, including `Qh7#`**; only `Qxh6+` and `Qxg7+` were then searched; white returned `-206` |
-| `core_node_pruning` + F | black after `1.Qg6`, depth 4 reduced to 3 by IIR, eval `+570` | reverse futility cut at once: `570 - (68 + 50) * 3 = 216 >= 206`; the HCE prices the attacked queen at more than five pawns and the seed margin was the depth-one fitted value |
+| `core_node_pruning` + F | black after `1.Qg6`, depth 4 reduced to 3 by IIR, eval `+570` | reverse futility cut at once: `570 - (68 + 50) * 3 = 216 >= 206`; the evaluator already rates the root three pawns better for Black because its unfitted king danger misses White's attack (see 6.5.12), the pawn attack on the queen adds about 250 more, and the seed margin was the depth-one fitted value |
 
 F was correct and irrelevant to both: the skip never made the checking move,
 and the static cut never reached a move loop. Opus's three questions are
@@ -1891,7 +1892,7 @@ recorded, the off arm keeps reconstructing `642,336`, the archived fingerprints
 stay pinned, and `SCORE-034`, EXPERIMENTS, GUIDE and this section are
 reconciled. H0 or the cap does not promote: one ablation cycle in the ADR's
 order is permitted, then a re-plan. After the verdict the maintainer records
-in 6.5.14 whether Phase 6.5 continues through 6.5.11 to 6.5.13 or Manta
+in 6.5.15 whether Phase 6.5 continues through 6.5.11 to 6.5.14 or Manta
 releases 1.1.0 on the accepted head and freezes.
 
 #### 6.5.11 — Fit of the accepted core (conditional, expected)
@@ -1914,7 +1915,85 @@ maintainer runs it. Bake one rounded vector and gate it once as `MAN-S37`.
 contaminated gradients, one final production 1T H1. An inconclusive or rejected
 fit leaves the accepted seeds in place.
 
-#### 6.5.12 — Second-order relationships on the accepted core (conditional)
+#### 6.5.12 — Evaluator calibration: king danger and the unfitted nonlinear terms
+
+**Model:** Fable derives the coordinate set and any structural change; Opus
+wires the tune-only exposure and the bake. **Dependency:** the accepted and,
+if run, fitted core; a maintainer decision to continue. Added on 2026-09-12
+after the evaluator review recorded below.
+
+**Why this step exists.** The classical evaluator is structurally complete and
+its 1,109 linear coefficients are at their fitted optimum (ADR-0056 and the
+single-attractor sweep in `docs/HCE_FITTING.md`). The 103 coefficients the
+linear fit excluded were never fitted at all, and the whole king-danger table
+is among them: `king_attack_weight`, `king_pawn_attack_weight`,
+`safe_check_weight`, `unsafe_check_weight` and `king_danger_divisor` are the
+hand-set seeds. The residual harness (`zig build eval-residual`, run on
+2026-09-12 at `559b59a`) shows the consequence. Against the pinned classical
+reference the quiet, pawn-ending and rule-fifty cohorts sit within about 20
+centipawns, one outlier at 82, while every attacking cohort disagrees by
+hundreds:
+
+| Cohort position | Manta raw, white view | Reference | Gap |
+|---|---:|---:|---:|
+| `tactical-wac001` | `-324` | `+441` | `765` |
+| `king-attack-castled-pressure` | `-221` | `+37` | `258` |
+| `tactical-wac003` | `-186` | `-33` | `153` |
+| `king-attack-exposed-king` | `-136` | `-39` | `97` |
+
+Manta rates White's queen-and-two-knights swarm on WAC.001 as three pawns
+worse for White; the reference gives White four and a half, almost all of it
+king safety, and after `Qg6` its king-safety term alone reaches 11.9 pawns.
+The fitted linear terms around the seeds (threats, mobility, piece-square) were
+scaled to the data and the nonlinear king danger was not, so the two halves of
+the evaluator are on different scales. That is the incoherence, and it costs
+more once the core prunes on static evaluation to depth 8. A second limit is
+label quality: the fit corpus is Manta self-play at 8,000 nodes per move on
+the pre-fit evaluator, about depth six, which under-resolves exactly the
+attacking positions above.
+
+SPSA is necessary but not sufficient. The king-danger group cannot be fitted by
+the linear Texel path, and the current labels would mislead a nonlinear offline
+fit, so games are the right oracle for it. Games cannot tell a missing
+relationship from a wrong weight, and a changed nonlinear part moves the linear
+optimum, so a structural review and a conditional refit follow.
+
+1. **6.5.12.1 — King-danger game fit (`MAN-E22`).** Expose the king-danger
+   scalars above, the king-ring attacker threshold and the shelter and storm
+   scales through a tune-only runtime path that the production build compiles
+   away exactly: the evaluator keeps its constants and only the `-Dtune` build
+   reads a parameter block. Freeze prospective ranges from the residual gap,
+   not from the reference's numbers. Run one Weather Factory fit on the
+   designated host under the accepted core, maintainer-run, at most twelve
+   coordinates; bake one rounded vector; gate it once with a 1T SPRT. Re-run
+   the residual harness before and after as the diagnostic that the attacking
+   cohorts closed without the quiet cohorts opening.
+2. **6.5.12.2 — Structural king-attack review (conditional).** If 12.1 leaves
+   the attacking-cohort residual above 150 centipawns, derive at most one
+   structural change from the traces: queen contact with the king zone,
+   attacker weighting by piece and count, the shelter-moderated danger that
+   MAN-E21 tested on the old head, or the open-file and safe-check coupling.
+   One candidate, one SPRT, re-derived on the fitted core rather than
+   re-enabling MAN-E21.
+3. **6.5.12.3 — Conditional linear refit with deeper labels.** Only if 12.1 or
+   12.2 changed what the linear terms consume: regenerate the self-play corpus
+   with the accepted core at a node budget that resolves king attacks, at
+   least 40,000 nodes per move and decided from a residual-labelled pilot,
+   refit the linear coefficients with the fitted nonlinear block held fixed,
+   bake and gate once. Without that trigger the accepted linear vector stands;
+   the fit is at its limit for the current labels.
+4. **6.5.12.4 — Correction history as a live pruning and reduction input.**
+   Producer and consumers together, re-derived on the core rather than
+   re-enabling MAN-S25; it belongs here because it is evaluation reliability
+   feeding search.
+
+**Gate:** residual-harness before and after tables per cohort, deterministic
+property tests for every changed nonlinear term, feature-off reconstruction of
+the accepted evaluator, evaluator throughput within the accepted allowance,
+and one registered 1T H1 per retained candidate. A static residual improvement
+promotes nothing.
+
+#### 6.5.13 — Second-order search relationships on the accepted core (conditional)
 
 **Model:** Fable derives each package; Opus implements. **Dependency:** the
 accepted and, if run, fitted core; a maintainer decision to continue.
@@ -1923,20 +2002,19 @@ Candidates in this order, each its own package with its own diagnostics and one
 1T SPRT, each derived on the actual accepted head; deferral or rejection is a
 valid closure and nothing is retried automatically:
 
-1. Correction history as a live pruning and reduction input: producer and
-   consumers together, re-derived rather than re-enabling MAN-S25.
-2. Capture history with a capture-aware SEE pruning threshold and capture
-   futility.
-3. Singular review: threshold scale, half-depth exclusion horizon, non-PV
-   double extension and multi-cut, on the new reduction surface.
-4. ProbCut move cap and typed TT proof reuse.
-5. Quiet SEE pruning and the upcoming-repetition lower bound.
-6. TT replacement and aging review under the new tree.
+1. **6.5.13.1** Capture history with a capture-aware SEE pruning threshold and
+   capture futility.
+2. **6.5.13.2** Singular review: threshold scale, half-depth exclusion
+   horizon, non-PV double extension and multi-cut, on the new reduction
+   surface.
+3. **6.5.13.3** ProbCut move cap and typed TT proof reuse.
+4. **6.5.13.4** Quiet SEE pruning and the upcoming-repetition lower bound.
+5. **6.5.13.5** TT replacement and aging review under the new tree.
 
-#### 6.5.13 — Residual full-search cost and board target
+#### 6.5.14 — Residual full-search cost and board target
 
 **Model:** Opus for profile-owned exact work; Fable for any TT semantic change.
-**Dependency:** search head frozen through 6.5.12 or the decision to skip it.
+**Dependency:** search and evaluator heads frozen through 6.5.13 or the decision to skip them.
 
 1. Refresh the profile on the frozen tree and rank time in HCE, SEE, picker,
    TT and transition. Fix the largest evidenced residual owner, not every
@@ -1953,7 +2031,7 @@ valid closure and nothing is retried automatically:
 repeated release-build whole-search timing, applicable concurrency tests, and
 one 1T H1 per retained playing change.
 
-#### 6.5.14 — Targets, cumulative gate and release decision
+#### 6.5.15 — Targets, cumulative gate and release decision
 
 **Model:** Opus collects evidence; Fable performs the final review.
 **Dependency:** every prior disposition explicit.
@@ -1980,7 +2058,8 @@ one 1T H1 per retained playing change.
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
 6.5.15 closeout. Their surviving content is owned by the steps above; their
-mechanisms that entered the core are governed by ADR-0071.
+mechanisms that entered the core are governed by ADR-0071. The evaluator
+calibration step 6.5.12 was added later the same day.
 
 ### Phase 7 — NNUE runway and data contract
 

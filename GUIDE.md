@@ -183,7 +183,7 @@ values for Manta's contracts.
   deficit remains visible for later residual-cost work.
 - [x] **6.5.6 — State transitions, SEE and board parity checkpoint:** Narrow
   exact duplicate-work forms were refuted and removed. The `0.638` board
-  baseline remains open; residual attribution is explicitly owned by 6.5.13.
+  baseline remains open; residual attribution is explicitly owned by 6.5.14.
 - [x] **6.5.7 — Qsearch work proportional to tactical search:** MAN-S34 avoids
   discarded quiet work while preserving stalemate, evasions and exact search
   behavior; its final 1T SPRT accepted H1 and the mechanism is production.
@@ -206,13 +206,44 @@ values for Manta's contracts.
     designated host; then continue or release 1.1.0.
 - [ ] **6.5.11 — Fit of the accepted core:** Conditional SPSA of the live
   coordinates and one rounded bake, `MAN-S37`.
-- [ ] **6.5.12 — Second-order relationships:** Conditional follow-on packages
-  on the accepted core, each gated alone.
-- [ ] **6.5.13 — Residual full-search cost and board target:** Profile-owned
+  - [ ] **6.5.11.1 — Coordinate set:** Fable freezes the live coordinates and
+    ranges; Opus exposes them through the tune-only registry.
+  - [ ] **6.5.11.2 — Fit and bake:** Maintainer-run Weather Factory fit on the
+    designated host, one rounded vector, one 1T SPRT.
+- [ ] **6.5.12 — Evaluator calibration:** The king-danger block was never
+  fitted and disagrees with the classical reference by hundreds of centipawns
+  in attacking positions; SPSA is necessary but not the whole answer.
+  - [ ] **6.5.12.1 — King-danger game fit:** Tune-only exposure of the
+    nonlinear king-danger scalars, one Weather Factory fit, one bake, one 1T
+    SPRT, `MAN-E22`; residual harness before and after.
+  - [ ] **6.5.12.2 — Structural king-attack review:** Only if the attacking
+    residual stays above 150 centipawns; one derived candidate, one SPRT.
+  - [ ] **6.5.12.3 — Deeper-label linear refit:** Only if the nonlinear block
+    changed what the linear terms consume; new corpus at a node budget that
+    resolves attacks, refit with the nonlinear block fixed, one gate.
+  - [ ] **6.5.12.4 — Correction history as pruning input:** Producer and
+    consumers together, re-derived on the core.
+- [ ] **6.5.13 — Second-order search relationships:** Conditional follow-on
+  packages on the accepted core, each gated alone.
+  - [ ] **6.5.13.1 — Capture history and capture-aware SEE and futility.**
+  - [ ] **6.5.13.2 — Singular review on the new reduction surface.**
+  - [ ] **6.5.13.3 — ProbCut move cap and typed TT proof reuse.**
+  - [ ] **6.5.13.4 — Quiet SEE pruning and upcoming-repetition bound.**
+  - [ ] **6.5.13.5 — TT replacement and aging review.**
+- [ ] **6.5.14 — Residual full-search cost and board target:** Profile-owned
   exact work after the tree freezes; PGO optional.
-- [ ] **6.5.14 — Targets, cumulative gate and release decision:** Depth curve
+  - [ ] **6.5.14.1 — Profile and fix the largest residual owner.**
+  - [ ] **6.5.14.2 — HCE traversal and pawn-cache inspection.**
+  - [ ] **6.5.14.3 — TT cache-line versus capacity and replacement.**
+  - [ ] **6.5.14.4 — Six-cell board target on the designated host.**
+- [ ] **6.5.15 — Targets, cumulative gate and release decision:** Depth curve
   against classical Stockfish, board cells, `MAN-C03` against 1.0.0, then
   continue or release 1.1.0 and freeze.
+  - [ ] **6.5.15.1 — Freeze and final gates.**
+  - [ ] **6.5.15.2 — Depth curve and board cells on the designated host.**
+  - [ ] **6.5.15.3 — Search and board targets recorded, met or open.**
+  - [ ] **6.5.15.4 — Cumulative `MAN-C03` against Manta 1.0.0.**
+  - [ ] **6.5.15.5 — Continue or release 1.1.0 and freeze.**
 
 ### Phase 7 — NNUE runway and data contract
 

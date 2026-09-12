@@ -195,8 +195,9 @@ known, ordinary beta, non-pawn material.
    `pruning_eval - (150 + (improving ? 0 : 60)) * depth >= beta` returns the
    existing speculative lower bound at beta. Amended 2026-09-12, third review:
    the first seed reused the depth-one fitted margin of 68 plus 50 per ply,
-   and Manta's HCE swings by more than 500 for an attacked queen, so that
-   margin let a static claim override a mate in one at depth 3.
+   and the evaluator already stood at `+570` for the defender, mostly because
+   its unfitted king danger misses the attack (PLAN 6.5.12), so that margin
+   let a static claim override a mate in one at depth 3.
 3. **Razoring.** `depth == 1`, ordinary alpha, and `pruning_eval + 300 <= alpha`
    returns the quiescence result through the existing parked razoring path.
    Amended 2026-09-12, third review: razoring at depth 2 and 3 replaces a
