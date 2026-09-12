@@ -21,6 +21,13 @@ MAN-S35 complete mate windows, deterministic depth-six fingerprint `642,336`.
 A disabled implementation is not an active feature. A rejected formulation is
 not a proof that its entire concept can never help, nor permission to retry.
 
+**Superseding note, 2026-09-12.** [ADR-0071](adr/0071-coordinated-selective-search-core.md)
+replaces the separately gated owners in the table below for reduction,
+move pruning, node-level proofs, IIR, quiet history and aspiration with one
+coordinated Step-6.5.10 package, and makes the pinned final pre-NNUE
+Stockfish the search-shape reference for branching comparisons. The table's
+owner column is historical where it names 6.5.10.2 to 6.5.12 sub-steps.
+
 | Mechanism | Current Manta status | Reworked owner / interaction |
 |---|---|---|
 | Iterative deepening, PVS, completed root authority | Present | Preserve through 6.5.8–6.5.10; root time/UCI consumes only final completed iterations |

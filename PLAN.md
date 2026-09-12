@@ -284,7 +284,7 @@ other, and neither is a substitute for playing strength:
 | Objective | Frozen comparison and exit target |
 |---|---|
 | Board backbone | On the idle designated 5950X, native optimized builds, identical `cross-engine-board-v1` inputs/work counts and SEE semantics: geometric mean of Manta/Basilisk throughput ratios across all six cells at least `1.00`, with no cell below `0.95`. Report every cell, not just the aggregate. These are maintainer-request-derived planning targets, not achieved measurements. |
-| Mature search | Same immutable forty positions, 1T, Hash 64 MiB, fresh-process/reset policy and nominal depth 13: Manta total elapsed time no more than `1.10x` Basilisk. Require the same ratio for the ordinary-position subset excluding the two already identified mate-heavy cases; retain both cases in the full result. Separately require routine `bench 13 1` (Hash 1 MiB) within a prospectively frozen absolute time limit. |
+| Mature search | Revised 2026-09-12 by maintainer direction: the reference is the pinned final pre-NNUE Stockfish (`9587eeeb`), not the maintainer's own engines. Same immutable forty positions, 1T, Hash 64 MiB, fresh-process/reset policy: geometric branching over depths 4 to 12 at most `1.98` against the reference's host-measured value, depth-12 total elapsed at most `4x` the reference, ordinary and mate cohorts reported separately and both retained. Separately require routine `bench 13 1` (Hash 1 MiB) within 30 seconds. Historical Basilisk depth-13 figures remain recorded under 6.5.4 as diagnostics. |
 | Strength and safety | Legal results, correct terminal/draw/bound authority, unchanged hard time safety, each retained candidate's registered 1T H1, then cumulative H1 against immutable Manta 1.0.0. No inferred 4T strength improvement. |
 
 Step 6.5.4 binds reference revisions, tolerances, timing protocol and the
@@ -299,9 +299,11 @@ is an operational comparison, not equal chess coverage across engines.
 
 **Reference and implementation rule.** Use modern Stockfish search structure,
 feature relationships and evidence flow, currently pinned at
-`edb0d9db6731067ec50ce619ff372b463bc4dd5d`, as the primary design reference;
-Basilisk is the performance target and secondary implementation cross-check.
-The final pre-NNUE reference remains authoritative only for the HCE study.
+`edb0d9db6731067ec50ce619ff372b463bc4dd5d`, as the structural design reference.
+The final pre-NNUE Stockfish pinned in `config/eval-reference.json` is the
+search-shape and strength yardstick for a classical-evaluation engine and the
+HCE study reference; Basilisk remains the board-throughput comparison and the
+maintainer's engines are otherwise secondary data points.
 Reimplement selected structure and features as original Zig, with Manta-owned
 score units, history scales, depth semantics, safety predicates and tests.
 Do not import NNUE-dependent confidence assumptions or tuned constants. An
@@ -315,9 +317,9 @@ head. A rejected dependency stays off and its dependent proposal must be
 re-derived; never quietly activate a rejected umbrella. The sequence is:
 
 `4 contracts -> 5 legal generation -> 6 transitions/SEE -> 7 qsearch ->
-8 search design -> 9 evidence substrate -> 10 integrated search core ->
-11 forward proofs -> 12 evaluation reliability -> 13 residual cost ->
-14 optional joint fit -> 15 qualification`.
+8 search design -> 9 evidence substrate -> 10 coordinated core ->
+11 core fit -> 12 second-order relationships -> 13 residual cost ->
+14 targets, cumulative gate and release decision` (resequenced 2026-09-12).
 
 **Common implementation ticket (applies to every open step).**
 
@@ -349,14 +351,12 @@ re-derived; never quietly activate a rejected umbrella. The sequence is:
   equivalence from an interval containing zero, or a settled verdict from an
   LLR trend. Store concise evidence in EXPERIMENTS; raw artifacts stay ignored.
 
-**Model assignments.** The step choices below are engineering recommendations:
-GPT-5.6 Terra High for bounded exact implementation; GPT-6 Astra High/XHigh for
-search design and interacting selective-search semantics. A smaller model may
-implement a frozen sub-ticket but must stop at an unresolved chess assumption.
-GPT-5.6 Sol XHigh is the fallback for complex work, with an explicit semantic
-review before games. This allocation follows the capability/cost distinction
-in [official model guidance](https://developers.openai.com/api/docs/models);
-it is not a claim that OpenAI validated these particular chess assignments.
+**Model assignments (revised 2026-09-12).** Claude Fable owns search design,
+interacting selective-search semantics, authority review and every chess
+question an implementer cannot settle from the written contract. Claude Opus
+implements frozen tickets from ADR and PLAN text, runs the named diagnostics
+and stops at an unresolved chess assumption rather than guessing. The
+historical GPT assignments in completed steps are records, not guidance.
 
 #### 6.5.0 — Comparable performance audit
 
@@ -1177,93 +1177,60 @@ complete and accepted, so 6.5.9.4 is closed. Step 6.5.10 may begin; it is a
 separately approved package and inherits no permission from this step beyond
 the frozen contract and the recorded admission profile.
 
-#### 6.5.10 — Integrated ordering, aspiration and selective depth
+#### 6.5.10 — Coordinated selective-search core
 
-**Model:** GPT-6 Astra XHigh. Terra High may implement one frozen sub-ticket;
-Astra owns integration and chess review. **Dependency:** 8–9.
-**Files:** search baseline/types/ordering/params, TT only for required typed
-evidence; root iteration/time consumer boundaries must remain authoritative.
+**Redefined on 2026-09-12 by maintainer direction.** The remaining Phase-6.5
+search work is one package, `MAN-S36`, designed in
+[ADR-0071](docs/adr/0071-coordinated-selective-search-core.md) and contracted
+by `SCORE-034`. The maintainer wants a large registered strength gain from this
+step; the step is not complete until that gate has run and the continue-or-
+release decision of 6.5.14 is recorded. **Model:** Claude Fable owns design,
+review and every chess or authority question; Claude Opus implements each
+ticket below from the ADR text and reports; Fable reviews before the local
+diagnostic match and again before the SPRT is prepared. **Dependency:**
+production head `596159e` (MAN-S35, fingerprint `642,336`). **Files:**
+`src/search/baseline.zig`, `ordering.zig`, `types.zig`, `params.zig`,
+`build.zig`, `tests/search_substrate.zig`, `tests/search_qualification.zig`,
+`tests/bench_qualification.zig`; `tt.zig` only if the storage-authority change
+needs it. No board, evaluation, UCI, clock or SMP files.
 
-Separate candidates in this order. Only the dependent parts *within* a package
-are implemented together; there is no unqualified umbrella branch spanning all
-four tickets. Rebase each later decision on actual accepted production.
+**Search-shape reference.** By maintainer direction the comparison engine for
+tree shape is the final pre-NNUE Stockfish pinned in `config/eval-reference.json`
+(commit `9587eeeb`), built with the recorded `zig c++` command; the maintainer's
+own engines are secondary data points. Baselines measured on the workspace host
+on 2026-09-12, forty positions, 64 MiB, 1T, fresh process per depth:
 
-1. **6.5.10.1 — Complete mate windows (independent).** Derive non-root alpha/beta
-   narrowing from legal mate distance, with reached draw/checkmate precedence,
-   normalized TT scores, correct returned bound and unchanged root completion.
-   MAN-S32's crossing-only path is not this contract. Test positive/negative
-   mate at different plies and both crossing/non-crossing windows. No new
-   ordering/depth policy; inspect mate and ordinary cohorts separately, then
-   qualify this candidate independently rather than attributing mate savings
-   to ordinary pruning.
-2. **6.5.10.2 — Shared selective-depth core (one coupled package).**
-   **A:** Astra freezes a Manta-derived reduction surface, units, rounding and
-   caps before Terra implements formulas. Inputs are active depth, selected
-   ordinal and explicitly supported existing node/TT/history/trend facts; no
-   imported constants, confidence votes or target re-search percentage.
-   **B:** Replace independent prospective-depth calculations with ADR-0070's
-   one plan feeding existing LMP/quiet-futility/main-SEE and LMR. Preserve
-   accepted staging/ranking, IIR/forcing eligibility and explicit single check
-   grant. Initial LMR remains ordinary non-checking quiet search; no capture,
-   evasion or checking reduction expansion. Protect actual searched fallback,
-   promotions, decisive scores and TT/forcing exceptions.
-   **C:** Dispatch probes, mandatory planned-horizon verification and PVS
-   re-search from that same plan. Preserve source/scope, terminal authority and
-   once-only publication; freeze any necessary existing-requirement amendment
-   before implementing incompatible semantics. Keep production history updates
-   unchanged and 9's richer paired outcome tables diagnostic.
-   **D:** Validate the complete A–C policy and register one final candidate.
-   Components remain ablatable for diagnosis, but a passing bundle does not
-   prove each component helped. No aspiration, new ranking/feedback, correction,
-   capture history/futility, null or singular-proof redesign in this package.
-3. **6.5.10.3 — Window-aware aspiration (conditional coupled package).** On
-   the accepted core, require an actual new window/depth consumer relation
-   before adding adaptive root windows. Freeze root reference/current width,
-   missing/full-window evidence, failed-side widening and full-window recovery
-   as in ADR-0070. Include only that depth consumer and its root producer;
-   no partial retry commits to time/UCI. Test fail-low/fail-high, unstable PV,
-   mate/ordinary transitions and cancellation. Qualify independently, or defer
-   if it would merely repeat isolated MAN-R02.
-4. **6.5.10.4 — Forcing-policy disposition (conditional).** Review forcing
-   work on the accepted core. Current check/singular behavior stays intact
-   unless a new decision-level relation justifies a separately frozen candidate.
-   Derive extension limits, tactical sacrifices/only-move safeguards and any
-   changed eligibility before coding; negative reductions and adaptive
-   verification horizons remain excluded from the initial core. Do not revive
-   S31/S33 or the MAN-S21 umbrella. Record accepted/rejected/deferred disposition.
+| Quantity | Manta `596159e` | Classical Stockfish `9587eeeb` |
+|---|---:|---:|
+| Geometric branching, depths 4 to 12 | `2.225` | `1.88` |
+| Nodes at depth 12 | `82,249,155` | `2,598,338` |
+| Elapsed at depth 12 | `57,494 ms` | `1,321 ms` |
+| Depth-12 ordinary-subset elapsed | `55,875 ms` | `1,300 ms` |
 
-**Package boundary:** ADR-0070 freezes the memberships above. Additional new
-ordering/feedback requires a distinct populated hypothesis and explicit scope
-approval, not an automatic extra table/consumer. Independent packages receive
-independent gates; there is no evidence to claim below-resolution bundling.
+Nominal depths are not equal coverage across engines; the branching factor is
+the durable comparison. The package's pre-game targets are branching at most
+`1.95`, depth-12 nodes at most `25 M`, NPS at least `0.85` of baseline, both
+cohorts improving, and a local diagnostic match of at least `+80` Elo.
 
-**Gate:** legal PV/terminal/mate-distance/draw/exclusion/cancellation tests,
-feature-off reconstruction, full safety/process gates, per-position depth curve
-and exclusive work attribution. Inspect ordinary and mate cohorts separately,
-tactical misses, fail-low nodes and re-search tails; low re-search frequency
-does not measure false negatives. Compare elapsed, nodes and NPS separately.
-Register one final 1T gate per retained package after its dependent parts freeze.
-No automatic games or candidate-specific pilot on the unchanged trusted harness.
+**Current-mechanism inventory at `596159e`.** Symbols are in
+`src/search/baseline.zig` unless noted. Every row changes under the core; the
+ADR gives the replacement formulas.
 
-**Prepared 2026-09-12 at head `df9ba68739f006e6463e8293f1ebc00f43be69b3`.
-This is a worklist, not implementation authorization.** Production remains
-MAN-S34 at `775,451`. Each numbered ticket needs its own approval before its
-first edit; approval of one ticket does not cover the next, and every ticket
-after 10.1 is rebased on whatever is production at that time.
-
-**Current-mechanism inventory.** Read these symbols before any ticket; all are
-in `src/search/baseline.zig` unless noted. The observation types
-`NodeDepthPlan`, `MoveDepthPlan` and `SearchOutcome` in `types.zig` describe
-these decisions today and become the production carrier only in 10.2.
-
-| Mechanism | Present implementation | Ticket that changes it |
+| Mechanism | Present implementation | Under the core |
 |---|---|---|
-| Mate-distance evidence | `mateDistanceBound` returns `.upper` at `mateIn(ply+1)` or `.lower` at `matedIn(ply)` only when the window already lies outside the reachable band. It sits behind default-off `-Dmate-distance-pruning` (MAN-S32), runs at `ply != 0` after the reached-draw and max-ply exits and before `probeTable`, and its `mate_distance` provenance has no TT, singular or ProbCut authority. The zero-window property test at `baseline.zig:5439` shows crossing equals clamping there, so the crossing-only path differs from a full clamp only in open (PV) windows. | 10.1 |
-| Shallow move omission | `lateMovePruneEligible`, `quietFutilityEligible` and `seePruneEligible` share `shallowMovePruneEligible`: non-PV zero-window ordinary-score node, `search_index != 0`, parent `depth <= 3`, non-pawn material. Thresholds `late_move_base + depth*late_move_depth_scale (+improving bonus)`, `quiet_futility_unit*(depth+1) + trend bonus` and `-see_pruning_unit*depth` all read the **parent** depth. Tests run before `make`; omission commits after `make` only when the move does not give check. | 10.2 B |
-| Late-move reduction | `lateMoveEligible`: depth >= 4, `search_index >= 3`, quiet, not in check, not giving check, not the singular move. `lateMoveReductionWithParams`: `min((depth-3)/3, log2(index+1)-2)` scaled by `lmr_extra_scale = 116`, plus one, capped at `depth-2`. Probe is `reduced(depth-1, r)` on a null window; an alpha rise re-searches at `full_child_depth`; a PV result inside the window then gets the full-window re-search. Rejected MAN-S18 vote layer and MAN-S20 history count stay off. | 10.2 A/C |
-| Ordinals | `search_index` counts selected moves including ones later omitted; `actually_searched_count` increments immediately before recursion and is read only by observation. | 10.2 B |
-| Extensions and IIR | Wrapper `negamax` adds one ply at any in-check node before `negamaxNode`. Singular: depth >= 6, legal ordinary lower/exact TT record with depth >= depth-1, exclusion at `depth-2`, one ply. IIR: PV node, depth >= 5, no TT move, one ply. | Unchanged in 10.2; 10.4 reviews |
-| Aspiration | `AspirationWindow` narrows to one pawn around the previous exact score after two stable populated iterations and doubles to full; `features.aspiration = false` (MAN-R02). `root_reference_width` is frozen from the first finite attempt and recorded in `WindowFacts` with no consumer. | 10.3, conditional |
+| Quiet history | `recordLegacyQuietCutoff` adds `depth` to a positive-saturating `i16` main table with no malus; reply/continuation use signed gravity with `historyBonus = depth^2`; `balanced_history` bonus/malus path exists but is off | One linear bonus `min(2048, 150*depth - 60)` and equal malus through `updateBounded` for main, reply and continuation; malus only to quiets actually searched before the winner |
+| Late-move reduction | `lateMoveEligible`: depth >= 4, `search_index >= 3`, quiet, not in check, not giving check, not singular; `min((depth-3)/3, log2(index+1)-2)` scaled by `116`, plus one, capped at `depth-2`; probe `reduced(depth-1, r)`, alpha rise re-searched at `full_child_depth` | Compile-time log-log table in 1024ths with PV/improving/cut/TT/history/root adjustments, from the third selected move at depth >= 2, quiets and losing captures, clamped to `[0, new_depth]` so a probe may run in quiescence; dispatch shape unchanged |
+| Shallow move omission | `shallowMovePruneEligible`: non-PV zero window, `search_index != 0`, parent `depth <= 3`, non-pawn material; LMP/futility/SEE read parent depth | One prospective depth `pd = max(0, new_depth - estimated reduction)`; LMP, futility and losing-capture SEE to `pd <= 8`, history pruning to `pd <= 6`; guard is one move actually searched; LMP trigger skips the node's remaining quiets |
+| Omission fail-low storage | `speculativeStoreValue` relabels a pruned fail-low as `reduced_search` and `tableDepth` stores it one ply shallower | Ordinary upper bound at nominal depth; the omission stays a diagnostic fact |
+| Reverse futility, razoring | RFP at `depth == 1` only with margin `68`; razoring parked at depth 1 | RFP to depth 8 with `68*depth + 50*depth*(not improving)`; razoring to depth 3 with `200*depth` through quiescence |
+| Null move | Fixed `R = 2`, minimum depth 4, verification at every fail-high at `depth - R` with null disabled | `R = 3 + depth/4 + min(3, (eval-beta)/200)` from depth 3; fail-high below depth 10 cuts without verification; from depth 10 the existing verification decides |
+| IIR | PV node, depth >= 5, no TT move | Every node type, depth >= 4, no legal TT move |
+| Aspiration | `features.aspiration = false` (MAN-R02 stability gate, symmetric doubling) | `core_aspiration`: `delta = 20 + |s|/32`, failed-side widening, geometric growth, one side opens fully after four failures; only exact attempts commit |
+| Unchanged | ProbCut (`depth >= 5`, margin `103`, reduction 3), singular extension, check extension, quiescence, TT format, publication, clock, SMP | Same |
+
+Sub-tickets, in order. 6.5.10.1 is complete; 6.5.10.2 is approved for
+implementation by this redefinition; 6.5.10.3 and 6.5.10.4 follow without a
+further approval step but each records its outcome here before the next begins.
 
 **6.5.10.1 frozen contract.**
 
@@ -1405,237 +1372,198 @@ was measured on; MAN-S33 and MAN-R02 pin it off for the same reason. Focused
 and full `zig build test`, `zig build fmt`, `zig build policy`, `zig build lint`
 and `git diff --check` pass.
 
-**6.5.10.2 decisions the A design must fix before B is coded.** Astra writes
-them as an ADR-0070 amendment or ADR-0071 and a new requirement; Terra
-implements only after that text exists.
+**6.5.10.2 — Implement the core (Opus, from ADR-0071).** Work the tickets in
+this order. Every ticket ends with: both arms compile (`zig build check` with
+`-Dselective-core=false` and `true`), the off arm reproduces `642,336` in
+native ReleaseFast `bench 6 1` with identical PV and results, the ticket's
+focused tests pass, and one commit. Do not tune the ADR's seed constants by
+hand; a changed seed needs a demonstrated defect and a recorded reason. Do not
+read other engines' sources; the ADR is the contract.
 
-- **Surface inputs and shape.** Active node depth after check/IIR, the
-  selected ordinal, and among existing facts only: the raw improving trend
-  from `ShallowEvidence`, node expectation, legal-TT-move presence,
-  `HistoryConfidence` from live worker-local main/reply/continuation values at
-  the move's depth decision, and the quiet/capture/promotion, evasion and
-  gives-check class. Excluded: paired shadow support, unknown PV origin,
-  copied constants, confidence votes and any target re-search rate. The
-  design states units (plies), rounding, monotone direction and chess rationale
-  per input, at least one ordinary child ply, nonnegative reductions only and
-  probe never deeper than verification.
-- **Prune depth.** `prune_depth = max(0, verification - proposed_reduction)`
-  replaces the parent depth in the LMP, quiet-futility and main-SEE formulas,
-  which keep their MAN-S29 parameters. Today those consumers stop at parent
-  depth 3 and LMR starts at depth 4, so their populations are disjoint. The
-  coupling creates one new population, reduced late quiets at parent depths
-  4 to about 4 plus the reduction, and shrinks the shallow inputs by one ply
-  elsewhere. The design decides whether `shallow_selectivity_max_depth = 3`
-  keeps its value in prune-depth units or is re-derived, and states that this
-  population is the mechanism hypothesis the SPRT tests.
-- **Ordinals and the first-move guard.** Thresholds keep the selected ordinal.
-  The omission guard becomes "at least one legal move actually searched" from
-  `actually_searched_count`, per the ADR-0070 matrix; the design records where
-  this differs from the present `search_index != 0` exemption.
-- **Protections kept exactly.** Promotions, captures beyond the depth input,
-  checking moves, evasions, TT and singular moves, decisive or non-ordinary
-  windows, PV nodes for omission, the first actually searched move and ply
-  capacity. Initial LMR remains ordinary non-checking quiet search.
-- **Requirement amendment.** `SCORE-016` binds base LMR magnitude to nominal
-  depth and ordinal only, and `SCORE-021` freezes the disabled MAN-S20 history
-  count adjustment. Freeze a new `SCORE-033` for the shared surface and plan
-  before B; the new surface supersedes those disabled adjustments rather than
-  stacking on them, and `SCORE-019` stays a rejected contract.
-- **Switch and ablation.** `-Dshared-depth-core`, compile-time, default off
-  until H1; the surface (A), shared prune depth (B) and plan dispatch (C) each
-  remain ablatable for diagnosis. Off arm reproduces `775,451` in default and
-  observation-enabled builds.
-- **C dispatch.** Probe at the plan's probe horizon; an alpha rise verifies at
-  the plan's verification horizon on a null window; a PV result inside the
-  window re-searches full-window at the same verification horizon. Reduced
-  fail-lows keep reduced provenance and `storeTableWithReduction` depth. The
-  plan carries `child_check_extension` and dispatches a `DepthIntent` that
-  already includes it, so the wrapper needs an explicit already-granted input
-  and cannot add the check ply again; depth-zero checking children keep the
-  accepted evasion semantics. Production history updates are unchanged.
-- **D validation.** Both-arm fingerprints (the on arm is a playing candidate),
-  the `search_qualification` canaries, the substrate tests in the enabled
-  observation arm now that plans describe production, `branching_profile.ps1`
-  depth 4 to 10 on the workspace host in both arms for the per-position depth
-  curve, `search-attribution` exclusive work, and re-search, fail-low and
-  omission counts with their eligibility denominators. Report nodes, elapsed
-  and NPS separately. Then one registered 1T SPRT for the package.
+- **A. Switches.** Add `-Dselective-core` and `features.selective_core` plus
+  the five component flags `core_history`, `core_lmr`, `core_move_pruning`,
+  `core_node_pruning`, `core_aspiration`, each effective only when the umbrella
+  is on. Extend the feature-ledger test, `build.zig` option plumbing and
+  `tests/bench_qualification.zig`'s `runArchived` so every archived fingerprint
+  pins the umbrella off. The core requires `live_history_staging`; make the
+  incompatible combination a compile error.
+- **B. `core_history`.** `historyBonus` per ADR A; main history moves to the
+  bounded gravity update with bonus to the exact or cutoff quiet winner and
+  malus to every quiet actually searched before it, collected at every node
+  regardless of reply context; reply and continuation keep their producers.
+  Killers and ranking weights unchanged. Tests: bonus bounds and monotonicity,
+  gravity stays within `history_limit`, only searched quiets are penalised,
+  winners at exact PV nodes are rewarded, killers rotate as before.
+- **C. `core_lmr`.** Comptime log-log table, one `coreReduction` returning
+  1024ths from a named-input struct, eligibility per ADR B, the `stat` input
+  from the picker's ranking value, root relief, and the clamp to
+  `[0, new_depth]` at dispatch (a zero probe depth enters quiescence through the
+  existing depth-zero dispatch). Reduced fail-lows keep `reduced_search`
+  provenance and the reduced TT depth. Under the core the archived
+  `dynamic_lmr`, `lmr_desaturation`, `lmr_synchronization` and `history_lmr`
+  paths are not consulted. Tests: table monotonic in both arguments, sign of
+  each adjustment, clamp bounds, first two selected moves never reduced, checks,
+  promotions, good captures and the singular move never reduced, every reduced
+  alpha rise verified before PV, cutoff or feedback authority, and a zero
+  reduction behaving as the ordinary scout.
+- **D. `core_move_pruning`.** Pre-make estimate with `gives_check = false`,
+  `pd`, the four omission rules per ADR C, `skipQuiets` on the live picker
+  after the first late-move-count trigger (bad captures still emitted), and the
+  storage change: a fail-low with omitted siblings stores as an ordinary upper
+  bound at nominal depth under the core. Tests: `pd <= new_depth`, no omission
+  before one move actually searched, no omission of a checking move after
+  make, no omission at PV nodes, in check, under decisive windows or without
+  non-pawn material, skipped quiets counted as omitted, remaining bad captures
+  still searched, and the nominal-depth upper-bound store.
+- **E. `core_node_pruning`.** RFP to depth 8, razoring to depth 3 through the
+  existing parked path, null move per ADR D with no verification below depth
+  10 and the existing same-node verification from depth 10, mate-range null
+  scores clamped to beta, and all-node IIR at depth >= 4 without a legal TT
+  move. Tests: no null move without non-pawn material, in check, at PV nodes or
+  directly after a null; verification subtree cannot null-prune at its root;
+  RFP and razoring refuse PV, check, exclusion and decisive windows; IIR never
+  fires at exclusion nodes; the existing zugzwang, fortress and tactical
+  canaries; WAC.001 `g3g6` at depth 5.
+- **F. `core_aspiration`.** A new root window per ADR E, separate from the
+  archived MAN-R02 path: only exact attempts commit, root evidence resets per
+  attempt, the retained completed result survives cancellation mid-retry, and
+  a mate or tablebase previous score uses the full window. Tests: bounded
+  attempt count, scripted fail-low and fail-high sequences, cancellation.
+- **G. Integration diagnostics.** With the mechanisms frozen, run once and
+  report as one table in this section: both-arm `bench 6 1`;
+  `tools/branching_profile.ps1` depths 4 to 12 at 64 MiB in both arms
+  (branching, depth-12 nodes, elapsed, NPS, ordinary and mate cohorts);
+  `zig build search-attribution -- --min-depth 4 --max-depth 10 --hash 64` on
+  the core arm (LMR probe share, re-search rate, each omission rule's share
+  with its eligibility denominator, null attempts, cutoffs and verifications,
+  aspiration retries); the tactical canaries; one full `zig build test` per
+  arm. Then the local diagnostic match on this workstation, authorized by this
+  plan as a design diagnostic and not as a gate:
 
-**6.5.10.3 entry rule.** Enter only if the accepted 10.2 surface reads a
-window fact: reference width, current width or a width-derived input. If it
-does not, record "deferred: no populated window/depth relation" and do not
-re-run MAN-R02. If it does, the package is the root producer (reference width
-frozen from the first finite attempt, failed-side widening, bounded recovery to
-full) plus that consumer, under a new requirement rather than the archived
-`SCORE-029`, with fail-low/high, unstable-PV, mate/ordinary transition and
-mid-retry cancellation tests and its own 1T SPRT.
+  ```bash
+  pwsh -NoProfile -File .\tools\sprt.ps1 -EngineA .\zig-out\manta-core.exe -EngineB .\zig-out\manta-base.exe -NameA MAN-S36-core -NameB MAN-S35-base -Mode fixed -Games 500 -Concurrency 8 -TC 3+0.03 -Hash 64
+  ```
 
-**6.5.10.4 disposition rule.** After the 10.2 verdict, review the wrapper
-check extension, singular eligibility and IIR on the actual production head.
-For each, record keep, deferred or a separately bounded candidate, naming the
-decision-level relation that justifies any candidate. MAN-S31, MAN-S33 and
-MAN-S21 are not revived; negative reductions and adaptive verification horizons
-stay excluded. The output is a written disposition in PLAN and ADR-0070.
+  Report W/L/D and the Elo estimate. Below `+30` Elo, stop and run the ADR's
+  ablation order once; between `+30` and `+80`, stop for review; at or above
+  `+80`, proceed to review. Do not run anything on the designated host.
 
-**Per-ticket verification.** While editing, `zig build check` and the focused
-test root; the deterministic gate is native ReleaseFast `bench 6 1` in each
-arm. Documentation-only edits run `zig build policy` and `git diff --check`.
-Full suites run before a release, not per ticket.
+Stop rules for Opus: any legality, PV, terminal or restoration failure stops
+the ticket; a changed canary is recorded with its cause, never re-blessed or
+deleted silently; a fingerprint change in the off arm is a defect; questions
+about authority or chess semantics stop for Fable rather than being resolved
+by guess.
 
-#### 6.5.11 — Forward proofs matched to the accepted depth policy
+**6.5.10.3 — Review loop (Fable).** Review the implementation against ADR-0071
+and `SCORE-034`: verification before PV, cutoff, TT or feedback authority;
+provenance and scope through negation; null-verification scope; exclusion-node
+behavior; the omission storage change; every legality exemption; arithmetic
+at saturation and negative 1024ths; plausibility of the G diagnostics with
+their denominators; and test independence. Each finding returns to Opus as a
+bounded repair that re-runs its ticket gate and the affected G rows. The loop
+ends when Fable records acceptance here with the final diagnostic table.
 
-**Model:** GPT-6 Astra High. **Dependency:** accepted 10 policy; if rejected,
-return to 8 and re-derive this step against actual production before coding.
-**Files:** baseline/types/params, TT provenance and focused search tests;
-`src/chess/draw.zig`/history state only for a proven legal cycle-witness API.
+**6.5.10.4 — Registered gate and decision.** Prepare `MAN-S36` per the
+EXPERIMENTS template: candidate `-Dselective-core=true` against the same-source
+baseline, both native ReleaseFast with recorded SHA-256, bench fingerprints
+and manifests; 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized
+UHO, normalized `[1,5]` at alpha/beta `0.05`, 16,000-game cap, setup-only
+preflight, every fault fatal, no pilot. The maintainer runs it on the
+designated host. H1 promotes: the umbrella defaults on, the new fingerprint is
+recorded, the off arm keeps reconstructing `642,336`, the archived fingerprints
+stay pinned, and `SCORE-034`, EXPERIMENTS, GUIDE and this section are
+reconciled. H0 or the cap does not promote: one ablation cycle in the ADR's
+order is permitted, then a re-plan. After the verdict the maintainer records
+in 6.5.14 whether Phase 6.5 continues through 6.5.11 to 6.5.13 or Manta
+releases 1.1.0 on the accepted head and freezes.
 
-Work in bounded packages, each using the same evidence/depth interfaces:
+#### 6.5.11 — Fit of the accepted core (conditional, expected)
 
-- **6.5.11.1 — Upcoming repetition:** current search detects a draw already present in
-  history; the modern reference also detects an available move completing a
-  repetition. Derive a legal reversible-move witness and the root/search-history
-  condition before raising a non-root bound toward draw in main/qsearch.
-  Fence irreversible/null moves, castling/EP rights and check legality. Never
-  confuse a possible draw with a forced exact result, publish a history-local
-  bound as universally reusable TT truth, or infer repetition from a colliding
-  hash alone. Compare against an independent legal-move/history walk and price
-  the lookup at non-repeating nodes before retaining a candidate.
-- **6.5.11.2 — Null move and verification:** production's fixed reduction is two plies.
-  Derive a depth/eval/context-sensitive probe together with verification scope
-  and a clearly bounded null-disabled region. The null probe passes the move;
-  verification searches real moves from the restored position. Keep PV/check,
-  consecutive-null, decisive-score and zugzwang/pawn-ending safety explicit.
-  Rare failed verifications may be valuable; include their cases in the oracle
-  population. Deeper reduction and safety policy are one coupled candidate.
-- **6.5.11.3 — ProbCut and TT proof reuse:** reuse accepted tactical ordering, qsearch
-  and ordinary TT bounds to avoid redundant probes. Distinguish shallow
-  probabilistic lower bounds from full-depth exact results. Stale, decisive,
-  insufficient-depth or exclusion-contaminated evidence cannot acquire new
-  cutoff authority. A separate package from null move unless dependency is
-  concretely demonstrated.
-- **6.5.11.4 — Singular proof/IIR review:** assess exclusion horizon,
-  threshold, TT age/depth, one/multiple extension and no-TT depth jointly where
-  they interact. Do not retry MAN-S33's half-depth change on the same head.
-  A new attempt needs changed accepted context and decision-level evidence.
-- **6.5.11.5 — Verified razoring decision:** separately assess a populated
-  shallow-error relation; defer if none justifies a new candidate. Razoring
-  must verify through qsearch with check/mate/zugzwang guards; a legal
-  tactical mismatch is examined, not dismissed or accepted by fingerprint alone.
+**Model:** Fable designs the coordinate set; Opus wires the tune-only registry.
+**Dependency:** accepted 6.5.10 and a maintainer decision to continue.
 
-**Gate:** same-position alternative and zugzwang/fortress/only-move cases,
-bound/provenance and TT-history authority, exact unmake, cancellation; observed
-cost and outcomes on the accepted head, then one final 1T SPRT per meaningful
-package. Close each family as accepted, rejected or deferred with reason.
-Rejecting a family is permitted; declaring mature efficiency still requires 15.
+The core's seeds are order-of-magnitude values, so a joint fit is expected to
+be worth its budget once the mechanisms are frozen. Expose only live
+coordinates through the existing tune-only `params.zig` registry: table base
+and divisor, history divisor, PV/improving/cut/TT adjustments, late-move base,
+scale and improving bonus, futility unit, history-prune unit, SEE unit, RFP
+margins, razoring unit, null-move base, depth and margin divisors, aspiration
+delta and growth, history bonus slope and cap. Exclude categorical switches,
+safety and terminal predicates. Use the existing Weather Factory bridge on the
+designated host with prospective ranges, iteration horizon and stop rule; the
+maintainer runs it. Bake one rounded vector and gate it once as `MAN-S37`.
 
-#### 6.5.12 — Evaluation reliability feeding search, only where justified
+**Gate:** complete valid checkpoints, bounded active theta, no infrastructure-
+contaminated gradients, one final production 1T H1. An inconclusive or rejected
+fit leaves the accepted seeds in place.
 
-**Model:** GPT-6 Astra High. **Dependency:** frozen accepted 10–11 consumers.
-**Files:** search evaluation-evidence/history boundary, baseline/params;
-`src/eval/hce.zig` only to expose existing exact facts, not refit the HCE.
+#### 6.5.12 — Second-order relationships on the accepted core (conditional)
 
-1. **6.5.12.1 — Provenance/consumer map.** Preserve raw HCE separately from
-   ordinary TT refinement and any learned correction. Document which value may
-   drive stand-pat, improving, futility,
-   null eligibility and reduction confidence; terminal/tablebase/mate values
-   never train or consume an ordinary correction.
-2. **6.5.12.2 — Open-or-defer decision.** Inspect existing held-out residuals
-   and populated search outcomes for a systematic error affecting the new
-   consumers. MAN-S25 was rejected: do not
-   simply turn it back on. A candidate must explain the new information or
-   changed consumer relation and bound both correction and uncertainty.
-3. **6.5.12.3 — Conditional coherent candidate.** If justified, make correction
-   generation, reliable outcome training and its coherent search consumers one
-   package, with sample support, history
-   separation, saturation and worker ownership. Otherwise close as deferred.
-   No new datagen/Texel cycle, NNUE work or automatic cache family is authorized.
+**Model:** Fable derives each package; Opus implements. **Dependency:** the
+accepted and, if run, fitted core; a maintainer decision to continue.
 
-**Gate:** independent raw/corrected provenance and learning-exclusion properties,
-held-out bias/sign checks, tactical/endgame safeguards and final 1T H1 for any
-retained package. Reference coverage alone never opens this optional experiment.
+Candidates in this order, each its own package with its own diagnostics and one
+1T SPRT, each derived on the actual accepted head; deferral or rejection is a
+valid closure and nothing is retried automatically:
 
-#### 6.5.13 — Residual full-search cost and build optimization
+1. Correction history as a live pruning and reduction input: producer and
+   consumers together, re-derived rather than re-enabling MAN-S25.
+2. Capture history with a capture-aware SEE pruning threshold and capture
+   futility.
+3. Singular review: threshold scale, half-depth exclusion horizon, non-PV
+   double extension and multi-cut, on the new reduction surface.
+4. ProbCut move cap and typed TT proof reuse.
+5. Quiet SEE pruning and the upcoming-repetition lower bound.
+6. TT replacement and aging review under the new tree.
 
-**Model:** GPT-5.6 Terra High; Astra High for TT semantic changes.
-**Dependency:** accepted search head frozen through 12.
-**Files:** profile-owned board/search/eval hot path; `build.zig` and build
-support only if the compiler branch is justified.
+#### 6.5.13 — Residual full-search cost and board target
 
-1. Refresh only the profile portions invalidated by tree changes. Determine
-   whether the still-open board target is met and rank time in HCE, SEE, picker,
-   TT and transition. If necessary, isolate transition from generation and
-   sample the accepted search's actual SEE thresholds/capture distribution.
-   Fix the largest evidenced residual owner, not all listed mechanisms.
-2. Compare occupied-piece traversal with HCE's 64-square placement/phase scan;
-   inspect pawn-cache hit/collision/footprint and exact trace behavior before
-   cache redesign. Incremental HCE is conditional on a concentrated profile,
-   exact refresh/unmake contract and a bounded payoff, not a default rewrite.
-3. TT work distinguishes cache-line/probe/prefetch cost from capacity and
-   replacement behavior. The prior hash sweep did not establish that layout,
-   replacement quality or warm-history behavior is optimal. Preserve 4T
-   publication/authentication; a special 1T path must not weaken shared safety.
-4. PGO/LTO/code layout is optional, not a standalone mandatory phase. First
-   verify actual Zig 0.16 support and reproducible profile use; use a
-   representative training population distinct from timing validation, with
-   fallback builds. No working pipeline or no measured full-search gain means
-   defer without adding launcher/product complexity.
+**Model:** Opus for profile-owned exact work; Fable for any TT semantic change.
+**Dependency:** search head frozen through 6.5.12 or the decision to skip it.
 
-**Gate:** exact scalar/fingerprint/PV/results, repeated release-build whole-search
-timing, applicable board/HCE/TT concurrency tests and final 1T H1 per retained
-candidate/package. A changed TT replacement decision is playing behavior,
-not an exact optimization. No local microbenchmark can conceal a full-search loss.
+1. Refresh the profile on the frozen tree and rank time in HCE, SEE, picker,
+   TT and transition. Fix the largest evidenced residual owner, not every
+   listed mechanism.
+2. Compare occupied-piece traversal with the 64-square HCE scan and inspect
+   the pawn cache before any cache redesign; incremental HCE only on a
+   concentrated profile with an exact refresh contract.
+3. TT work separates cache-line and prefetch cost from capacity and
+   replacement; a changed replacement decision is playing behavior.
+4. Measure the six-cell board target against Basilisk on the designated host;
+   PGO and LTO are optional and need a reproducible pipeline first.
 
-#### 6.5.14 — Conditional fit of the interacting accepted search
+**Gate:** exact scalar, fingerprint, PV and result identity for exact work,
+repeated release-build whole-search timing, applicable concurrency tests, and
+one 1T H1 per retained playing change.
 
-**Model:** GPT-6 Astra High for coordinate/consumer design; Terra High for an
-approved existing-wrapper configuration. **Dependency:** mechanisms frozen.
+#### 6.5.14 — Targets, cumulative gate and release decision
 
-This is a decision checkpoint, not authorization to tune. Reuse MAN-S29 scales
-where their meanings survive; do not assume they remain optimum after new depth,
-ordering and pruning consumers. Map each proposed continuous parameter to all
-live consumers and show interaction/sensitivity worth the game budget.
+**Model:** Opus collects evidence; Fable performs the final review.
+**Dependency:** every prior disposition explicit.
 
-If justified and separately approved, use the existing Weather Factory bridge
-and a prospectively bounded active-coordinate fit. Exclude inactive, categorical,
-safety/terminal and unsupported NNUE coordinates. Freeze the complete rounded
-vector and qualify it once as a whole; no cherry-picked coordinates or changing
-mechanisms during a run. SPSA sensitivity is not SPRT harness calibration.
+1. Freeze source, binaries, toolchain, feature ledger and fingerprints. Run the
+   final correctness, ReleaseSafe and ReleaseFast, UCI, time, SMP lifecycle and
+   platform gates once each.
+2. On the idle designated host, measure the forty-position depth curve 4 to
+   13 for Manta and the pinned classical Stockfish under the identical fresh-
+   process protocol, and the six board cells against Basilisk. Record nodes,
+   NPS, elapsed, branching, ordinary and mate cohorts and per-position tails.
+3. Search target, revised on 2026-09-12: geometric branching over depths 4 to
+   12 at most `1.98` against the reference's host-measured value, depth-12
+   total elapsed at most `4x` the reference, and routine `bench 13 1` at most
+   30 seconds. Board target unchanged from 6.5.4. These are planning targets;
+   a miss is an open deficit, never a moved target.
+4. Run the cumulative registered 1T SPRT of the final head against immutable
+   Manta 1.0.0 as `MAN-C03` on the trusted harness.
+5. The maintainer decides: continue Phase 6.5 on the recorded deficits, or
+   release Manta 1.1.0 on the accepted head and freeze development. GUIDE
+   records the board target, the search target and the strength gate
+   separately. Phase 7 still needs its own approval.
 
-**Gate:** explicit tune/defer decision. For an approved fit, complete valid
-checkpoints, no infrastructure-contaminated gradients, bounded active theta and
-one final production 1T H1. An inconclusive or rejected fit does not replace
-the previously accepted parameters. No automatic new clock fit or 4T gate.
-
-#### 6.5.15 — Separate board/search targets and integrated closeout
-
-**Model:** GPT-5.6 Terra High for evidence collection; Astra High for final
-causal/contract review. **Dependency:** all prior dispositions explicit.
-
-1. Freeze final source, binaries, Zig/options, feature ledger and accepted
-   fingerprints. Run each required final correctness, ReleaseSafe/ReleaseFast,
-   UCI/time/SMP lifecycle and platform gate once; do not infer multi-thread
-   strength from 1T qualification.
-2. On the idle designated host, measure the board six-cell target and the
-   common forty-position depth curve through 13 with the frozen reset policy.
-   Record nodes, NPS, elapsed, ordinary/mate cohorts and per-position tails.
-   Do not subtract inconvenient cases, use observer timings, alter depth
-   semantics or stop accounting after a search becomes expensive.
-3. Check both the 64-MiB Basilisk-relative depth-13 limits and the independent
-   routine `bench 13 1` absolute limit. Record the relation
-   elapsed = counted nodes / measured NPS without treating it as chess quality.
-   If either target misses, identify remaining cost/tree owners and request a
-   bounded plan revision; no automatic phase advance or endless unguided tuning.
-4. Require every retained production candidate/package's H1, then one final
-   cumulative registered 1T SPRT against immutable Manta 1.0.0. Use setup-only
-   verification and the trusted fastchess harness, no candidate pilots.
-5. GUIDE records board target, search target and strength gate separately.
-   Close Phase 6.5 only when all three pass, or the maintainer explicitly
-   changes the objective prospectively. Phase 7 still needs separate approval.
-
-**Removed obligations:** no standalone retry of S31/S33, no automatic sequence
-of shallow proof weakenings, no TT-capacity campaign after a negative capacity
-diagnostic, no mandatory PGO project and no mandatory SPSA. Their useful,
-evidence-dependent parts now have owners above.
+**Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
+evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
+6.5.15 closeout. Their surviving content is owned by the steps above; their
+mechanisms that entered the core are governed by ADR-0071.
 
 ### Phase 7 — NNUE runway and data contract
 

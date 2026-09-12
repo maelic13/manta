@@ -77,6 +77,7 @@ close their owning evidence steps. They are read with [`ARCHITECTURE.md`](../../
 | [0068](0068-board-backbone-integrated-search-roadmap.md) | Superseding two-target board-backbone and integrated-search roadmap, dependency packages and evidence corrections |
 | [0069](0069-qsearch-tactical-generation-candidate.md) | Default-off exact tactical-only non-check qsearch generation with a complete terminal witness |
 | [0070](0070-shared-search-evidence-and-depth.md) | Shared evidence/depth interfaces, verification authority and separately gated modern-search packages |
+| [0071](0071-coordinated-selective-search-core.md) | One coordinated selective-search core package, superseding the separately gated Phase-6.5 search packages and the rejected-umbrella rule for its components |
 | [0071](0071-no-adjudication-game-termination.md) | Measured games end only by the rules of chess; adjudication removed from every harness |
 
 An ADR records the accepted decision and its boundary, not implementation

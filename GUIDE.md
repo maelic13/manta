@@ -51,8 +51,15 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   not precedent for any other candidate. The corpus saving is concentrated in
   the two mate positions (`-88.5%` at depth 10); the ordinary 38-position
   subset moved `+0.21%` and ordinary elapsed time was noise-dominated, so no
-  ordinary-position strength is claimed. 6.5.10.2 needs its own approval
-  before its first edit.
+  ordinary-position strength is claimed.
+- Phase 6.5 was redirected on 2026-09-12. The measured gap is tree shape:
+  geometric branching `2.225` against `1.88` for the pinned classical
+  Stockfish on the same forty positions, `82.2 M` nodes against `2.6 M` at
+  depth 12. Step 6.5.10 is now one coordinated selective-search core,
+  `MAN-S36`, designed in ADR-0071 and contracted by `SCORE-034`. 6.5.10.2
+  implementation is approved and is next: Opus implements from the ADR, Fable
+  reviews, then one registered 1T SPRT decides. After that verdict the
+  maintainer decides between finishing Phase 6.5 and releasing 1.1.0.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
@@ -148,11 +155,12 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 ### Phase 6.5 — Board backbone and integrated search maturity
 
 Two separate goals: rival Basilisk across the six board benchmark cells, and
-reach depth 13 in comparable time with a mature, coordinated search. PLAN owns
-the exact targets, implementation tickets, model assignments and gates.
-Fewer nodes and higher NPS are separate diagnostics; registered games still
-decide promotion. Modern Stockfish supplies search structure and feature
-relationships, reimplemented in original Zig for Manta's contracts.
+bring the search tree's branching factor to that of the pinned classical
+Stockfish with a mature, coordinated search. PLAN owns the exact targets,
+implementation tickets, model assignments and gates. Fewer nodes and higher NPS
+are separate diagnostics; registered games still decide promotion. Search
+structure and relationships are reimplemented as original Zig with Manta's own
+values for Manta's contracts.
 
 - [x] **6.5.0 — Comparable performance audit:** Board and search deficits measured.
 - [x] **6.5.1a — Exact staged move picker:** Exact formulation rejected.
@@ -181,31 +189,26 @@ relationships, reimplemented in original Zig for Manta's contracts.
   history/TT/move-evidence model for ordering and selective search, behavior-
   neutral and default-off. Three authority repairs closed; the fourth Astra
   High review accepted the authority and lifetime boundaries.
-- [ ] **6.5.10 — Integrated ordering, aspiration and selective depth:** Connect
-  mate bounds, root windows, contextual LMR, shallow pruning and forcing depth.
-  Prepared 2026-09-12; each sub-ticket is approved and gated separately.
-  - [x] **6.5.10.1 — Complete mate windows:** `MAN-S35` non-root window clip
-    replacing MAN-S32's crossing-only path; production at `642,336` on a
-    neutral gate by documented maintainer exception.
-  - [ ] **6.5.10.2 — Shared selective-depth core:** A design freeze, B one
-    prune depth for LMP/futility/SEE, C plan-driven dispatch, D validation
-    and one package SPRT.
-  - [ ] **6.5.10.3 — Window-aware aspiration:** Only if the accepted core reads
-    a window fact; otherwise recorded as deferred.
-  - [ ] **6.5.10.4 — Forcing-policy disposition:** Review-only on the accepted
-    head; keep, defer or separately bound each forcing mechanism.
-- [ ] **6.5.11 — Forward proofs matched to the accepted depth policy:** Derive
-  repetition bounds, null/verification, ProbCut and singular/razoring policies
-  on the accepted head.
-- [ ] **6.5.12 — Evaluation reliability feeding search, only where justified:**
-  Corrected/static evidence and its consumers; no automatic rejected-feature retry.
-- [ ] **6.5.13 — Residual full-search cost and build optimization:** Address
-  measured remaining HCE/TT/hot-path cost; PGO is optional, not a mandatory project.
-- [ ] **6.5.14 — Conditional fit of the interacting accepted search:** Tune only
-  frozen, live consumers when justified and separately approved; otherwise defer.
-- [ ] **6.5.15 — Separate board/search targets and integrated closeout:** Pass
-  board target, comparable depth-13/routine-bench time and cumulative strength
-  separately. Missed targets keep the deficit open; Phase 7 needs approval.
+- [ ] **6.5.10 — Coordinated selective-search core:** One package, `MAN-S36`,
+  per ADR-0071: informative history, full-coverage log reductions, prospective-
+  depth pruning, node-level proofs and root aspiration, gated once.
+  - [x] **6.5.10.1 — Complete mate windows:** `MAN-S35` non-root window clip;
+    production by maintainer exception on a neutral gate.
+  - [ ] **6.5.10.2 — Implement the core:** Opus tickets A to G from the ADR,
+    ending in branching, attribution and a local diagnostic match.
+  - [ ] **6.5.10.3 — Review loop:** Fable authority and legality review with
+    bounded repairs until acceptance is recorded.
+  - [ ] **6.5.10.4 — Registered gate and decision:** One 1T SPRT on the
+    designated host; then continue or release 1.1.0.
+- [ ] **6.5.11 — Fit of the accepted core:** Conditional SPSA of the live
+  coordinates and one rounded bake, `MAN-S37`.
+- [ ] **6.5.12 — Second-order relationships:** Conditional follow-on packages
+  on the accepted core, each gated alone.
+- [ ] **6.5.13 — Residual full-search cost and board target:** Profile-owned
+  exact work after the tree freezes; PGO optional.
+- [ ] **6.5.14 — Targets, cumulative gate and release decision:** Depth curve
+  against classical Stockfish, board cells, `MAN-C03` against 1.0.0, then
+  continue or release 1.1.0 and freeze.
 
 ### Phase 7 — NNUE runway and data contract
 
@@ -269,5 +272,6 @@ chooses it.
   dependency makes a bundle indivisible.
 - Build and smoke-test all supported release targets natively. Do not claim an
   ISA tier or platform that is not implemented and measured.
-- The next development step after the Manta 1.0.0 release is **7.0**, defining
-  NNUE state, feature and accumulator contracts. It requires explicit approval.
+- After Step 6.5.10's registered gate the maintainer decides between finishing
+  Phase 6.5 and releasing Manta 1.1.0. Phase 7, defining NNUE state, feature and
+  accumulator contracts, requires explicit approval in either case.

@@ -236,15 +236,15 @@ must stay otherwise idle for the registered rule to hold.
 |---|---|---|
 | `MAN-S14` singular-extension family | Rejected and disabled | A new, independently justified extension authority exists |
 | `MAN-S16` capture history | Rejected and disabled | New evidence identifies the original missing relation |
-| `MAN-S18` LMR synchronization | Rejected | Search architecture changes invalidate the old result |
-| `MAN-S20` main selectivity | H0; disabled | A new producer/consumer relation changes the hypothesis |
-| `MAN-S21` extension/depth authority | Exhausted cap without H1; disabled | Materially new evidence and a newly registered candidate exist |
+| `MAN-S18` LMR synchronization | Rejected | Superseded: history-aware reduction is re-derived inside the Step-6.5.10 coordinated core (ADR-0071); the archived vote switch stays off |
+| `MAN-S20` main selectivity | H0; disabled | Superseded: history pruning and dynamic null reduction are re-derived inside the Step-6.5.10 coordinated core (ADR-0071); capture futility stays excluded and the archived cluster stays off |
+| `MAN-S21` extension/depth authority | Exhausted cap without H1; disabled | Superseded for IIR only: all-node IIR is re-derived inside the Step-6.5.10 coordinated core (ADR-0071); singular multi-cut and double extension stay off pending 6.5.12 |
 | `MAN-S23` / `MAN-S24` correction selectivity | Deterministically refuted / never opened | A valid structural producer first passes its own gate |
 | `MAN-S25` pawn-structure correction history | H0; archived default-off | New evidence changes the producer or authority contract |
 | `MAN-E20` context-weighted space | Static fit reversed sign and missed validation floor | A different chess mechanism and label-quality case are established |
 | `MAN-E21` shelter-moderated king danger | H0 at `-9.31 +/- 7.98` nElo | A materially different coupling is derived |
 | `MAN-R01` root-uncertainty time consumer | H0; disabled | Root evidence or time architecture changes materially |
-| `MAN-R02` stability-gated aspiration | 16,000-game cap without H1; disabled | Evaluator/search head changes make the old gate stale |
+| `MAN-R02` stability-gated aspiration | 16,000-game cap without H1; disabled | Superseded: failed-side-widening root aspiration is a component of the Step-6.5.10 coordinated core (ADR-0071); the archived stability-gated switch stays off |
 | `MAN-S31` isolated check-extension removal | Rejected by judgment on an adverse trajectory | Only after Step 6.5.8 derives a distinct shared-depth policy for Step 6.5.10; no presumed benefit from removing more protections |
 | Colosseum | Parked by maintainer direction | The maintainer explicitly authorizes re-evaluation |
 | Additional classical HCE fitting | Closed in the normal path | Serious NNUE retries fail and Phase 11 is explicitly entered |

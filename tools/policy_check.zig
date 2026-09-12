@@ -2,7 +2,7 @@ const std = @import("std");
 
 const max_file_size = 2 * 1024 * 1024;
 // Includes the Markdown header row plus every stable requirement-ID row.
-const expected_requirement_count = 116;
+const expected_requirement_count = 117;
 
 const required_paths = [_][]const u8{
     ".github/workflows/ci.yml",
@@ -93,6 +93,7 @@ const allowed_reference_files = [_][]const u8{
     "config/eval-reference.json",
     "docs/adr/0020-uci-search-and-clock-baseline.md",
     "docs/adr/0021-search-benchmark-and-qualification.md",
+    "docs/adr/0071-coordinated-selective-search-core.md",
     "docs/adr/0023-late-move-reduction-candidate.md",
     "docs/adr/0024-search-reference-observation.md",
     "docs/adr/0033-lmr-reply-feedback-candidate.md",
