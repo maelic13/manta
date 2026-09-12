@@ -27,7 +27,7 @@ pub const State = struct {
     /// with the evaluator for this side and this pawn structure.
     correction_history: [2][correction_slots]i16 = @splat(@splat(0)),
 
-    const history_limit: i32 = 16 * 1024;
+    pub const history_limit: i32 = 16 * 1024;
     /// A power of two so the key reduces by mask rather than division.
     const correction_slots: usize = 16 * 1024;
     /// Fixed-point denominator for a stored correction, so an entry carries
@@ -113,8 +113,9 @@ pub const State = struct {
         chess_move: chess.move.Move,
         depth: u16,
         ply: usize,
+        comptime core: bool,
     ) void {
-        self.updateQuiet(side, chess_move, historyBonus(depth));
+        self.updateQuiet(side, chess_move, historyBonus(core, depth));
         if (self.killers[ply][0].raw() != chess_move.raw()) {
             self.killers[ply][1] = self.killers[ply][0];
             self.killers[ply][0] = chess_move;
@@ -142,8 +143,9 @@ pub const State = struct {
         side: chess.types.Color,
         chess_move: chess.move.Move,
         depth: u16,
+        comptime core: bool,
     ) void {
-        self.updateQuiet(side, chess_move, -historyBonus(depth));
+        self.updateQuiet(side, chess_move, -historyBonus(core, depth));
     }
 
     pub fn quietScore(
@@ -160,8 +162,9 @@ pub const State = struct {
         reply: ReplyContext,
         chess_move: chess.move.Move,
         depth: u16,
+        comptime core: bool,
     ) void {
-        self.updateReply(value, reply, chess_move, historyBonus(depth));
+        self.updateReply(value, reply, chess_move, historyBonus(core, depth));
     }
 
     pub fn recordReplyFailure(
@@ -170,8 +173,9 @@ pub const State = struct {
         reply: ReplyContext,
         chess_move: chess.move.Move,
         depth: u16,
+        comptime core: bool,
     ) void {
-        self.updateReply(value, reply, chess_move, -historyBonus(depth));
+        self.updateReply(value, reply, chess_move, -historyBonus(core, depth));
     }
 
     pub fn replyScore(
@@ -244,7 +248,7 @@ pub const State = struct {
         chess_move: chess.move.Move,
         depth: u16,
     ) void {
-        self.updateCapture(value, chess_move, historyBonus(depth));
+        self.updateCapture(value, chess_move, historyBonus(false, depth));
     }
 
     pub fn recordCaptureFailure(
@@ -253,7 +257,7 @@ pub const State = struct {
         chess_move: chess.move.Move,
         depth: u16,
     ) void {
-        self.updateCapture(value, chess_move, -historyBonus(depth));
+        self.updateCapture(value, chess_move, -historyBonus(false, depth));
     }
 
     pub fn captureScore(
@@ -294,8 +298,9 @@ pub const State = struct {
         continuation: ContinuationContext,
         chess_move: chess.move.Move,
         depth: u16,
+        comptime core: bool,
     ) void {
-        self.updateContinuation(value, continuation, chess_move, historyBonus(depth));
+        self.updateContinuation(value, continuation, chess_move, historyBonus(core, depth));
     }
 
     pub fn recordContinuationFailure(
@@ -304,8 +309,9 @@ pub const State = struct {
         continuation: ContinuationContext,
         chess_move: chess.move.Move,
         depth: u16,
+        comptime core: bool,
     ) void {
-        self.updateContinuation(value, continuation, chess_move, -historyBonus(depth));
+        self.updateContinuation(value, continuation, chess_move, -historyBonus(core, depth));
     }
 
     fn updateContinuation(
@@ -332,7 +338,7 @@ pub const State = struct {
         updateBounded(entry, bonus);
     }
 
-    fn updateBounded(value: *i16, bonus: i32) void {
+    pub fn updateBounded(value: *i16, bonus: i32) void {
         const current: i32 = value.*;
         const magnitude: i32 = @intCast(@abs(bonus));
         const next = current + bonus - @divTrunc(current * magnitude, history_limit);
@@ -340,11 +346,28 @@ pub const State = struct {
         value.* = @intCast(next);
     }
 
-    fn historyBonus(depth: u16) i32 {
-        const bounded: i32 = @intCast(@min(depth, 128));
-        return @min(bounded * bounded, history_limit);
+    fn historyBonus(comptime core: bool, depth: u16) i32 {
+        return historyBonusFor(core, depth);
     }
 };
+
+/// One depth-to-magnitude scale for every quiet history producer.
+///
+/// The accepted `depth^2` curve tops out near `196` for the depths a real
+/// search reaches, so an entry never travels far inside the `16384` range and
+/// relative history says little beyond coarse ordering. ADR-0071 A replaces it
+/// with a linear curve that saturates at `2048`: a depth-one outcome still
+/// moves an entry by about `90`, and by depth fourteen the producer is writing
+/// an eighth of the range. That is what makes history informative enough to
+/// carry a reduction and a pruning decision rather than only a rank.
+pub fn historyBonusFor(comptime core: bool, depth: u16) i32 {
+    if (comptime core) {
+        const bounded: i32 = @intCast(@min(depth, 128));
+        return @min(2048, 150 * bounded - 60);
+    }
+    const bounded: i32 = @intCast(@min(depth, 128));
+    return @min(bounded * bounded, State.history_limit);
+}
 
 /// The shadow outcome uses the accepted history scale only as a bounded sample
 /// encoding. It has no ordering or depth consumer in Step 6.5.9.
@@ -873,16 +896,65 @@ pub fn source(
     return rank(true, value, binding, chess_move, tt_move, state, .{}, ply, null, .{}).source;
 }
 
+test "the core history bonus is bounded, monotone and informative" {
+    // ADR-0071 A. The oracle is the stated curve and the table's own range,
+    // not the implementation: a producer that cannot move an entry across a
+    // useful fraction of [-16384, 16384] cannot carry a pruning decision.
+    try std.testing.expectEqual(@as(i32, 90), historyBonusFor(true, 1));
+    try std.testing.expectEqual(@as(i32, 240), historyBonusFor(true, 2));
+    // 150*14 - 60 = 2040; the cap first binds at depth 15. The ADR's prose
+    // rounds this to "saturates at 2048"; the formula is the contract.
+    try std.testing.expectEqual(@as(i32, 2040), historyBonusFor(true, 14));
+    try std.testing.expectEqual(@as(i32, 2048), historyBonusFor(true, 15));
+
+    var depth: u16 = 1;
+    var previous = historyBonusFor(true, 0);
+    while (depth <= 128) : (depth += 1) {
+        const bonus = historyBonusFor(true, depth);
+        try std.testing.expect(bonus >= previous);
+        try std.testing.expect(bonus > 0 and bonus <= 2048);
+        previous = bonus;
+    }
+    // Saturation is reached inside the depths a real search visits, and the
+    // accepted curve does not reach a comparable share of the range there.
+    try std.testing.expect(historyBonusFor(true, 20) == 2048);
+    try std.testing.expect(historyBonusFor(true, 8) > historyBonusFor(false, 8));
+}
+
+test "the core gravity update stays inside the history range under saturation" {
+    // Property: repeated same-direction updates converge inside the bound and
+    // never leave it, and the opposite direction moves the entry back. The
+    // bound is the table's own declared range, which the update must respect
+    // for every reachable bonus magnitude.
+    inline for (.{ true, false }) |core| {
+        var entry: i16 = 0;
+        for (0..4096) |_| {
+            State.updateBounded(&entry, historyBonusFor(core, 14));
+            try std.testing.expect(entry >= -State.history_limit and entry <= State.history_limit);
+        }
+        const saturated = entry;
+        try std.testing.expect(saturated > 0);
+        for (0..4096) |_| {
+            State.updateBounded(&entry, -historyBonusFor(core, 14));
+            try std.testing.expect(entry >= -State.history_limit and entry <= State.history_limit);
+        }
+        // The fixed point of the gravity update is the bound itself, so the
+        // entry may land exactly on it; it may never pass it.
+        try std.testing.expect(entry < 0);
+        try std.testing.expect(entry >= -State.history_limit);
+    }
+}
+
 test "balanced quiet outcomes remain bounded and rotate killers deterministically" {
     // Search ordering evidence must remain bounded and responsive across
     // arbitrarily long games; only successful quiets become killers.
     var state: State = .{};
     const first = chess.move.Move.normal(.g1, .f3);
     const second = chess.move.Move.normal(.b1, .c3);
-    state.recordQuietCutoff(.white, first, std.math.maxInt(u16), 2);
-    state.recordQuietCutoff(.white, first, std.math.maxInt(u16), 2);
-    state.recordQuietFailure(.white, first, std.math.maxInt(u16));
-    state.recordQuietCutoff(.white, second, 3, 2);
+    state.recordQuietCutoff(.white, first, std.math.maxInt(u16), 2, false);
+    state.recordQuietCutoff(.white, first, std.math.maxInt(u16), 2, false);
+    state.recordQuietFailure(.white, first, std.math.maxInt(u16), false);
+    state.recordQuietCutoff(.white, second, 3, 2, false);
     try std.testing.expectEqual(@as(i16, -16 * 1024), state.quietScore(.white, first));
     try std.testing.expectEqual(second, state.killers[2][0]);
     try std.testing.expectEqual(first, state.killers[2][1]);
@@ -892,9 +964,9 @@ test "opposite quiet outcomes age prior evidence toward the latest result" {
     // A touched entry uses bounded gravity rather than irreversible saturation.
     var state: State = .{};
     const chess_move = chess.move.Move.normal(.g1, .f3);
-    state.recordQuietCutoff(.white, chess_move, 8, 0);
+    state.recordQuietCutoff(.white, chess_move, 8, 0, false);
     const rewarded = state.quietScore(.white, chess_move);
-    state.recordQuietFailure(.white, chess_move, 8);
+    state.recordQuietFailure(.white, chess_move, 8, false);
     const balanced = state.quietScore(.white, chess_move);
     try std.testing.expect(rewarded > 0);
     try std.testing.expect(balanced < rewarded);
@@ -916,7 +988,7 @@ test "reply keys use resulting pieces and color-symmetric destinations" {
     var state: State = .{};
     const white_move = chess.move.Move.normal(.h2, .h3);
     const black_move = chess.move.Move.normal(.h7, .h6);
-    state.recordReplySuccess(&white, white_reply, white_move, 4);
+    state.recordReplySuccess(&white, white_reply, white_move, 4, false);
     try std.testing.expectEqual(
         state.replyScore(&white, white_reply, white_move),
         state.replyScore(&black, black_reply, black_move),
@@ -957,7 +1029,7 @@ test "reply outcomes are bounded context-specific quiet ordering evidence" {
     const preferred = chess.move.Move.normal(.h2, .h3);
     const other = chess.move.Move.normal(.e2, .e3);
     var state: State = .{};
-    state.recordReplySuccess(&value, reply, preferred, std.math.maxInt(u16));
+    state.recordReplySuccess(&value, reply, preferred, std.math.maxInt(u16), false);
     try std.testing.expectEqual(@as(i16, 16 * 1024), state.replyScore(&value, reply, preferred));
     try std.testing.expectEqual(@as(i16, 0), state.replyScore(&value, reply, other));
 
@@ -977,7 +1049,7 @@ test "reply outcomes are bounded context-specific quiet ordering evidence" {
     orderWithReply(&moves, &value, Binding{}, null, &state, 0, reply);
     try std.testing.expectEqual(preferred, moves.slice()[0]);
 
-    state.recordReplyFailure(&value, reply, preferred, std.math.maxInt(u16));
+    state.recordReplyFailure(&value, reply, preferred, std.math.maxInt(u16), false);
     try std.testing.expectEqual(@as(i16, -16 * 1024), state.replyScore(&value, reply, preferred));
     state.clear();
     try std.testing.expectEqual(@as(i16, 0), state.replyScore(&value, reply, preferred));
@@ -998,7 +1070,7 @@ test "history tuning weights only contextual quiet-ordering evidence" {
     const preferred = chess.move.Move.normal(.h2, .h3);
     const other = chess.move.Move.normal(.e2, .e3);
     var state: State = .{};
-    state.recordReplySuccess(&value, reply, preferred, 8);
+    state.recordReplySuccess(&value, reply, preferred, 8, false);
     const Binding = struct {
         pub fn seeAtLeast(_: @This(), _: *const chess.position.Position, _: chess.move.Move, _: i32) bool {
             unreachable;
@@ -1060,7 +1132,7 @@ test "continuation evidence separates check tactical and color-symmetric facts" 
     try std.testing.expectEqual(ordinary, mirrored);
 
     var state: State = .{};
-    state.recordContinuationSuccess(&white, ordinary, white_move, std.math.maxInt(u16));
+    state.recordContinuationSuccess(&white, ordinary, white_move, std.math.maxInt(u16), false);
     try std.testing.expectEqual(
         state.continuationScore(&white, ordinary, white_move),
         state.continuationScore(&black, mirrored, black_move),
@@ -1068,7 +1140,7 @@ test "continuation evidence separates check tactical and color-symmetric facts" 
     try std.testing.expectEqual(@as(i16, 16 * 1024), state.continuationScore(&white, ordinary, white_move));
     try std.testing.expectEqual(@as(i16, 0), state.continuationScore(&white, from_check, white_move));
     try std.testing.expectEqual(@as(i16, 0), state.continuationScore(&white, tactical, white_move));
-    state.recordContinuationFailure(&white, ordinary, white_move, std.math.maxInt(u16));
+    state.recordContinuationFailure(&white, ordinary, white_move, std.math.maxInt(u16), false);
     try std.testing.expectEqual(@as(i16, -16 * 1024), state.continuationScore(&white, ordinary, white_move));
 }
 
@@ -1089,13 +1161,13 @@ test "quiet confidence uses relation consensus rather than raw magnitude" {
         state.quietConfidence(&value, reply, continuations, chess_move),
     );
 
-    state.recordReplySuccess(&value, reply, chess_move, std.math.maxInt(u16));
-    state.recordContinuationFailure(&value, first, chess_move, 2);
+    state.recordReplySuccess(&value, reply, chess_move, std.math.maxInt(u16), false);
+    state.recordContinuationFailure(&value, first, chess_move, 2, false);
     try std.testing.expectEqual(
         HistoryConfidence.neutral,
         state.quietConfidence(&value, reply, continuations, chess_move),
     );
-    state.recordContinuationFailure(&value, second, chess_move, 2);
+    state.recordContinuationFailure(&value, second, chess_move, 2, false);
     try std.testing.expectEqual(
         HistoryConfidence.negative,
         state.quietConfidence(&value, reply, continuations, chess_move),

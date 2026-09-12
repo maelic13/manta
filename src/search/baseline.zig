@@ -1384,6 +1384,10 @@ fn negamaxNode(
             0
     ]chess.move.Move = undefined;
     var searched_quiet_count: usize = 0;
+    var core_quiets: [
+        if (features.selective_core) chess.types.move_capacity else 0
+    ]chess.move.Move = undefined;
+    var core_quiet_count: usize = 0;
     var shadow_quiets: [
         if (features.search_evidence_observation) chess.types.move_capacity else 0
     ]chess.move.Move = undefined;
@@ -1691,6 +1695,12 @@ fn negamaxNode(
                 searched_quiet_count += 1;
             }
         }
+        if (comptime features.coreHistory()) {
+            if (quiet and !exclusion_node) {
+                core_quiets[core_quiet_count] = chess_move;
+                core_quiet_count += 1;
+            }
+        }
         if (comptime features.capture_history) {
             if (is_capture and !exclusion_node and context.heuristics != null) {
                 searched_captures[searched_capture_count] = chess_move;
@@ -1908,6 +1918,7 @@ fn negamaxNode(
                     std.debug.assert(searched_quiets[searched_quiet_count - 1].raw() == chess_move.raw());
                     searched_quiet_count -= 1;
                     recordLmrContextFeedback(
+                        features.coreHistory(),
                         heuristics,
                         value,
                         reply,
@@ -1935,7 +1946,7 @@ fn negamaxNode(
                     // avoid double training the same node outcome.
                     std.debug.assert(searched_quiet_count != 0);
                     std.debug.assert(searched_quiets[searched_quiet_count - 1].raw() == chess_move.raw());
-                    heuristics.recordReplyFailure(value, reply, chess_move, depth);
+                    heuristics.recordReplyFailure(value, reply, chess_move, depth, features.coreHistory());
                     searched_quiet_count -= 1;
                     context.observer.contextualHistoryLmrFailure();
                 };
@@ -1976,6 +1987,7 @@ fn negamaxNode(
                         if (reply_context) |reply|
                             recordContextualQuietOutcome(
                                 features.search_evidence_observation,
+                                features.coreHistory(),
                                 &context.thread.search_evidence,
                                 heuristics,
                                 value,
@@ -2001,20 +2013,30 @@ fn negamaxNode(
                                 context.observer,
                             );
                     }
-                    if (comptime features.balanced_history)
-                        heuristics.recordQuietCutoff(value.side_to_move, chess_move, depth, ply)
-                    else
-                        heuristics.recordLegacyQuietCutoff(value.side_to_move, chess_move, depth, ply);
-                    context.observer.historyReward(depth);
-                    if (comptime features.balanced_history) {
+                    if (comptime features.coreHistory()) {
+                        recordCoreQuietOutcome(
+                            heuristics,
+                            value,
+                            chess_move,
+                            core_quiets[0..core_quiet_count],
+                            depth,
+                            ply,
+                            context.observer,
+                        );
+                    } else if (comptime features.balanced_history) {
+                        heuristics.recordQuietCutoff(value.side_to_move, chess_move, depth, ply, false);
+                        context.observer.historyReward(depth);
                         for (moves.slice()[0..move_index]) |prior_move| {
                             if (!chess.movegen.isCapture(value, prior_move) and
                                 prior_move.kind() != .promotion)
                             {
-                                heuristics.recordQuietFailure(value.side_to_move, prior_move, depth);
+                                heuristics.recordQuietFailure(value.side_to_move, prior_move, depth, false);
                                 context.observer.historyPenalty(depth);
                             }
                         }
+                    } else {
+                        heuristics.recordLegacyQuietCutoff(value.side_to_move, chess_move, depth, ply);
+                        context.observer.historyReward(depth);
                     }
                 }
             }
@@ -2072,6 +2094,22 @@ fn negamaxNode(
         .bound = if (best <= original_alpha) .upper else .exact,
         .provenance = if (exclusion_node) .exclusion_search else best_provenance,
     };
+    if (comptime features.coreHistory()) {
+        if (!exclusion_node and result.bound == .exact and best_move.isChessMove() and
+            !chess.movegen.isCapture(value, best_move) and best_move.kind() != .promotion)
+        {
+            if (context.heuristics) |heuristics|
+                recordCoreQuietOutcome(
+                    heuristics,
+                    value,
+                    best_move,
+                    core_quiets[0..core_quiet_count],
+                    depth,
+                    ply,
+                    context.observer,
+                );
+        }
+    }
     if (comptime features.search_context and features.contextual_history) {
         if (!exclusion_node and result.bound == .exact and best_move.isChessMove() and
             !chess.movegen.isCapture(value, best_move) and best_move.kind() != .promotion)
@@ -2079,6 +2117,7 @@ fn negamaxNode(
             if (reply_context) |reply| if (context.heuristics) |heuristics|
                 recordContextualQuietOutcome(
                     features.search_evidence_observation,
+                    features.coreHistory(),
                     &context.thread.search_evidence,
                     heuristics,
                     value,
@@ -2231,6 +2270,7 @@ fn shadowCandidateEligible(candidate: NodeValue, required_horizon: u16) bool {
 
 fn recordContextualQuietOutcome(
     comptime observe_search_evidence: bool,
+    comptime core_history: bool,
     search_evidence: *types.SearchEvidenceObservation,
     heuristics: *ordering.State,
     value: *const chess.position.Position,
@@ -2272,11 +2312,11 @@ fn recordContextualQuietOutcome(
         // Do not reward and penalize the same key when two equal piece types
         // can reach the same destination in one position.
         if (sameReplyMoveKey(value, winner, candidate)) continue;
-        heuristics.recordReplyFailure(value, reply, candidate, depth);
+        heuristics.recordReplyFailure(value, reply, candidate, depth, core_history);
         penalty_count += 1;
     }
     std.debug.assert(winner_seen);
-    if (!winner_pretrained) heuristics.recordReplySuccess(value, reply, winner, depth);
+    if (!winner_pretrained) heuristics.recordReplySuccess(value, reply, winner, depth, core_history);
     observer.contextualHistoryUpdate(disposition, penalty_count, !winner_pretrained);
     for (continuations.items, 0..) |maybe_continuation, slot| {
         const continuation = maybe_continuation orelse continue;
@@ -2284,11 +2324,11 @@ fn recordContextualQuietOutcome(
         for (searched_quiets) |candidate| {
             if (candidate.raw() == winner.raw() or sameReplyMoveKey(value, winner, candidate))
                 continue;
-            heuristics.recordContinuationFailure(value, continuation, candidate, depth);
+            heuristics.recordContinuationFailure(value, continuation, candidate, depth, core_history);
             continuation_penalties += 1;
         }
         if (!winner_pretrained)
-            heuristics.recordContinuationSuccess(value, continuation, winner, depth);
+            heuristics.recordContinuationSuccess(value, continuation, winner, depth, core_history);
         observer.continuationHistoryUpdate(
             @enumFromInt(slot),
             disposition,
@@ -2448,6 +2488,7 @@ fn continuationKeySeenEarlier(
 }
 
 fn recordLmrContextFeedback(
+    comptime core_history: bool,
     heuristics: *ordering.State,
     value: *const chess.position.Position,
     reply: ordering.ReplyContext,
@@ -2458,18 +2499,46 @@ fn recordLmrContextFeedback(
     observer: anytype,
 ) void {
     if (positive)
-        heuristics.recordReplySuccess(value, reply, chess_move, depth)
+        heuristics.recordReplySuccess(value, reply, chess_move, depth, core_history)
     else
-        heuristics.recordReplyFailure(value, reply, chess_move, depth);
+        heuristics.recordReplyFailure(value, reply, chess_move, depth, core_history);
     observer.contextualHistoryLmrFeedback(positive);
     for (continuations.items, 0..) |maybe_continuation, slot| {
         const continuation = maybe_continuation orelse continue;
         if (positive)
-            heuristics.recordContinuationSuccess(value, continuation, chess_move, depth)
+            heuristics.recordContinuationSuccess(value, continuation, chess_move, depth, core_history)
         else
-            heuristics.recordContinuationFailure(value, continuation, chess_move, depth);
+            heuristics.recordContinuationFailure(value, continuation, chess_move, depth, core_history);
         observer.continuationHistoryLmrFeedback(@enumFromInt(slot), positive);
     }
+}
+
+/// ADR-0071 A. Under the core, main history learns the same way the reply and
+/// continuation tables already do: the quiet that produced the node's answer is
+/// rewarded, and every quiet the node actually searched before it is penalised
+/// by the same magnitude through the bounded gravity update.
+///
+/// Only moves that were really recursed are penalised. A move omitted by
+/// shallow selectivity was never shown to be bad -- the node simply declined to
+/// look -- so training on it would teach the table the pruning policy's own
+/// prejudice and then feed that back into the pruning decision.
+fn recordCoreQuietOutcome(
+    heuristics: *ordering.State,
+    value: *const chess.position.Position,
+    winner: chess.move.Move,
+    searched_quiets: []const chess.move.Move,
+    depth: u16,
+    ply: usize,
+    observer: anytype,
+) void {
+    std.debug.assert(!chess.movegen.isCapture(value, winner) and winner.kind() != .promotion);
+    for (searched_quiets) |candidate| {
+        if (candidate.raw() == winner.raw()) continue;
+        heuristics.recordQuietFailure(value.side_to_move, candidate, depth, true);
+        observer.historyPenalty(depth);
+    }
+    heuristics.recordQuietCutoff(value.side_to_move, winner, depth, ply, true);
+    observer.historyReward(depth);
 }
 
 fn containsMove(moves: []const chess.move.Move, needle: chess.move.Move) bool {
