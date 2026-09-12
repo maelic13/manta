@@ -1244,6 +1244,151 @@ does not measure false negatives. Compare elapsed, nodes and NPS separately.
 Register one final 1T gate per retained package after its dependent parts freeze.
 No automatic games or candidate-specific pilot on the unchanged trusted harness.
 
+**Prepared 2026-09-12 at head `df9ba68739f006e6463e8293f1ebc00f43be69b3`.
+This is a worklist, not implementation authorization.** Production remains
+MAN-S34 at `775,451`. Each numbered ticket needs its own approval before its
+first edit; approval of one ticket does not cover the next, and every ticket
+after 10.1 is rebased on whatever is production at that time.
+
+**Current-mechanism inventory.** Read these symbols before any ticket; all are
+in `src/search/baseline.zig` unless noted. The observation types
+`NodeDepthPlan`, `MoveDepthPlan` and `SearchOutcome` in `types.zig` describe
+these decisions today and become the production carrier only in 10.2.
+
+| Mechanism | Present implementation | Ticket that changes it |
+|---|---|---|
+| Mate-distance evidence | `mateDistanceBound` returns `.upper` at `mateIn(ply+1)` or `.lower` at `matedIn(ply)` only when the window already lies outside the reachable band. It sits behind default-off `-Dmate-distance-pruning` (MAN-S32), runs at `ply != 0` after the reached-draw and max-ply exits and before `probeTable`, and its `mate_distance` provenance has no TT, singular or ProbCut authority. The zero-window property test at `baseline.zig:5439` shows crossing equals clamping there, so the crossing-only path differs from a full clamp only in open (PV) windows. | 10.1 |
+| Shallow move omission | `lateMovePruneEligible`, `quietFutilityEligible` and `seePruneEligible` share `shallowMovePruneEligible`: non-PV zero-window ordinary-score node, `search_index != 0`, parent `depth <= 3`, non-pawn material. Thresholds `late_move_base + depth*late_move_depth_scale (+improving bonus)`, `quiet_futility_unit*(depth+1) + trend bonus` and `-see_pruning_unit*depth` all read the **parent** depth. Tests run before `make`; omission commits after `make` only when the move does not give check. | 10.2 B |
+| Late-move reduction | `lateMoveEligible`: depth >= 4, `search_index >= 3`, quiet, not in check, not giving check, not the singular move. `lateMoveReductionWithParams`: `min((depth-3)/3, log2(index+1)-2)` scaled by `lmr_extra_scale = 116`, plus one, capped at `depth-2`. Probe is `reduced(depth-1, r)` on a null window; an alpha rise re-searches at `full_child_depth`; a PV result inside the window then gets the full-window re-search. Rejected MAN-S18 vote layer and MAN-S20 history count stay off. | 10.2 A/C |
+| Ordinals | `search_index` counts selected moves including ones later omitted; `actually_searched_count` increments immediately before recursion and is read only by observation. | 10.2 B |
+| Extensions and IIR | Wrapper `negamax` adds one ply at any in-check node before `negamaxNode`. Singular: depth >= 6, legal ordinary lower/exact TT record with depth >= depth-1, exclusion at `depth-2`, one ply. IIR: PV node, depth >= 5, no TT move, one ply. | Unchanged in 10.2; 10.4 reviews |
+| Aspiration | `AspirationWindow` narrows to one pawn around the previous exact score after two stable populated iterations and doubles to full; `features.aspiration = false` (MAN-R02). `root_reference_width` is frozen from the first finite attempt and recorded in `WindowFacts` with no consumer. | 10.3, conditional |
+
+**6.5.10.1 frozen contract.**
+
+1. Placement is the existing MAN-S32 slot: non-root, after `isSearchDraw`
+   and the max-ply exit, before `probeTable`. Compute `lower = matedIn(ply)`
+   and `upper = mateIn(ply+1)`, then `alpha' = max(alpha, lower)` and
+   `beta' = min(beta, upper)`. When `alpha' >= beta'` return the existing
+   proof; otherwise the node continues with `alpha'/beta'` as its window, so
+   the TT probe, null/ProbCut/static windows, the move loop, the PVS test and
+   the final bound classification all read the narrowed window. Root never
+   narrows; completed-root, aspiration and root-confidence logic are untouched.
+2. Bound authority: a result at or below `alpha'` is `.upper`, at or above
+   `beta'` is `.lower`, between them exact. These remain valid against the
+   caller's wider window because no score reachable from this ply lies in the
+   clipped ranges; that is a SCORE-004 arithmetic property, tested from the
+   rules rather than from the implementation. TT storage keeps the existing
+   `scoreToTable` normalization and format. A checkmated or stalemated node
+   inside a narrowed window still returns within the clipped bounds.
+3. Zero windows are unchanged from MAN-S32 by the existing equivalence
+   property; the new behavior is confined to PV windows: the first ply below
+   root, `pv_research` children and full-window aspiration retries. The
+   default `-Dsearch-evidence-observation=false` arm records nothing; the
+   enabled arm records the narrowed window as the invocation's current width.
+4. Proposed selector, to confirm at ticket start: replace
+   `features.mate_distance_pruning` and `-Dmate-distance-pruning` with
+   `features.mate_windows` and `-Dmate-windows`, default off. The crossing-only
+   arm is removed rather than kept as a third configuration, because ADR-0070
+   states it is not the contract and two default-off mate switches would create
+   an untested combination. MAN-S32 keeps its historical registration. The off
+   arm must reproduce `775,451`, identical PV and results.
+5. Tests, each with an independent oracle: forced mates for both sides at
+   several plies giving identical mate distance and legal PV in both arms;
+   the window property in item 2 over crossing and non-crossing windows,
+   including a PV window that narrows without crossing; a scripted child that
+   confirms the returned bound is valid against the unnarrowed window; mate
+   bounds stored under a narrowed window and read back through the TT; root
+   mate positions (corpus indices 6 and 30) completing with the same best move
+   and score in both arms; terminal nodes inside a narrowed window.
+6. Evidence before games: `zig build search-attribution` and
+   `tools/branching_profile.ps1` over the forty positions in both arms,
+   reporting the full corpus, the ordinary subset and the two mate cases
+   separately, with nodes, elapsed and NPS as separate columns. A mate-cohort
+   saving is expected and is not ordinary-position strength.
+7. Gate: focused tests, off-arm fingerprint, then one registered 1T SPRT of
+   the on arm against this head under the unchanged trusted harness. The
+   candidate takes the next free `MAN-S` identifier when it is frozen; nothing
+   is registered now. 10.2 rebases on the accepted arm either way.
+
+**6.5.10.2 decisions the A design must fix before B is coded.** Astra writes
+them as an ADR-0070 amendment or ADR-0071 and a new requirement; Terra
+implements only after that text exists.
+
+- **Surface inputs and shape.** Active node depth after check/IIR, the
+  selected ordinal, and among existing facts only: the raw improving trend
+  from `ShallowEvidence`, node expectation, legal-TT-move presence,
+  `HistoryConfidence` from live worker-local main/reply/continuation values at
+  the move's depth decision, and the quiet/capture/promotion, evasion and
+  gives-check class. Excluded: paired shadow support, unknown PV origin,
+  copied constants, confidence votes and any target re-search rate. The
+  design states units (plies), rounding, monotone direction and chess rationale
+  per input, at least one ordinary child ply, nonnegative reductions only and
+  probe never deeper than verification.
+- **Prune depth.** `prune_depth = max(0, verification - proposed_reduction)`
+  replaces the parent depth in the LMP, quiet-futility and main-SEE formulas,
+  which keep their MAN-S29 parameters. Today those consumers stop at parent
+  depth 3 and LMR starts at depth 4, so their populations are disjoint. The
+  coupling creates one new population, reduced late quiets at parent depths
+  4 to about 4 plus the reduction, and shrinks the shallow inputs by one ply
+  elsewhere. The design decides whether `shallow_selectivity_max_depth = 3`
+  keeps its value in prune-depth units or is re-derived, and states that this
+  population is the mechanism hypothesis the SPRT tests.
+- **Ordinals and the first-move guard.** Thresholds keep the selected ordinal.
+  The omission guard becomes "at least one legal move actually searched" from
+  `actually_searched_count`, per the ADR-0070 matrix; the design records where
+  this differs from the present `search_index != 0` exemption.
+- **Protections kept exactly.** Promotions, captures beyond the depth input,
+  checking moves, evasions, TT and singular moves, decisive or non-ordinary
+  windows, PV nodes for omission, the first actually searched move and ply
+  capacity. Initial LMR remains ordinary non-checking quiet search.
+- **Requirement amendment.** `SCORE-016` binds base LMR magnitude to nominal
+  depth and ordinal only, and `SCORE-021` freezes the disabled MAN-S20 history
+  count adjustment. Freeze a new `SCORE-033` for the shared surface and plan
+  before B; the new surface supersedes those disabled adjustments rather than
+  stacking on them, and `SCORE-019` stays a rejected contract.
+- **Switch and ablation.** `-Dshared-depth-core`, compile-time, default off
+  until H1; the surface (A), shared prune depth (B) and plan dispatch (C) each
+  remain ablatable for diagnosis. Off arm reproduces `775,451` in default and
+  observation-enabled builds.
+- **C dispatch.** Probe at the plan's probe horizon; an alpha rise verifies at
+  the plan's verification horizon on a null window; a PV result inside the
+  window re-searches full-window at the same verification horizon. Reduced
+  fail-lows keep reduced provenance and `storeTableWithReduction` depth. The
+  plan carries `child_check_extension` and dispatches a `DepthIntent` that
+  already includes it, so the wrapper needs an explicit already-granted input
+  and cannot add the check ply again; depth-zero checking children keep the
+  accepted evasion semantics. Production history updates are unchanged.
+- **D validation.** Both-arm fingerprints (the on arm is a playing candidate),
+  the `search_qualification` canaries, the substrate tests in the enabled
+  observation arm now that plans describe production, `branching_profile.ps1`
+  depth 4 to 10 on the workspace host in both arms for the per-position depth
+  curve, `search-attribution` exclusive work, and re-search, fail-low and
+  omission counts with their eligibility denominators. Report nodes, elapsed
+  and NPS separately. Then one registered 1T SPRT for the package.
+
+**6.5.10.3 entry rule.** Enter only if the accepted 10.2 surface reads a
+window fact: reference width, current width or a width-derived input. If it
+does not, record "deferred: no populated window/depth relation" and do not
+re-run MAN-R02. If it does, the package is the root producer (reference width
+frozen from the first finite attempt, failed-side widening, bounded recovery to
+full) plus that consumer, under a new requirement rather than the archived
+`SCORE-029`, with fail-low/high, unstable-PV, mate/ordinary transition and
+mid-retry cancellation tests and its own 1T SPRT.
+
+**6.5.10.4 disposition rule.** After the 10.2 verdict, review the wrapper
+check extension, singular eligibility and IIR on the actual production head.
+For each, record keep, deferred or a separately bounded candidate, naming the
+decision-level relation that justifies any candidate. MAN-S31, MAN-S33 and
+MAN-S21 are not revived; negative reductions and adaptive verification horizons
+stay excluded. The output is a written disposition in PLAN and ADR-0070.
+
+**Per-ticket verification.** While editing, `zig build check` and the focused
+test root; the deterministic gate is native ReleaseFast `bench 6 1` in each
+arm. Documentation-only edits run `zig build policy` and `git diff --check`;
+the three known bench-reference policy violations remain a separate repair.
+Full suites run before a release, not per ticket.
+
 #### 6.5.11 — Forward proofs matched to the accepted depth policy
 
 **Model:** GPT-6 Astra High. **Dependency:** accepted 10 policy; if rejected,

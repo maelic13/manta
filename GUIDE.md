@@ -39,9 +39,12 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   together with the measured admission profile, which shows the paired relation
   is trained mostly at shallow remaining depth by construction. Default and
   observation-enabled builds keep exact fingerprint parity at `775,451`.
-  Step 6.5.10 is unblocked but still needs its own approval before coding.
   Three pre-existing bench-document policy violations remain; PLAN records the
   separate repair.
+- Step 6.5.10 is prepared, not started. PLAN records the current-mechanism
+  inventory, the frozen contract of each sub-ticket, the decisions its design
+  must fix before coding and each ticket's gate. 6.5.10.1 complete mate
+  windows is next and needs its own approval before its first edit.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
@@ -172,6 +175,16 @@ relationships, reimplemented in original Zig for Manta's contracts.
   High review accepted the authority and lifetime boundaries.
 - [ ] **6.5.10 — Integrated ordering, aspiration and selective depth:** Connect
   mate bounds, root windows, contextual LMR, shallow pruning and forcing depth.
+  Prepared 2026-09-12; each sub-ticket is approved and gated separately.
+  - [ ] **6.5.10.1 — Complete mate windows:** Independent non-root window
+    clamp replacing MAN-S32's crossing-only path; own 1T SPRT.
+  - [ ] **6.5.10.2 — Shared selective-depth core:** A design freeze, B one
+    prune depth for LMP/futility/SEE, C plan-driven dispatch, D validation
+    and one package SPRT.
+  - [ ] **6.5.10.3 — Window-aware aspiration:** Only if the accepted core reads
+    a window fact; otherwise recorded as deferred.
+  - [ ] **6.5.10.4 — Forcing-policy disposition:** Review-only on the accepted
+    head; keep, defer or separately bound each forcing mechanism.
 - [ ] **6.5.11 — Forward proofs matched to the accepted depth policy:** Derive
   repetition bounds, null/verification, ProbCut and singular/razoring policies
   on the accepted head.
