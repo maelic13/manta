@@ -1601,6 +1601,68 @@ moves to ticket E2; F and G are unchanged and still pending.
   `.selective_core = true` to `tests/search_qualification.zig` and re-run the
   per-component localisation table with F included.
 
+**E2 pre-check stop (2026-09-12, Opus).** Ticket E is committed as `fa142fc`
+under its amended gate: both arms compile, the off arm reproduces `642,336`
+with geomean EBF `4.703`, upper median `12,201` and top share `16.1%`, and the
+focused node-pruning tests pass. The two mate-in-two cases in the ticket-D
+substrate test are WAC.001 and its colour mirror; they moved to E2 with a
+comment naming this resolution, and E2 restores them.
+
+E2's mandated pre-check **fails, so implementation stopped before the filter.**
+`seeAtLeast` does not price a quiet move at all. `src/chess/see.zig`'s
+`atLeast` returns `threshold <= 0` for any non-capture non-promotion move
+before it looks at the board:
+
+```zig
+if (!movegen.isCapture(value, chess_move) and chess_move.kind() != .promotion) {
+    return threshold <= 0;
+}
+```
+
+Confirmed on a constructed position rather than by reading alone. With black
+king `g8`, black pawns `d5` and `h3`, white queen `a2` and white king `e1`
+(`6k1/8/8/3p4/8/7p/Q7/4K3 w - - 0 1`), `Qa2-g2+` is a legal quiet check onto a
+square the `h3` pawn attacks, with no defender: the queen simply hangs.
+`seeAtLeast(Qg2, 0)` returns `true`, and so does `seeAtLeast(Qg2, -10000)`.
+The result is independent of the position; only the sign of the threshold
+matters.
+
+ADR-0071 F's filter is therefore a no-op as written. "Search each generated
+check only if its destination is not a losing square (`seeAtLeast(move, 0)`)"
+admits every direct quiet check the new generator produces, including ones
+that drop a queen for a spite check. The component would still be sound -- a
+checking child is an in-check quiescence node with complete evasions, no
+stand-pat and no further check generation, so the extension stays bounded by
+one ply -- but it would carry every hanging check in the position at every
+first-ply quiescence node, which is the cost the filter exists to prevent.
+
+This is a chess-semantics question, so it stops here rather than being resolved
+by choosing a threshold or writing a quiet-move exchange path unasked. Options
+for the review, not ranked:
+
+1. Give `see.atLeast` a real quiet-move path: run the existing exchange
+   sequence on the destination square with an empty initial gain, so a quiet
+   move that hangs its mover prices as the mover's value. This is the faithful
+   reading of "not a losing square" and makes the ADR text work unchanged, but
+   it edits `src/chess/see.zig`, which is outside the files PLAN 6.5.10 lists,
+   and it changes a function every existing consumer shares -- the capture
+   paths would be unaffected by construction, but that is a claim the review
+   should want tested, not assumed.
+2. Filter with a cheaper in-scope predicate: drop a check whose destination is
+   attacked by an enemy pawn, or attacked by anything and undefended, using
+   the attack machinery `movegen` already has. This keeps the change inside
+   the declared files and catches the case that motivated the filter, but it
+   is a different rule from the one the ADR states and needs its own wording.
+3. Drop the filter and search every direct quiet check, relying on the one-ply
+   bound. Simplest and closest to what the classical reference does at its
+   first quiescence ply, but it spends nodes on obviously losing checks and
+   the ADR's cost argument would need restating.
+
+Nothing else in E2 was implemented: `Mode.quiet_checks`, the quiescence ply
+counter and the loop wiring all depend on which of these the review picks,
+because the filter sits inside the same loop. The working tree is clean at
+`fa142fc`; tickets F and G are untouched and still pending.
+
 **6.5.10.3 — Review loop (Fable).** Review the implementation against ADR-0071
 and `SCORE-034`: verification before PV, cutoff, TT or feedback authority;
 provenance and scope through negation; null-verification scope; exclusion-node
