@@ -1151,10 +1151,12 @@ test "a checking move is never omitted and a bad capture outlives the quiet skip
     // checks, and confirm the engine still finds the forced mate that only
     // those checking moves deliver. If a checking move could be omitted by a
     // count or a margin, the mate would disappear.
+    // The two mate-in-two cases that lived here are WAC.001 and its colour
+    // mirror. PLAN 6.5.10.2's review resolution moved that canary to ticket E2:
+    // the mating line runs through a quiet check that only `core_qs_checks`
+    // keeps visible, so it is E2's property, not this test's. E2 restores both.
     const forced = [_]struct { fen: []const u8, distance: i32 }{
         .{ .fen = "r1bq1r2/pp2n3/4N2k/3pPppP/1b1n2Q1/2N5/PP3PP1/R1B1K2R w KQ g6 0 20", .distance = 1 },
-        .{ .fen = "2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1", .distance = 3 },
-        .{ .fen = "r4rk1/ppb4p/2p3q1/2Pp4/3Pn3/1NNQBn1P/PP3PP1/2RR3K b - - 0 1", .distance = 3 },
     };
     for (forced) |case| {
         var root: chess.position.PositionState = .{};

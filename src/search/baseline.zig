@@ -956,7 +956,48 @@ fn negamaxNode(
         hasNonPawnMaterial(value)
     else
         false;
-    if (comptime features.shallow_selectivity and features.reverse_futility) {
+    if (comptime features.coreNodePruning()) {
+        if (coreNodeProofGate(
+            shallow.known,
+            pv_node,
+            value.current.checkers != 0,
+            exclusion_node,
+            shallow_has_non_pawn_material,
+            beta,
+        )) {
+            if (depth <= 8 and shallow.pruning_eval -
+                coreReverseFutilityMargin(context.params, depth, shallow.improving) >= beta)
+            {
+                context.observer.reverseFutility(true);
+                context.observer.prune(.reverse_futility);
+                return resolved(
+                    .{ .raw = beta, .bound = .lower, .provenance = .speculative_cutoff },
+                    active_depth,
+                );
+            }
+            if (depth <= 3 and (score.Score{ .raw_value = alpha_initial }).isOrdinary() and
+                shallow.pruning_eval + coreRazoringMargin(depth) <= alpha_initial)
+            {
+                context.observer.razoring(true);
+                context.observer.prune(.razoring);
+                return resolvedFromObserved(try quiescence(
+                    features,
+                    context,
+                    value,
+                    binding,
+                    control,
+                    ply,
+                    alpha_initial,
+                    beta,
+                    expectation,
+                    node_scope,
+                ), active_depth);
+            }
+        }
+    }
+    if (comptime features.shallow_selectivity and features.reverse_futility and
+        !features.coreNodePruning())
+    {
         if (shallow.known and reverseFutilityEligible(
             features,
             depth,
@@ -977,7 +1018,9 @@ fn negamaxNode(
             }
         }
     }
-    if (comptime features.shallow_selectivity and features.razoring) {
+    if (comptime features.shallow_selectivity and features.razoring and
+        !features.coreNodePruning())
+    {
         if (shallow.known and razoringEligible(
             features,
             depth,
@@ -1013,18 +1056,33 @@ fn negamaxNode(
             if (shallow.known) shallow.pruning_eval else binding.evaluate(value).raw()
         else
             binding.evaluate(value).raw();
-        const null_reduction: u16 = if (comptime features.main_selectivity_sync and
-            features.dynamic_null_move)
+        const null_reduction: u16 = if (comptime features.coreNodePruning())
+            coreNullReduction(depth, null_eval, beta)
+        else if (comptime features.main_selectivity_sync and features.dynamic_null_move)
             if (depth >= null_move_min_depth)
                 dynamicNullMoveReduction(depth, null_eval, beta)
             else
                 fixed_null_move_reduction
         else
             fixed_null_move_reduction;
-        if (!pv_node and beta == alpha_initial + 1 and depth > null_reduction + 1 and
-            value.current.checkers == 0 and !after_null and beta_score.isOrdinary() and
-            hasNonPawnMaterial(value) and null_eval >= beta)
-        {
+        // ADR-0071 D. The core drops the accepted zero-window and
+        // depth-versus-reduction guards: the probe depth saturates to a
+        // quiescence probe instead, and the window terms move into the shared
+        // node-proof gate. Every legality condition is unchanged.
+        const null_eligible = if (comptime features.coreNodePruning())
+            coreNodeProofGate(
+                shallow.known,
+                pv_node,
+                value.current.checkers != 0,
+                exclusion_node,
+                hasNonPawnMaterial(value),
+                beta,
+            ) and depth >= 3 and !after_null and null_eval >= beta
+        else
+            !pv_node and beta == alpha_initial + 1 and depth > null_reduction + 1 and
+                value.current.checkers == 0 and !after_null and beta_score.isOrdinary() and
+                hasNonPawnMaterial(value) and null_eval >= beta;
+        if (null_eligible) {
             context.observer.nullMoveAttempt();
             if (comptime features.main_selectivity_sync and features.dynamic_null_move)
                 context.observer.nullMoveReduction(null_reduction);
@@ -1051,10 +1109,28 @@ fn negamaxNode(
                 unmakeNull(value, binding);
                 return err;
             };
-            const null_value = negated(child);
+            const raw_null = negated(child);
+            // ADR-0071 D. A mate score out of a null search proves nothing
+            // about a real line, so it is worth beta and no more. The clamp is
+            // one-sided on purpose: capping a mate AGAINST the side to move
+            // would turn "passing here loses immediately" into a fail-high.
+            const null_value = if (raw_null.raw > beta and
+                (score.Score{ .raw_value = raw_null.raw }).isMate())
+                NodeValue{ .raw = beta, .bound = raw_null.bound, .provenance = raw_null.provenance }
+            else
+                raw_null;
             unmakeNull(value, binding);
             if ((null_value.bound == .lower or null_value.bound == .exact) and null_value.raw >= beta) {
                 context.observer.nullMoveFailHigh();
+                if (comptime features.coreNodePruning()) {
+                    if (depth < core_null_verification_depth) {
+                        context.observer.prune(.null_move);
+                        const cutoff = NodeValue{ .raw = beta, .bound = .lower, .provenance = .null_move };
+                        if (!exclusion_node)
+                            storeTable(context, value.current.key, .none, cutoff, tableStaticEval(features, shallow), depth, ply);
+                        return resolved(cutoff, active_depth);
+                    }
+                }
                 const saved_static_eval = context.thread.static_evals[ply];
                 const verification = negamax(
                     features,
@@ -3958,6 +4034,11 @@ fn internalIterativeReductionEligible(
     // A cut node needs two additional plies: its null-window result is useful
     // only when a missing TT move makes ordering uncertainty material.
     if (ply == 0 or in_check or has_tt_move or exclusion_node) return false;
+    // ADR-0071 D retires the PV-only rule: a node without a legal TT move has
+    // no ordering evidence whatever its expectation, and spending a ply to
+    // build some is worth the same everywhere. The root keeps its nominal
+    // depth because the completed-iteration contract is stated in it.
+    if (comptime features.coreNodePruning()) return depth >= 4;
     if (expectation == .principal) return depth >= 5;
     return features.depth_authority_sync and features.iir_cut_expectation and
         expectation == .cut and depth >= 7;
@@ -4474,6 +4555,57 @@ fn speculativeStoreValue(result: NodeValue, pruned_late_move: bool) NodeValue {
     if (!pruned_late_move or result.bound != .upper) return result;
     return .{ .raw = result.raw, .bound = result.bound, .provenance = .reduced_search };
 }
+
+/// ADR-0071 D. One gate for every node-level forward proof. Each of them
+/// replaces a real search with a claim about the static evaluation, so all of
+/// them need a static evaluation, a window they can price in centipawns, a
+/// position where a quiet move cannot reverse the verdict, and a node that is
+/// not carrying the answer. An exclusion search is excluded outright: it exists
+/// to prove something about one move and manufactures no reusable authority.
+fn coreNodeProofGate(
+    static_known: bool,
+    pv_node: bool,
+    in_check: bool,
+    exclusion_node: bool,
+    has_non_pawn_material: bool,
+    beta: i32,
+) bool {
+    return static_known and !pv_node and !in_check and !exclusion_node and
+        has_non_pawn_material and (score.Score{ .raw_value = beta }).isOrdinary();
+}
+
+/// ADR-0071 D. The accepted margin fires only at depth one; the core extends
+/// the same claim to depth eight and widens it when the line is not improving,
+/// because a falling evaluation makes a static claim about the future less
+/// trustworthy and should cost more to act on.
+fn coreReverseFutilityMargin(search_params: params.Values, depth: u16, improving: bool) i32 {
+    const plies: i32 = @intCast(depth);
+    const base = search_params.reverse_futility_margin * plies;
+    return base + if (improving) 0 else 50 * plies;
+}
+
+/// ADR-0071 D. A node this far below alpha at this depth is claimed not to
+/// reach it with quiet play, so the tactical answer quiescence already gives is
+/// accepted instead of a full search.
+fn coreRazoringMargin(depth: u16) i32 {
+    return 200 * @as(i32, @intCast(depth));
+}
+
+/// ADR-0071 D. The reduction grows with depth and with how far the static
+/// evaluation already exceeds beta: both raise the confidence that the side to
+/// move can give up a tempo and still be winning. The `min(3, ...)` keeps a
+/// huge evaluation from collapsing the probe to nothing on its own.
+fn coreNullReduction(depth: u16, pruning_eval: i32, beta: i32) u16 {
+    const margin_term: i32 = @min(3, @divTrunc(pruning_eval - beta, 200));
+    const reduction: i32 = 3 + @as(i32, @intCast(depth / 4)) + @max(@as(i32, 0), margin_term);
+    return @intCast(reduction);
+}
+
+/// Below this depth a null fail-high is trusted on its own; at or above it the
+/// existing same-node real-move verification decides. Verifying every fail-high
+/// costs a second search at almost the same depth, and the accepted head's own
+/// diagnostics recorded it confirming `99.91%` of them.
+const core_null_verification_depth: u16 = 10;
 
 fn reverseFutilityEligible(
     comptime features: types.Features,
