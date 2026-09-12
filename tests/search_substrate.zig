@@ -962,6 +962,148 @@ test "check extension is independently ablatable and preserves legal evasion pub
     try std.testing.expect(chess.state.isConsistent(&disabled_position));
 }
 
+const core_features = search.types.Features{ .selective_core = true };
+
+/// Positions with quiet middlegame structure, a tactical shot, an endgame and
+/// a check, so a core-arm search has to exercise every exemption.
+const core_positions = [_][]const u8{
+    chess.fen.start_position,
+    "r2qr1k1/p4ppp/1pn1bn2/2b1p3/4P3/1BN1BN2/PPP2PPP/R2QR1K1 b - - 6 10",
+    "3r1rk1/1ppb1pb1/p2npqnp/P5p1/3P4/1BN1BN1P/1PP2PP1/3RQR1K w - - 3 10",
+    "2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1",
+    "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+    "4k3/8/8/8/8/8/4R3/4K3 b - - 0 1",
+};
+
+test "every core reduction probe is either accepted as a fail-low or verified" {
+    // ADR-0071 B's authority rule, as an accounting property rather than an
+    // assertion about any one node: a reduced probe leaves exactly two exits,
+    // and the counters are incremented on those two exits only. If a probe
+    // could reach PV, cutoff or feedback authority without a full-horizon
+    // re-search, some probe would leave through a third exit and the totals
+    // would not reconcile.
+    for (core_positions) |fen_text| {
+        var root: chess.position.PositionState = .{};
+        var position = try chess.fen.parse(fen_text, &root);
+        const original_key = position.current.key;
+        var harness: Harness = .{};
+        var storage: [8192]search.tt.Cluster = undefined;
+        var table = search.tt.Table.init(&storage);
+        var ordering: search.ordering.State = .{};
+        var counters: search.diagnostics.Counters = .{};
+        var control: search.types.NeverStop = .{};
+        const result = search.baseline.runWithFeatures(
+            core_features,
+            &position,
+            harness.binding(),
+            .{ .depth = 7 },
+            &control,
+            &harness.thread,
+            &table,
+            &ordering,
+            &counters,
+        );
+        try std.testing.expectEqual(
+            counters.lmr_probes,
+            counters.lmr_researches + counters.lmr_accepted,
+        );
+        // The package is only useful if it actually probes.
+        if (std.mem.eql(u8, fen_text, chess.fen.start_position))
+            try std.testing.expect(counters.lmr_probes > 0);
+        try expectLegalPv(fen_text, result.completed.?.pv.slice());
+        try std.testing.expect(chess.state.isConsistent(&position));
+        try std.testing.expectEqual(original_key, position.current.key);
+    }
+}
+
+test "the core arm keeps legal results, restored roots and terminal precedence" {
+    // Deep reductions may reach quiescence, so the whole package is re-checked
+    // against the rules rather than against the accepted tree: every published
+    // line is sequentially legal from its own root, the root is restored
+    // exactly, and a terminal position is still decided by the rules of chess
+    // before any selectivity runs.
+    for (core_positions) |fen_text| {
+        var root: chess.position.PositionState = .{};
+        var position = try chess.fen.parse(fen_text, &root);
+        const original_key = position.current.key;
+        var harness: Harness = .{};
+        var storage: [8192]search.tt.Cluster = undefined;
+        var table = search.tt.Table.init(&storage);
+        var ordering: search.ordering.State = .{};
+        var counters: search.diagnostics.Counters = .{};
+        var control: search.types.NeverStop = .{};
+        const result = search.baseline.runWithFeatures(
+            core_features,
+            &position,
+            harness.binding(),
+            .{ .depth = 8 },
+            &control,
+            &harness.thread,
+            &table,
+            &ordering,
+            &counters,
+        );
+        try expectLegalPv(fen_text, result.completed.?.pv.slice());
+        try std.testing.expect(result.best_move != null);
+        try std.testing.expect(chess.movegen.isLegal(&position, result.best_move.?));
+        try std.testing.expect(chess.state.isConsistent(&position));
+        try std.testing.expectEqual(original_key, position.current.key);
+        try std.testing.expect(result.evidence.value.isValid());
+    }
+
+    // Terminal roots keep their rule-derived verdict under the core.
+    const terminal = [_]struct { fen: []const u8, expected: manta.score.Score }{
+        .{ .fen = "7k/6Q1/5K2/8/8/8/8/8 b - - 0 1", .expected = manta.score.Score.matedIn(0).? },
+        .{ .fen = "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", .expected = .zero },
+    };
+    for (terminal) |case| {
+        var root: chess.position.PositionState = .{};
+        var position = try chess.fen.parse(case.fen, &root);
+        var harness: Harness = .{};
+        var counters: search.diagnostics.Counters = .{};
+        var control: search.types.NeverStop = .{};
+        const result = search.baseline.runWithFeatures(
+            core_features,
+            &position,
+            harness.binding(),
+            .{ .depth = 6 },
+            &control,
+            &harness.thread,
+            null,
+            null,
+            &counters,
+        );
+        try std.testing.expectEqual(case.expected, result.evidence.value);
+        try std.testing.expectEqual(search.types.Termination.terminal, result.termination);
+    }
+}
+
+test "a zero core reduction searches as the ordinary scout" {
+    // ADR-0071 B: a zero reduction is not a probe. A node whose every eligible
+    // move is protected hard enough to clamp the surface to zero must produce
+    // no probe and no re-search at all, which is what distinguishes "reduce by
+    // nothing" from "reduce and verify".
+    var root: chess.position.PositionState = .{};
+    var position = try chess.fen.parse(chess.fen.start_position, &root);
+    var harness: Harness = .{};
+    var counters: search.diagnostics.Counters = .{};
+    var control: search.types.NeverStop = .{};
+    // Depth one cannot satisfy the depth-two floor, so nothing is eligible.
+    _ = search.baseline.runWithFeatures(
+        core_features,
+        &position,
+        harness.binding(),
+        .{ .depth = 1 },
+        &control,
+        &harness.thread,
+        null,
+        null,
+        &counters,
+    );
+    try std.testing.expectEqual(@as(u64, 0), counters.lmr_probes);
+    try std.testing.expectEqual(@as(u64, 0), counters.lmr_researches);
+}
+
 test "mate windows are behavior-identical wherever no mate score enters the window" {
     // The clip removes only scores outside [matedIn(ply), mateIn(ply + 1)], so
     // on searches that never produce a mate score it must change nothing at

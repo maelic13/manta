@@ -1493,6 +1493,22 @@ fn negamaxNode(
                 };
         }
         const move_source = selection.source;
+        // ADR-0071 B's `stat`. Delayed quiets carry the value they were ranked
+        // with; a TT or killer quiet was never ranked by history, so its value
+        // is read on demand from the same composite the picker would use.
+        const core_stat: i32 = if (comptime features.selective_core) stat: {
+            if (!quiet) break :stat 0;
+            const heuristics = context.heuristics orelse break :stat 0;
+            if (move_source == .quiet_history) break :stat selection.history;
+            break :stat ordering.quietHistoryValue(
+                heuristics,
+                value,
+                chess_move,
+                context.params,
+                reply_context,
+                continuation_contexts,
+            );
+        } else 0;
         const history_confident = if (comptime features.history_lmr)
             if (quiet)
                 if (context.heuristics) |heuristics|
@@ -1719,18 +1735,44 @@ fn negamaxNode(
         var lmr_full_depth_fail_low = false;
         var lmr_researched = false;
         if (singular) context.observer.extension(.singular);
-        const reduce = !singular and shouldReduceLateMove(
-            features,
-            depth,
-            search_index,
-            quiet,
-            in_check,
-            value.current.checkers != 0,
-            history_confident,
-        );
+        const core_reduction_plies: u16 = if (comptime features.coreLmr()) plies: {
+            if (!coreReductionEligible(
+                depth,
+                search_index,
+                in_check,
+                gives_check,
+                singular,
+                quiet,
+                is_capture and !is_promotion and move_source == .bad_tactical,
+            )) break :plies 0;
+            break :plies coreReduction(.{
+                .depth = depth,
+                .search_index = search_index,
+                .pv_node = pv_node,
+                .cut_node = expectation == .cut,
+                .improving = shallow.known and shallow.improving,
+                .has_tt_move = table_evidence.chess_move != null,
+                .stat = core_stat,
+                .root = ply == 0,
+            }, full_child_depth.searched());
+        } else 0;
+        // A zero reduction is the ordinary scout: it takes the unreduced path
+        // below and therefore never asks for a verification it does not need.
+        const reduce = if (comptime features.coreLmr())
+            core_reduction_plies > 0
+        else
+            !singular and shouldReduceLateMove(
+                features,
+                depth,
+                search_index,
+                quiet,
+                in_check,
+                value.current.checkers != 0,
+                history_confident,
+            );
         actually_searched_count += 1;
         if (reduce) {
-            reduction = synchronizedLateMoveReduction(
+            reduction = if (comptime features.coreLmr()) core_reduction_plies else synchronizedLateMoveReduction(
                 features,
                 context.params,
                 depth,
@@ -4018,6 +4060,98 @@ test "singular separation gives bounded extension and searched multi-cut authori
     ));
 }
 
+/// ADR-0071 B. One reduction surface for the whole core, in 1024ths of a ply.
+///
+/// The accepted MAN-S13 surface takes the minimum of a linear depth band and a
+/// logarithmic move band, which caps the whole thing at four plies however deep
+/// the search runs. The core replaces it with a product of logarithms: each
+/// doubling of the remaining depth and each doubling of the searched prefix
+/// multiply the confidence that a late quiet will not matter, rather than one
+/// merely licensing what the other already allowed. That product is what makes
+/// the tree narrow with depth instead of widening.
+///
+/// `0.625` is the floor in plies for the earliest reducible move at the
+/// shallowest reducible depth, and `2.4` sets how fast the product grows. Both
+/// are Manta seeds to be fitted in Step 6.5.11, not imported constants.
+const core_reduction_table = build: {
+    @setEvalBranchQuota(200_000);
+    var table: [64][64]i32 = undefined;
+    for (0..64) |d| {
+        for (0..64) |m| {
+            const log_depth: f64 = if (d < 1) 0 else @log(@as(f64, @floatFromInt(d)));
+            const log_move: f64 = if (m < 1) 0 else @log(@as(f64, @floatFromInt(m)));
+            const plies = 0.625 + log_depth * log_move / 2.4;
+            table[d][m] = @intFromFloat(1024.0 * plies);
+        }
+    }
+    break :build table;
+};
+
+/// Everything the surface reads. Named rather than positional because the
+/// pre-make pruning estimate in ADR-0071 C evaluates the same surface with one
+/// input deliberately different, and a positional call would hide that.
+const CoreReductionInputs = struct {
+    depth: u16,
+    search_index: usize,
+    pv_node: bool,
+    cut_node: bool,
+    improving: bool,
+    has_tt_move: bool,
+    /// Composite quiet history for this move, clamped to the table range.
+    stat: i32,
+    root: bool,
+};
+
+/// Reduction in 1024ths before the clamp. Signed: a principal node with strong
+/// history can drive this below zero, which the caller reads as "do not reduce".
+fn coreReductionUnits(inputs: CoreReductionInputs) i32 {
+    var units: i32 = core_reduction_table[@min(inputs.depth, 63)][@min(inputs.search_index, 63)];
+    // A principal node carries the answer and must not lose it to a probe; a
+    // node that is not principal is expected to be refuted, not explored.
+    units += if (inputs.pv_node) -1024 else 1024;
+    // A rising static evaluation means this line is working, so spend on it.
+    if (inputs.improving) units -= 1024;
+    // A cut node expects one move to refute it; the rest are noise.
+    if (inputs.cut_node) units += 768;
+    // A present TT move that already failed to cut makes late alternatives
+    // weaker still, but only once the early alternatives have also failed.
+    if (inputs.has_tt_move and inputs.search_index >= 4) units += 512;
+    // History is the only per-move evidence about a quiet's quality. The clamp
+    // bounds this term to about two plies in either direction.
+    units -= @divTrunc(std.math.clamp(inputs.stat, -history_stat_limit, history_stat_limit) * 1024, 8192);
+    // The root chooses the move that gets played; it may not be guessed at.
+    if (inputs.root) units -= 1024;
+    return units;
+}
+
+const history_stat_limit: i32 = 16 * 1024;
+
+/// Plies, clamped to `[0, new_depth]`. Reaching `new_depth` sends the probe
+/// into quiescence through the existing depth-zero dispatch, which is the
+/// largest single lever in the package and is deliberate.
+fn coreReduction(inputs: CoreReductionInputs, new_depth: u16) u16 {
+    const units = coreReductionUnits(inputs);
+    if (units < 1024) return 0;
+    const plies = @divFloor(units, 1024);
+    return @intCast(@min(plies, @as(i32, new_depth)));
+}
+
+/// Legality and class exemptions, evaluated identically before and after
+/// `make`; only `gives_check` differs, and ADR-0071 C states that difference.
+fn coreReductionEligible(
+    depth: u16,
+    search_index: usize,
+    in_check: bool,
+    gives_check: bool,
+    singular: bool,
+    quiet_non_promotion: bool,
+    losing_capture: bool,
+) bool {
+    if (depth < 2 or search_index < 2) return false;
+    if (in_check or gives_check or singular) return false;
+    return quiet_non_promotion or losing_capture;
+}
+
 fn shouldReduceLateMove(
     comptime features: types.Features,
     depth: u16,
@@ -5671,6 +5805,156 @@ test "a zero window is clipped exactly as the crossing test decided it" {
             }
         }
     }
+}
+
+test "the core reduction table grows with both of its arguments" {
+    // ADR-0071 B's surface is a product of logarithms, so it must be
+    // non-decreasing in depth at fixed move index and in move index at fixed
+    // depth, and strictly increasing once both arguments leave one. The oracle
+    // is that monotonicity statement, re-derived here rather than read off the
+    // table: a surface that ever reduced LESS at greater depth would make a
+    // refutation unattributable between regions.
+    for (2..64) |m| {
+        var previous = core_reduction_table[1][m];
+        for (2..64) |d| {
+            const current = core_reduction_table[d][m];
+            try std.testing.expect(current >= previous);
+            previous = current;
+        }
+    }
+    for (2..64) |d| {
+        var previous = core_reduction_table[d][1];
+        for (2..64) |m| {
+            const current = core_reduction_table[d][m];
+            try std.testing.expect(current >= previous);
+            previous = current;
+        }
+    }
+    // ln(1) is zero, so the whole first row and column sit on the floor.
+    try std.testing.expectEqual(@as(i32, 640), core_reduction_table[1][1]);
+    try std.testing.expectEqual(@as(i32, 640), core_reduction_table[63][1]);
+    try std.testing.expectEqual(@as(i32, 640), core_reduction_table[1][63]);
+    try std.testing.expect(core_reduction_table[63][63] > core_reduction_table[8][8]);
+    try std.testing.expect(core_reduction_table[8][8] > core_reduction_table[4][4]);
+}
+
+test "each core reduction adjustment moves in the direction it argues for" {
+    // One input changes at a time against a fixed reference, so each assertion
+    // is about that term alone. The directions come from ADR-0071 B's stated
+    // rationale, not from the arithmetic: principal nodes and improving lines
+    // keep depth, cut nodes and stale TT alternatives lose it, good history
+    // protects a move, and the root is never guessed at.
+    const reference = CoreReductionInputs{
+        .depth = 8,
+        .search_index = 6,
+        .pv_node = false,
+        .cut_node = false,
+        .improving = false,
+        .has_tt_move = false,
+        .stat = 0,
+        .root = false,
+    };
+    const base = coreReductionUnits(reference);
+
+    var principal = reference;
+    principal.pv_node = true;
+    try std.testing.expectEqual(base - 2048, coreReductionUnits(principal));
+
+    var improving = reference;
+    improving.improving = true;
+    try std.testing.expectEqual(base - 1024, coreReductionUnits(improving));
+
+    var cut = reference;
+    cut.cut_node = true;
+    try std.testing.expectEqual(base + 768, coreReductionUnits(cut));
+
+    var tt_late = reference;
+    tt_late.has_tt_move = true;
+    try std.testing.expectEqual(base + 512, coreReductionUnits(tt_late));
+
+    // The TT term is deliberately silent until the early alternatives failed.
+    var tt_early = reference;
+    tt_early.has_tt_move = true;
+    tt_early.search_index = 3;
+    var early = reference;
+    early.search_index = 3;
+    try std.testing.expectEqual(coreReductionUnits(early), coreReductionUnits(tt_early));
+
+    var loved = reference;
+    loved.stat = history_stat_limit;
+    try std.testing.expectEqual(base - 2048, coreReductionUnits(loved));
+
+    var hated = reference;
+    hated.stat = -history_stat_limit;
+    try std.testing.expectEqual(base + 2048, coreReductionUnits(hated));
+
+    // History beyond the table range cannot buy more than the clamp allows.
+    var absurd = reference;
+    absurd.stat = 64 * history_stat_limit;
+    try std.testing.expectEqual(coreReductionUnits(loved), coreReductionUnits(absurd));
+
+    var root = reference;
+    root.root = true;
+    try std.testing.expectEqual(base - 1024, coreReductionUnits(root));
+}
+
+test "a core reduction never leaves its own child depth" {
+    // The clamp is the safety property: a probe may run in quiescence but may
+    // never ask for a negative depth, and it may never exceed the depth the
+    // move would otherwise have been searched at.
+    for (2..40) |depth| {
+        for (2..40) |index| {
+            for ([_]i32{ -history_stat_limit, -4000, 0, 4000, history_stat_limit }) |stat| {
+                inline for (.{ true, false }) |pv| {
+                    const new_depth: u16 = @intCast(depth - 1);
+                    const reduction = coreReduction(.{
+                        .depth = @intCast(depth),
+                        .search_index = index,
+                        .pv_node = pv,
+                        .cut_node = !pv,
+                        .improving = false,
+                        .has_tt_move = true,
+                        .stat = stat,
+                        .root = false,
+                    }, new_depth);
+                    try std.testing.expect(reduction <= new_depth);
+                }
+            }
+        }
+    }
+    // A strongly protected principal move at a shallow node is not reduced.
+    try std.testing.expectEqual(@as(u16, 0), coreReduction(.{
+        .depth = 2,
+        .search_index = 2,
+        .pv_node = true,
+        .cut_node = false,
+        .improving = true,
+        .has_tt_move = false,
+        .stat = history_stat_limit,
+        .root = true,
+    }, 1));
+}
+
+test "core reduction eligibility keeps every legality exemption" {
+    // ADR-0071 B and SCORE-034: nothing is reduced in check, when the move
+    // gives check, for a promotion, for a good capture, for the singular move
+    // or before the third selected move. Each case flips exactly one input.
+    const eligible = coreReductionEligible(8, 2, false, false, false, true, false);
+    try std.testing.expect(eligible);
+    // The first two selected moves.
+    try std.testing.expect(!coreReductionEligible(8, 0, false, false, false, true, false));
+    try std.testing.expect(!coreReductionEligible(8, 1, false, false, false, true, false));
+    // Depth floor.
+    try std.testing.expect(!coreReductionEligible(1, 9, false, false, false, true, false));
+    // In check, giving check, singular.
+    try std.testing.expect(!coreReductionEligible(8, 9, true, false, false, true, false));
+    try std.testing.expect(!coreReductionEligible(8, 9, false, true, false, true, false));
+    try std.testing.expect(!coreReductionEligible(8, 9, false, false, true, true, false));
+    // Neither a quiet non-promotion nor a losing capture: promotions and good
+    // captures reach neither argument and are therefore never reduced.
+    try std.testing.expect(!coreReductionEligible(8, 9, false, false, false, false, false));
+    // A losing capture is reducible on its own.
+    try std.testing.expect(coreReductionEligible(8, 9, false, false, false, false, true));
 }
 
 test "mate-distance evidence never acquires ordinary search authority" {

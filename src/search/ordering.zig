@@ -551,6 +551,11 @@ pub const Selection = struct {
     chess_move: chess.move.Move,
     source: Source,
     index: usize,
+    /// The composite quiet-history value this move was ranked with, captured
+    /// at selection. Zero for every source that does not rank by history; a
+    /// consumer that needs the value for a TT or killer quiet asks
+    /// `quietHistoryValue` on demand.
+    history: i32,
 };
 
 /// Allocation-free incremental selection over one generated move list. Each
@@ -631,6 +636,7 @@ pub const Picker = struct {
             .chess_move = selected_move,
             .source = selected_rank.source,
             .index = self.cursor,
+            .history = selected_rank.history,
         };
         self.cursor += 1;
         return result;
@@ -863,19 +869,35 @@ fn rank(
     }
     return .{
         .source = .quiet_history,
-        .history = if (state) |active| history: {
-            const main: i32 = active.quiet_history[value.side_to_move.index()][chess_move.from().index()][chess_move.to().index()];
-            const contextual: i32 = if (reply) |active_reply|
-                weightedHistory(active.replyScore(value, active_reply, chess_move), search_params.reply_history_weight)
-            else
-                0;
-            const continuation = weightedHistory(
-                active.continuationTotal(value, continuations, chess_move),
-                search_params.continuation_history_weight,
-            );
-            break :history main + contextual + continuation;
-        } else 0,
+        .history = if (state) |active|
+            quietHistoryValue(active, value, chess_move, search_params, reply, continuations)
+        else
+            0,
     };
+}
+
+/// The composite the picker ranks quiets by: main history plus the weighted
+/// reply and continuation contributions. ADR-0071 B reads the same number as
+/// the reduction surface's per-move evidence, so ranking and reduction cannot
+/// disagree about what the tables say for a move.
+pub fn quietHistoryValue(
+    state: *const State,
+    value: *const chess.position.Position,
+    chess_move: chess.move.Move,
+    search_params: params.Values,
+    reply: ?ReplyContext,
+    continuations: ContinuationSet,
+) i32 {
+    const main: i32 = state.quiet_history[value.side_to_move.index()][chess_move.from().index()][chess_move.to().index()];
+    const contextual: i32 = if (reply) |active_reply|
+        weightedHistory(state.replyScore(value, active_reply, chess_move), search_params.reply_history_weight)
+    else
+        0;
+    const continuation = weightedHistory(
+        state.continuationTotal(value, continuations, chess_move),
+        search_params.continuation_history_weight,
+    );
+    return main + contextual + continuation;
 }
 
 fn weightedHistory(value: i32, weight: i32) i32 {
