@@ -44,9 +44,11 @@ The private table adds memory only while bench runs, and ordinary search hot
 paths gain no allocation, I/O, lock or runtime indirection.
 
 The presentation amendment changes no bench input or search behavior. The
-accepted MAN-S34 depth-six total remains `775,451`, with geomean EBF `4.821`,
+accepted MAN-S34 depth-six total was `775,451`, with geomean EBF `4.821`,
 upper median `12,447` nodes and maximum-position share `16.9%` (`130,895`
-nodes). Wall time and NPS remain run-specific diagnostics.
+nodes). Step 6.5.10.1's accepted MAN-S35 mate windows later moved the
+production total to `642,336`, geomean EBF `4.703`, upper median `12,201` and
+share `16.1%` (`103,615`). Wall time and NPS remain run-specific diagnostics.
 
 ## Verification
 

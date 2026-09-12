@@ -59,8 +59,8 @@ pub fn build(b: *std.Build) void {
     const mate_windows = b.option(
         bool,
         "mate-windows",
-        "Enable the Step-6.5.10.1 complete mate-window candidate in this build",
-    ) orelse false;
+        "Keep accepted Step-6.5.10.1 mate windows (false reconstructs the superseded MAN-S32 tree)",
+    ) orelse true;
     const singular_exclusion_horizon = b.option(
         bool,
         "singular-exclusion-horizon",

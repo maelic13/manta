@@ -102,8 +102,8 @@
     -NonrootCheckExtension:$false for the archived MAN-S31 candidate.
 
 .PARAMETER MateWindows
-    Build the Step-6.5.10.1 complete mate-window candidate arm. It defaults
-    off; the production arm omits the switch.
+    Keep the accepted Step-6.5.10.1 MAN-S35 mate windows. Pass
+    -MateWindows:$false to reconstruct the superseded MAN-S32 tree.
 
 .PARAMETER SingularExclusionHorizon
     Build the default-off Step-6.5.5 singular-exclusion-horizon candidate arm.
@@ -182,6 +182,12 @@ if ($BenchDepth -lt 1) { throw "-BenchDepth must be positive." }
 
 $nonrootCheckExtensionEnabled = if ($PSBoundParameters.ContainsKey("NonrootCheckExtension")) {
     [bool]$NonrootCheckExtension
+} else {
+    $true
+}
+
+$mateWindowsEnabled = if ($PSBoundParameters.ContainsKey("MateWindows")) {
+    [bool]$MateWindows
 } else {
     $true
 }
@@ -310,11 +316,12 @@ try {
     $buildArgs += "-Dlive-history-staging=$liveHistoryStagingText"
     $nonrootCheckExtensionText = $nonrootCheckExtensionEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dnonroot-check-extension=$nonrootCheckExtensionText"
-    if ($MateWindows) { $buildArgs += "-Dmate-windows=true" }
+    $mateWindowsText = $mateWindowsEnabled.ToString().ToLowerInvariant()
+    $buildArgs += "-Dmate-windows=$mateWindowsText"
     if ($SingularExclusionHorizon) { $buildArgs += "-Dsingular-exclusion-horizon=true" }
     $qsearchTacticalGenerationText = $qsearchTacticalGenerationEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dqsearch-tactical-generation=$qsearchTacticalGenerationText"
-    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($MateWindows) { '-mate-windows' } else { '' })$(if ($SingularExclusionHorizon) { '-singular-exclusion-horizon' } else { '' })$(if ($qsearchTacticalGenerationEnabled) { '-qsearch-tacticals' } else { '-full-qsearch-generation' })"
+    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($mateWindowsEnabled) { '' } else { '-crossing-mate-test' })$(if ($SingularExclusionHorizon) { '-singular-exclusion-horizon' } else { '' })$(if ($qsearchTacticalGenerationEnabled) { '-qsearch-tacticals' } else { '-full-qsearch-generation' })"
 
     Write-Host ""
     Write-Host "Building Manta ($flavor) - suffix: $Suffix"
@@ -349,7 +356,7 @@ try {
         -StabilityAspiration ([bool]$StabilityAspiration) `
         -LiveHistoryStaging $liveHistoryStagingEnabled `
         -NonrootCheckExtension $nonrootCheckExtensionEnabled `
-        -MateWindows ([bool]$MateWindows) `
+        -MateWindows $mateWindowsEnabled `
         -SingularExclusionHorizon ([bool]$SingularExclusionHorizon) `
         -QsearchTacticalGeneration $qsearchTacticalGenerationEnabled -SkipBench:$BuildOnly
     Write-Host ""

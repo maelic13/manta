@@ -38,7 +38,8 @@ run directories.
 | SMP | MAN-R03 main-authoritative lazy SMP | 4T versus 1T accepted H1 after 194 games at `+187.72 +/- 48.89` nElo; ADR-0064 |
 | Move ordering | MAN-S30 live-history staged picker | Accepted H1 over MAN-S29 after 8,752 games at `+13.19 +/- 7.28` nElo; ADR-0035 |
 | Qsearch generation | MAN-S34 tactical-only non-check generation | Accepted H1 over MAN-S30 after 1,614 games at `+59.77 +/- 16.95` nElo without anomaly; ADR-0069 |
-| Deterministic identity | One-thread depth-6 bench | `775,451` nodes |
+| Mate windows | MAN-S35 complete non-root window clip | Neutral registered gate stopped at 1,998 games (`+4.00 +/- 9.32` Elo); production by documented maintainer exception, not H1 |
+| Deterministic identity | One-thread depth-6 bench | `642,336` nodes |
 
 These measurements establish promotion decisions under their registered
 conditions. Small decisive samples, especially cumulative and 4T-versus-1T
@@ -69,6 +70,7 @@ Raw cumulative evidence is retained under
 | `MAN-T05` | Complete six-coordinate integrated time-management fit |
 | `MAN-S30` | Live-history staged move picker |
 | `MAN-S34` | Tactical-only non-check qsearch generation with a complete legal terminal witness |
+| `MAN-S35` | Complete non-root mate windows, retained by maintainer exception on a neutral gate |
 
 Acceptance of a bundle does not establish that every included term helped.
 Frozen baselines exist only for reconstruction and do not remain runtime
@@ -102,7 +104,23 @@ ordinary non-check qsearch nodes and generates the disjoint quiet subset solely
 when needed to distinguish quiet mobility from stalemate. The trusted harness
 boundary was unchanged, so setup-only validation replaced a pilot.
 
-`MAN-S35` is registered and **not yet run**. Step 6.5.10.1 replaced `MAN-S32`'s
+`MAN-S35` is production **by an explicit maintainer exception on a neutral gate,
+not by an H1 verdict**. The registered `[1,5]` SPRT was stopped by the maintainer
+at 1,998 games with W/L/D `484/461/1053`, `+4.00 +/- 9.32` Elo
+(`+6.54 +/- 15.23` nElo), LLR `0.23`, seed `1079633543`, and no anomaly of any
+kind. The interval straddles zero: this is a neutral result, marginally positive
+at the point estimate, and it proves neither a gain nor equivalence.
+
+The maintainer retained the mechanism on judgment, for stated reasons: the result
+is neutral to slightly positive, and the change completes a previously functional
+feature rather than adding a speculative one. The gate design was also wrong for
+the hypothesis -- gainer bounds were registered for a mechanism whose own pre-game
+evidence predicted no ordinary-position gain, and a non-regression design should
+have been chosen prospectively. **This exception is recorded, not precedent.** It
+was the maintainer's decision and does not authorize promoting any future neutral
+or H0 candidate; the standing rule that only H1 promotes is unchanged.
+
+Step 6.5.10.1 replaced `MAN-S32`'s
 crossing-only mate test with a complete non-root window clip (`SCORE-033`); the
 `MAN-S32` switch is removed rather than kept beside it, and ADR-0067's retention
 decision is superseded. Pre-game diagnostics on the designated 5950X, measured
@@ -115,10 +133,9 @@ is noise-dominated -- repeated depth-10 runs gave baseline `11,709 / 12,787 /
 12,156` ms against candidate `12,541 / 12,360 / 12,389` ms -- so no throughput
 change is claimed. The off arm reproduces `775,451`; the on arm's bench-6
 fingerprint is `642,336`, replacing `MAN-S32`'s `642,394`. None of this is
-strength evidence: the registered 1T SPRT below decides the candidate, and a
-mate-cohort node saving is not ordinary-position strength. Both arms are built
-and the harness preflight has passed; PLAN carries the binary hashes, run
-command, budget and stop rule.
+strength evidence, and a mate-cohort node saving is not ordinary-position
+strength. Production moved from `775,451` to `642,336`; switching the mechanism
+off reconstructs the superseded tree exactly.
 
 MAN-S30 accepted H1 and remains production. MAN-S31 was **rejected by
 maintainer judgment**, not formal H0, after 7,958 games at
@@ -147,7 +164,7 @@ their original step labels; new numbered work lives in PLAN.
 
 | ID | Candidate and hypothesis | Registered gate | Result |
 |---|---|---|---|
-| `MAN-S35` | Phase-6.5.10.1 complete non-root mate windows against production MAN-S34. Searching every non-root node with its window clipped to the mate distances the rules still allow, rather than only returning when the requested window already lies outside them, will avoid work on unreachable scores without changing any chess verdict. | Candidate A enables only `-Dmate-windows=true`; 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed recorded at launch; completed time forfeits and every engine/protocol/affinity fault are fatal; setup-only preflight passed, no pilot | Registered and preflighted, not yet run |
+| `MAN-S35` | Phase-6.5.10.1 complete non-root mate windows against production MAN-S34. Searching every non-root node with its window clipped to the mate distances the rules still allow, rather than only returning when the requested window already lies outside them, will avoid work on unreachable scores without changing any chess verdict. | Candidate A enables only `-Dmate-windows=true`; 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed recorded at launch; completed time forfeits and every engine/protocol/affinity fault are fatal; setup-only preflight passed, no pilot | Maintainer stopped at 1,998 games, W/L/D `484/461/1053`, `+4.00 +/- 9.32` Elo (`+6.54 +/- 15.23` nElo), LLR `0.23`, seed `1079633543`, no anomaly; neutral, neither H0 nor H1. Retained in production by explicit documented maintainer exception, not by the gate |
 | `MAN-S34` | Phase-6.5.7 exact tactical-only non-check qsearch generation against production MAN-S30. Removing quiet generation/ranking that qsearch cannot consume will increase throughput without changing the searched tree or chess evidence. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `751289825`; completed time forfeits and every engine/protocol/affinity fault are fatal | Accepted H1 after 1,614 games at `+59.77 +/- 16.95` nElo (`+40.00 +/- 11.45` Elo, LLR `2.95`); no anomaly; promoted to production |
 | `MAN-S33` | Phase-6.5.5 half-depth singular exclusion horizon against production MAN-S30. A bounded shallower same-position proof will preserve useful singular decisions while spending less work on alternatives. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `1844484847` | Maintainer stopped inconclusive; supplied 6,640-game snapshot `+1.24 +/- 8.36` nElo, LLR `-0.39`; unpromoted, final artifacts pending reconciliation |
 | `MAN-S31` | Phase-6.5.3 non-root blanket check-extension ablation against production MAN-S30. Spending one extra ply at every checked interior node costs more time than its tactical protection earns. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `6533108` | Rejected by maintainer judgment after 7,958 games at `-3.08 +/- 7.63` nElo, LLR `-1.60`; candidate archived; production check extension stays on; new-policy review belongs to Step 6.5.10 |

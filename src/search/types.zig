@@ -684,15 +684,16 @@ pub const Features = struct {
     continuation_distance_2: bool = true,
     continuation_distance_4: bool = true,
     continuation_distance_6: bool = true,
-    /// Step-6.5.10.1 complete mate-window playing candidate, default off until
-    /// its gate. Every non-root main-search node clips its own window to the
-    /// band the rules of chess still allow at that ply, `[matedIn(ply),
-    /// mateIn(ply + 1)]`. A window that no longer holds a reachable score
-    /// returns the proven bound; otherwise the clipped window is the one the
-    /// table probe, forward proofs, move loop and bound classification read.
-    /// This supersedes `MAN-S32`, whose crossing-only path tightened nothing
-    /// in an open window.
-    mate_windows: bool = false,
+    /// Accepted Step-6.5.10.1 `MAN-S35` production policy. Every non-root
+    /// main-search node clips its own window to the band the rules of chess
+    /// still allow at that ply, `[matedIn(ply), mateIn(ply + 1)]`. A window
+    /// that no longer holds a reachable score returns the proven bound;
+    /// otherwise the clipped window is the one the table probe, forward
+    /// proofs, move loop and bound classification read. This supersedes
+    /// `MAN-S32`, whose crossing-only path tightened nothing in an open
+    /// window. Switching it off reconstructs that superseded tree at
+    /// fingerprint `775,451` for archived diagnostics.
+    mate_windows: bool = true,
     /// Step-6.5.5 singular-exclusion-horizon candidate. The same-position
     /// search still excludes exactly the legal ordinary TT move and alone
     /// decides whether that move extends; this switch only replaces the
@@ -814,6 +815,10 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     // since MAN-S22 froze this ledger, so its promotion is asserted here.
     try std.testing.expect(features.live_history_staging);
     try std.testing.expect(features.qsearch_tactical_generation);
+    // Step 6.5.10.1 is the accepted head's second tree-changing default. It was
+    // promoted on a neutral registered gate by explicit maintainer exception,
+    // so its default-on state is asserted rather than inferred.
+    try std.testing.expect(features.mate_windows);
     try std.testing.expect(features.shallow_selectivity);
     try std.testing.expect(features.reverse_futility);
     try std.testing.expect(features.quiet_futility);
@@ -830,7 +835,6 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     try std.testing.expect(!features.balanced_history);
     try std.testing.expect(!features.history_lmr);
     try std.testing.expect(!features.lmr_reply_feedback);
-    try std.testing.expect(!features.mate_windows);
     try std.testing.expect(!features.singular_exclusion_horizon);
     try std.testing.expect(!features.main_selectivity_sync);
     try std.testing.expect(!features.depth_authority_sync);

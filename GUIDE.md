@@ -13,9 +13,9 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   pre-NNUE performance Phase 6.5 is current; Phase 7 remains blocked until the
   whole Phase 6.5 candidate and evidence sequence is complete.
 - Production is the MAN-E19 HCE, MAN-S29 search fit, MAN-T05 clock fit,
-  MAN-S30 live-history move ordering and MAN-S34 tactical-only non-check
-  qsearch generation. The deterministic one-thread depth-6 fingerprint remains
-  `775,451` nodes.
+  MAN-S30 live-history move ordering, MAN-S34 tactical-only non-check qsearch
+  generation and MAN-S35 complete mate windows. The deterministic one-thread
+  depth-6 fingerprint is `642,336` nodes.
 - Step 6.5.4 is complete. On the designated 5950X the six-cell board ratio is
   `0.638`; depth 13 hit the frozen mate-position timeout, and routine bench 13
   exceeded 30 seconds. These are open deficits, not accepted targets.
@@ -41,19 +41,18 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   observation-enabled builds keep exact fingerprint parity at `775,451`.
   The repository policy gate passes again after the separate bench-document
   repair of 2026-09-12.
-- Step 6.5.10 is open. PLAN records the current-mechanism inventory, the frozen
-  contract of each sub-ticket, the decisions its design must fix before coding
-  and each ticket's gate. 6.5.10.1 is implemented and frozen as `MAN-S35`:
-  every non-root node now searches its window clipped to the mate distances the
-  rules still allow, `SCORE-033` owns the mechanism, and MAN-S32's crossing-only
-  switch is removed. The off arm reproduces `775,451` and the on arm records
-  `642,336`. The corpus saving is concentrated in the two mate positions
-  (`-88.5%` at depth 10) while the ordinary 38-position subset moves `+0.21%`
-  there and ordinary elapsed time is noise-dominated, so nothing about strength
-  is claimed yet. Both `MAN-S35` arms are built and the harness setup-only
-  preflight has passed; the ticket closes on the maintainer-run registered 1T
-  SPRT whose identities, command, budget and stop rule PLAN records.
-  6.5.10.2 needs its own approval before its first edit.
+- Step 6.5.10 is open and 6.5.10.1 is complete. `MAN-S35` is production: every
+  non-root node searches its window clipped to the mate distances the rules
+  still allow, `SCORE-033` owns the mechanism, and MAN-S32's crossing-only
+  switch is removed. Its registered `[1,5]` gate was neutral -- maintainer
+  stopped at 1,998 games, `+4.00 +/- 9.32` Elo, LLR `0.23`, no anomaly -- and
+  the mechanism was retained by an explicit documented maintainer exception,
+  not by an H1 verdict. That exception is recorded in `EXPERIMENTS.md` and is
+  not precedent for any other candidate. The corpus saving is concentrated in
+  the two mate positions (`-88.5%` at depth 10); the ordinary 38-position
+  subset moved `+0.21%` and ordinary elapsed time was noise-dominated, so no
+  ordinary-position strength is claimed. 6.5.10.2 needs its own approval
+  before its first edit.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
@@ -185,9 +184,9 @@ relationships, reimplemented in original Zig for Manta's contracts.
 - [ ] **6.5.10 — Integrated ordering, aspiration and selective depth:** Connect
   mate bounds, root windows, contextual LMR, shallow pruning and forcing depth.
   Prepared 2026-09-12; each sub-ticket is approved and gated separately.
-  - [ ] **6.5.10.1 — Complete mate windows:** Implemented and frozen as
-    `MAN-S35`; non-root window clip replacing MAN-S32's crossing-only path.
-    Awaiting its registered 1T SPRT.
+  - [x] **6.5.10.1 — Complete mate windows:** `MAN-S35` non-root window clip
+    replacing MAN-S32's crossing-only path; production at `642,336` on a
+    neutral gate by documented maintainer exception.
   - [ ] **6.5.10.2 — Shared selective-depth core:** A design freeze, B one
     prune depth for LMP/futility/SEE, C plan-driven dispatch, D validation
     and one package SPRT.

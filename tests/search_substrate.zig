@@ -966,7 +966,9 @@ test "mate windows are behavior-identical wherever no mate score enters the wind
     // The clip removes only scores outside [matedIn(ply), mateIn(ply + 1)], so
     // on searches that never produce a mate score it must change nothing at
     // all. Equal node counts and an equal published PV are the oracle; a
-    // candidate that moved either would be clipping reachable scores.
+    // production head that moved either would be clipping reachable scores.
+    // Production carries the clip and the ablated arm is the superseded
+    // crossing-only tree, so the comparison runs the other way round now.
     const quiet = [_][]const u8{
         chess.fen.start_position,
         "r2qr1k1/p4ppp/1pn1bn2/2b1p3/4P3/1BN1BN2/PPP2PPP/R2QR1K1 b - - 6 10",
@@ -1002,8 +1004,8 @@ test "mate windows are behavior-identical wherever no mate score enters the wind
             &baseline_ordering,
             &baseline_counters,
         );
-        const candidate = search.baseline.runWithFeatures(
-            .{ .mate_windows = true },
+        const ablated = search.baseline.runWithFeatures(
+            .{ .mate_windows = false },
             &candidate_position,
             candidate_harness.binding(),
             .{ .depth = 6 },
@@ -1015,17 +1017,17 @@ test "mate windows are behavior-identical wherever no mate score enters the wind
         );
 
         try std.testing.expect(production.evidence.value.mateDistance() == null);
-        try std.testing.expectEqual(production.nodes, candidate.nodes);
-        try std.testing.expectEqual(production.evidence, candidate.evidence);
-        try std.testing.expectEqual(production.best_move.?, candidate.best_move.?);
+        try std.testing.expectEqual(production.nodes, ablated.nodes);
+        try std.testing.expectEqual(production.evidence, ablated.evidence);
+        try std.testing.expectEqual(production.best_move.?, ablated.best_move.?);
         try std.testing.expectEqualSlices(
             chess.move.Move,
             production.completed.?.pv.slice(),
-            candidate.completed.?.pv.slice(),
+            ablated.completed.?.pv.slice(),
         );
         try std.testing.expectEqual(
             @as(u64, 0),
-            candidate_counters.outcomes_by_producer[@intFromEnum(search.types.Provenance.mate_distance)],
+            baseline_counters.outcomes_by_producer[@intFromEnum(search.types.Provenance.mate_distance)],
         );
     }
 }
@@ -1096,6 +1098,7 @@ test "the corpus mate positions complete identically in both arms" {
     // change would be mistaken for general strength. Index 6 is a proven mate
     // at this depth and index 30 is not, and both must complete with the same
     // best move, score and published line under either arm.
+    // Production carries the clip; the compared arm is the superseded tree.
     const corpus = [_][]const u8{
         "r1bq1r2/pp2n3/4N2k/3pPppP/1b1n2Q1/2N5/PP3PP1/R1B1K2R w KQ g6 0 20",
         "1Q4bk/3R2pp/p7/3p3P/1p6/1B6/P2q1PP1/6K1 w - - 2 17",
@@ -1130,7 +1133,7 @@ test "the corpus mate positions complete identically in both arms" {
             &baseline_counters,
         );
         const candidate = search.baseline.runWithFeatures(
-            .{ .mate_windows = true },
+            .{ .mate_windows = false },
             &candidate_position,
             candidate_harness.binding(),
             .{ .depth = 6 },
@@ -1170,7 +1173,7 @@ test "mate evidence stored under a clipped window survives the table round trip"
         var expected_control: search.types.NeverStop = .{};
         var expected_counters: search.diagnostics.Counters = .{};
         const expected = search.baseline.runWithFeatures(
-            .{},
+            .{ .mate_windows = false },
             &expected_position,
             expected_harness.binding(),
             .{ .depth = 6 },
@@ -1191,7 +1194,7 @@ test "mate evidence stored under a clipped window survives the table round trip"
             var counters: search.diagnostics.Counters = .{};
             var control: search.types.NeverStop = .{};
             const result = search.baseline.runWithFeatures(
-                .{ .mate_windows = true },
+                .{},
                 &position,
                 harness.binding(),
                 .{ .depth = 6 },
