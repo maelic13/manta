@@ -28,6 +28,13 @@ run directories.
 - Do not repeat a rejected mechanism without the recorded trigger or genuinely
   new evidence.
 
+Measured games end only by the rules of chess. ADR-0071 removed resignation,
+draw-after-N-moves and move-cap adjudication from every harness on 2026-09-12.
+Every verdict recorded above and below that date was measured under the
+superseded `strength-v1` or `strength-v2` profile; those conditions stay as
+recorded and are **not comparable** with any later result. The instrument owes
+one identical-binary calibration before the next registered candidate.
+
 ## Manta 1 production state
 
 | Area | Released state | Evidence |

@@ -8,9 +8,11 @@
     budget. Real-time output is printed to the console. A budget-exhausted test
     has not accepted H1 and therefore cannot promote the candidate.
 
-    This is the Rarog harness ported to Manta, deliberately unchanged in every
-    measurement-affecting respect (book, adjudication, TC, affinity contract,
-    nElo model) so the two engines' ledgers stay comparable. Manta-specific
+    This is the Rarog harness ported to Manta. It was originally unchanged in
+    every measurement-affecting respect so the two ledgers stayed comparable;
+    Manta has since removed adjudication entirely (see GAME END below), which
+    is a deliberate divergence and breaks comparability with any adjudicated
+    ledger, Manta's own pre-2026-09-12 results included. Other Manta-specific
     differences are limited to:
       - the provenance sidecar records `zig` instead of `rustc`;
       - `option.Threads` is sent only if the engine actually advertises it
@@ -43,6 +45,14 @@
         in substantially fewer games, and it is large enough that opening reuse
         never correlates pairs. Legacy PGN books still work via -Book (format
         auto-detected from the extension).
+      - GAME END: no adjudication of any kind. No resignation threshold, no
+        draw-after-N-moves rule, no move cap. A game ends only by the rules of
+        chess: checkmate, stalemate, fifty-move, threefold repetition or
+        insufficient material. An adjudicator is a second, unvalidated engine
+        judging the one under test, and it truncates precisely the conversion,
+        fortress and mating phases where engines differ. Games are longer and
+        the draw rate is higher than any adjudicated ledger, so results are not
+        comparable across that boundary.
       - AFFINITY: fastchess before 1.7.0 did not correctly apply Windows
         process affinity, and 1.8.0 auto-topology guesses SMT siblings from
         alternating logical CPU IDs. This harness requires >=1.7.0, discovers
@@ -58,7 +68,7 @@
       not derive concurrency or affinity from logical-CPU numbering.
 
     CALIBRATION CHECK - run after a relevant runner, scheduler, topology,
-    placement, TC, book, adjudication, OS or hardware change:
+    placement, TC, book, game-end policy, OS or hardware change:
         ./tools/sprt.ps1 `
             -EngineA "tools\test_engines\manta-null.exe" `
             -EngineB "tools\test_engines\manta-null.exe" `
@@ -189,8 +199,8 @@ param(
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "harness_common.ps1")
 
-$strengthProfile = Get-StrengthTestProfile
-$resignArgs = @(Get-StrengthTestResignArgs)
+$gameEndProfile = Get-GameEndProfile
+$gameEndArgs = @(Get-GameEndArgs)
 
 # Per-engine Threads resolve to $Threads unless overridden. The game slot must
 # hold the larger of the two, so the core arithmetic uses max(ThreadsA,ThreadsB).
@@ -445,7 +455,8 @@ if (-not $repoSha) { $repoSha = "n/a" } else { $repoSha = $repoSha.Trim() }
     "test_design:     $(if ($Mode -eq 'calibrate') { "fixed ${Games}-game null; tolerance +/-${CalibrationTolerance} nElo" } elseif ($Mode -eq 'fixed') { "fixed ${Games}-game match; no stop rule" } else { "SPRT elo0=$Elo0 elo1=$Elo1 alpha=$Alpha beta=$Beta model=normalized" })"
     "game_budget:     $(if ($Mode -eq 'calibrate' -or $Mode -eq 'fixed') { $Games } else { $MaxGames })"
     "time_control:    $tcLabel; timemargin=${TimeMargin}ms"
-    "adjudication:    $($strengthProfile.Name); resign=$($strengthProfile.ResignScore)/$($strengthProfile.ResignMoveCount)$(if ($strengthProfile.ResignTwoSided) { ' two-sided' } else { ' one-sided' }); draw=$($strengthProfile.DrawScore)/$($strengthProfile.DrawMoveCount) from move $($strengthProfile.DrawMoveNumber)"
+    "game_end:        $($gameEndProfile.Name); $($gameEndProfile.Description)"
+    "adjudication:    none"
     "hash_mb:         $Hash"
     "threads:         $(if (-not ($supportsThreadsA -and $supportsThreadsB)) { 'option not advertised; not sent' } elseif ($ThreadsA -eq $ThreadsB) { $ThreadsA } else { "$NameA=$ThreadsA $NameB=$ThreadsB" })"
     "concurrency:     $Concurrency"
@@ -477,7 +488,7 @@ if ($Mode -eq "calibrate") {
     Write-Host "  Budget: $MaxGames games; no H1 at the cap means park/revert"
 }
 Write-Host "  TC: $tcLabel   Margin: ${TimeMargin} ms   Hash: ${Hash} MB   Conc: $Concurrency"
-Write-Host "  Adjudication: resign $($strengthProfile.ResignScore)/$($strengthProfile.ResignMoveCount)$(if ($strengthProfile.ResignTwoSided) { ' two-sided' } else { ' one-sided' }); profile $($strengthProfile.Name)"
+Write-Host "  Game end: no adjudication; chess rules only (profile $($gameEndProfile.Name))"
 Write-Host "  CPUs: $AffinityCpus"
 Write-Host "  Book: $(Split-Path $Book -Leaf)"
 Write-Host "  Runner: $($fcInfo.Text)"
@@ -504,7 +515,7 @@ $sprtArgs = if ($Mode -eq "calibrate" -or $Mode -eq "fixed") {
 }
 
 # Console-noise filter: the per-game 'Started game ...' / normal 'Finished game
-# ... {Draw/wins by adjudication}' / 'Score of ...' lines bury the periodic
+# ... {Draw by threefold repetition}' / 'Score of ...' lines bury the periodic
 # Elo/LLR report blocks. So: TEE the FULL stream to $logOut (nothing lost), and
 # on the CONSOLE keep everything EXCEPT that per-game noise. Keep-by-default is
 # deliberate — report blocks, errors, and any time-loss / disconnect / illegal
@@ -530,8 +541,7 @@ $dropNoise = {
     -srand $Seed `
     -ratinginterval 20 `
     @sprtArgs `
-    -draw "movenumber=$($strengthProfile.DrawMoveNumber)" "movecount=$($strengthProfile.DrawMoveCount)" "score=$($strengthProfile.DrawScore)" `
-    @resignArgs `
+    @gameEndArgs `
     -pgnout "file=$pgnOut" `
     -output format=fastchess 2>&1 |
     Tee-Object -FilePath $logOut |

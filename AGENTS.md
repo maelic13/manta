@@ -168,11 +168,19 @@ verdict. Do not overlap it with data generation or other timed work on that
 machine.
 
 The Rarog/Basilisk-derived fastchess SPRT harness, its 5950X placement, book,
-time control, adjudication and anomaly checks are battle-tested and trusted.
-Do not require a pilot before an ordinary Manta SPRT while those boundaries are
-unchanged. Reuse retained rate/storage evidence and proceed directly from a
-successful setup-only check to the registered final SPRT. A pilot is warranted
-only when an operational boundary changes and specifically needs qualification.
+time control and anomaly checks are battle-tested and trusted. Do not require a
+pilot before an ordinary Manta SPRT while those boundaries are unchanged. Reuse
+retained rate/storage evidence and proceed directly from a successful setup-only
+check to the registered final SPRT. A pilot is warranted only when an
+operational boundary changes and specifically needs qualification.
+
+Measured games end only by the rules of chess. ADR-0071 removed adjudication
+from every harness: no resignation threshold, no draw-after-N-moves rule, no
+move cap, for SPRT, SPSA and data generation alike. Never reintroduce one, and
+never propose an adjudication profile to make a run cheaper. That change is an
+operational boundary change, so the instrument owes one identical-binary
+calibration before the next registered candidate, and results measured before
+it are not comparable with results measured after it.
 
 Use the harness and SPSA tooling that `EXPERIMENTS.md` and `PLAN.md` name as
 current. Do not substitute a parked or unqualified harness silently.

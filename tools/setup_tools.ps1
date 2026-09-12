@@ -238,11 +238,12 @@ if (Test-Path $wfCute) {
     }
 }
 
-# PATCH 3 — NO ADJUDICATION. The 2026-09-01 Rarog harness revision removed
-# both weather-factory defaults. Draw adjudication truncates conversion/endgame
-# time, while conservative resignation saves little. A clock tune must sample
-# natural termination and actual clock demand. Never apply this patch to an
-# in-progress run; spsa.ps1 permits old state to finish under its original rule.
+# PATCH 3 — NO ADJUDICATION. Manta runs no adjudication anywhere: only the
+# rules of chess end a measured game (harness_common.ps1, Get-GameEndProfile).
+# Draw adjudication truncates conversion and endgame time, conservative
+# resignation saves little, and both put a second unvalidated engine in
+# judgment on the one under test. Never apply this patch to an in-progress
+# run; spsa.ps1 permits old state to finish under its original rule.
 if (Test-Path $wfCute) {
     $a = Get-Content $wfCute -Raw
     if ($a -match 'MANTA_ADJUDICATION_PATCH_V4') {

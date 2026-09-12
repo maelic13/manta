@@ -65,16 +65,15 @@ function Get-TextLineCount([string]$Path) {
     }
 }
 
+# Training labels come from played chess, not from an adjudicator's opinion.
+# Resignation and draw thresholds would delete exactly the conversion and
+# fortress positions a network most needs to learn, and a move cap would label
+# long technical wins as draws. Games end only by the rules of chess.
 function Get-DatagenProfile {
     [pscustomobject]@{
-        Name = "datagen-v1"
-        DrawMoveNumber = 40
-        DrawMoveCount = 8
-        DrawScore = 10
-        ResignMoveCount = 3
-        ResignScore = 600
-        ResignTwoSided = $true
-        MaxMoves = 200
+        Name        = "datagen-v2"
+        Adjudicated = $false
+        Description = "chess rules only: mate, stalemate, fifty-move, threefold, insufficient material"
     }
 }
 
@@ -184,9 +183,6 @@ try {
         '-srand', "$Seed",
         '-rounds', "$Rounds", '-games', '1',
         '-concurrency', "$Concurrency",
-        '-draw', "movenumber=$($profile.DrawMoveNumber)", "movecount=$($profile.DrawMoveCount)", "score=$($profile.DrawScore)",
-        '-resign', "movecount=$($profile.ResignMoveCount)", "score=$($profile.ResignScore)", 'twosided=true',
-        '-maxmoves', "$($profile.MaxMoves)",
         '-pgnout', "file=$OutputPgn", 'append=false',
         '-output', 'format=fastchess'
     )
@@ -261,7 +257,8 @@ try {
         effective_threads = 1
         threads_option_sent = $false
         concurrency = $Concurrency
-        adjudication = $profile
+        game_end = $profile
+        adjudication = "none"
         fastchess = [ordered]@{ version = $fastchessInfo.Text; sha256 = $fastchessHash }
         output = [ordered]@{ path = $OutputPgn; bytes = $pgnBytes; sha256 = $pgnHash }
     }
