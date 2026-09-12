@@ -1334,7 +1334,7 @@ read rather than the width requested. `MAN-S32`'s crossing-only arm is gone,
 ADR-0067's retention decision is marked superseded, and `SCORE-033` owns the
 mechanism.
 
-Gates that ran on this workstation. Focused and full `zig build test` pass,
+Gates that ran on the designated 5950X. Focused and full `zig build test` pass,
 including the rewritten band/clip properties, zero-window equivalence, both-side
 mate distance, terminal precedence, clipped-window table round trip and corpus
 mate-position identity. Native ReleaseFast `bench 6 1` reproduces `775,451` in
@@ -1365,7 +1365,7 @@ subset the effect is within half a percent at every depth, positive at depth 10,
 and only 13 of 38 ordinary positions change at all -- those whose trees contain
 a mate score somewhere. Two of them move substantially in opposite directions
 (position 33 `-25.2%`, position 38 `+33.2%`), which is legal window-dependent
-behavior, not a saving. Ordinary elapsed time is noise-dominated here: the
+behavior, not a saving. Ordinary elapsed time is noise-dominated: the
 in-process sweep read `-2.95%` at depth 10 while the first cross-engine run read
 `+7.11%`, and repeated depth-10 runs gave baseline `11,709 / 12,787 / 12,156` ms
 against candidate `12,541 / 12,360 / 12,389` ms, so the candidate's spread lies

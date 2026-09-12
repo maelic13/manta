@@ -105,8 +105,8 @@ boundary was unchanged, so setup-only validation replaced a pilot.
 `MAN-S35` is registered and **not yet run**. Step 6.5.10.1 replaced `MAN-S32`'s
 crossing-only mate test with a complete non-root window clip (`SCORE-033`); the
 `MAN-S32` switch is removed rather than kept beside it, and ADR-0067's retention
-decision is superseded. Pre-game diagnostics on the development workstation,
-measured twice through independent harnesses with identical node counts: the
+decision is superseded. Pre-game diagnostics on the designated 5950X, measured
+twice through independent harnesses with identical node counts: the
 depth-4..10 corpus total falls `41.9%` at depth 10, but the ordinary 38-position
 subset moves by at most `1.81%` at any depth and by `+0.21%` at depth 10, while
 the two mate positions fall `88.5%`. Only 13 of 38 ordinary positions change at
