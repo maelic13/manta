@@ -84,6 +84,47 @@ pub const SearchProgress = union(enum) {
     },
 };
 
+/// One completed bench position, on its way from the worker to the presenter.
+pub const BenchProgress = struct {
+    index: u16 = 0,
+    record: bench.PositionRecord = .{},
+};
+
+/// Bounded worker-to-controller bench progress. Unlike `ProgressSlot` this one
+/// never coalesces: a bench line is a running report of distinct positions
+/// rather than a superseding sample of one search, so dropping an entry would
+/// lose a row of the report. The corpus is a fixed size and one pass fills the
+/// queue at most once, so `offer` cannot fail in practice; it still reports
+/// failure rather than overwriting.
+pub const BenchProgressQueue = struct {
+    mutex: std.Io.Mutex = .init,
+    entries: [bench.position_count]BenchProgress = @splat(.{}),
+    count: usize = 0,
+
+    pub fn offer(self: *BenchProgressQueue, io: std.Io, entry: BenchProgress) bool {
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
+        if (self.count == self.entries.len) return false;
+        const needs_wake = self.count == 0;
+        self.entries[self.count] = entry;
+        self.count += 1;
+        return needs_wake;
+    }
+
+    /// Moves every queued entry to the caller and empties the queue.
+    pub fn take(self: *BenchProgressQueue, io: std.Io, out: []BenchProgress) usize {
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
+        const taken = @min(out.len, self.count);
+        @memcpy(out[0..taken], self.entries[0..taken]);
+        const remaining = self.count - taken;
+        if (remaining != 0)
+            std.mem.copyForwards(BenchProgress, self.entries[0..remaining], self.entries[taken..self.count]);
+        self.count = remaining;
+        return taken;
+    }
+};
+
 /// One bounded coalescible worker-to-controller information slot. Search
 /// completion has its separate non-droppable event and is never stored here.
 pub const ProgressSlot = struct {
@@ -173,6 +214,10 @@ pub const Active = struct {
     aggregate_nodes: std.atomic.Value(u64) = .init(0),
     controller_wake: *std.Io.Semaphore,
     progress: ProgressSlot = .{},
+    bench_progress: BenchProgressQueue = .{},
+    /// Set once the presenter has emitted the blank line that opens a streamed
+    /// bench report, so the summary block does not repeat it.
+    bench_header_published: bool = false,
     last_published_iteration_nodes: ?u64 = null,
     ponder_completion_waiting: bool = false,
     /// Controller-owned storage keeps this event alive until every persistent
@@ -919,14 +964,32 @@ fn runBench(active: *Active, spec: bench.Spec) void {
     const Control = struct {
         cancel_epoch: *const std.atomic.Value(u64),
         epoch: u64,
+        active: *Active,
+        stream: bool,
 
         pub fn shouldStop(self: *@This()) bool {
             return self.cancel_epoch.load(.acquire) == self.epoch;
         }
+
+        /// Per-position feedback while the corpus runs. Only the single-pass
+        /// report has per-position lines, so a repeats run streams nothing and
+        /// its output is unchanged.
+        pub fn benchPosition(self: *@This(), index: usize, record: bench.PositionRecord) void {
+            if (!self.stream) return;
+            if (self.active.bench_progress.offer(self.active.io, .{
+                .index = @intCast(index),
+                .record = record,
+            })) self.active.controller_wake.post(self.active.io);
+        }
     };
 
     var clock = Clock{ .io = active.io };
-    var control = Control{ .cancel_epoch = active.cancel_epoch, .epoch = active.epoch };
+    var control = Control{
+        .cancel_epoch = active.cancel_epoch,
+        .epoch = active.epoch,
+        .active = active,
+        .stream = spec.repeats == 1,
+    };
     active.completion = .{ .bench = bench.run(
         spec,
         &clock,

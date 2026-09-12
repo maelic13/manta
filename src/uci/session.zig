@@ -1014,7 +1014,41 @@ fn isWaitingPonder(active: *const Runtime.Active, shared: *const Shared) bool {
     return isPonderJob(active.job) and shared.ponderhit_epoch.load(.acquire) != active.epoch;
 }
 
+/// Emits each completed bench position as soon as the worker reports it.
+/// A long bench is otherwise silent for its whole run, which gives the user no
+/// way to tell a slow corpus from a hung engine.
+fn drainBenchProgress(shared: *Shared, active: *Runtime.Active) void {
+    var entries: [engine.bench.position_count]Runtime.BenchProgress = undefined;
+    const taken = active.bench_progress.take(shared.io, &entries);
+    if (taken == 0) return;
+    // The blank line opens the report and belongs before the first row, not
+    // after the last one; the summary block below knows not to repeat it.
+    if (!active.bench_header_published) {
+        if (!offerText(shared, "")) return;
+        active.bench_header_published = true;
+    }
+    for (entries[0..taken]) |entry| {
+        const ebf = fixedDecimal(engine.bench.positionEbfCenti(entry.record), 2);
+        if (!offerLine(shared, lineFmt(
+            "bench {d}/40  depth {d}  score {d}  nodes {d}  ebf {s}  time {d}ms  nps {d}",
+            .{
+                entry.index + 1,
+                entry.record.completed_depth,
+                entry.record.score,
+                entry.record.nodes,
+                ebf.slice(),
+                entry.record.time_ms,
+                engine.bench.nps(entry.record.nodes, entry.record.time_ms),
+            },
+        ))) return;
+    }
+}
+
 fn drainSearchProgress(shared: *Shared, active: *Runtime.Active) void {
+    if (active.job == .bench) {
+        drainBenchProgress(shared, active);
+        return;
+    }
     const progress = active.progress.take(shared.io) orelse return;
     const spec = switch (active.job) {
         .normal => |normal| normal,
@@ -1054,6 +1088,9 @@ fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
     if (!active.done.isSet()) active.done.waitUncancelable(shared.io);
     if (publish) drainSearchProgress(shared, active) else _ = active.progress.take(shared.io);
     const last_published_iteration_nodes = active.last_published_iteration_nodes;
+    // `finish` releases the active job, so anything the presenter still needs
+    // from it is captured first.
+    const bench_header_published = active.bench_header_published;
     const finished = Runtime.finish(state, shared.io);
     switch (finished.job) {
         .bench => {
@@ -1080,7 +1117,7 @@ fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
             },
             .perft => |divide| publishPerft(shared, finished.job.perft, divide),
             .perft_failed => _ = offerText(shared, "info string failed go: perft failed"),
-            .bench => |report| publishBench(shared, report),
+            .bench => |report| publishBench(shared, bench_header_published, report),
         }
     }
     shared.active_epoch.store(0, .release);
@@ -1123,7 +1160,7 @@ fn publishFinalSearchInfoIfNeeded(
     active.last_published_iteration_nodes = result.nodes;
 }
 
-fn publishBench(shared: *Shared, report: engine.bench.Report) void {
+fn publishBench(shared: *Shared, header_published: bool, report: engine.bench.Report) void {
     if (report.failed) {
         _ = offerText(shared, "info string bench failed: frozen position could not be prepared");
         return;
@@ -1136,15 +1173,12 @@ fn publishBench(shared: *Shared, report: engine.bench.Report) void {
         return;
     }
 
-    if (!offerText(shared, "")) return;
+    // Every per-position row of a single-pass report was already streamed by
+    // `drainBenchProgress`, along with the blank line that opens it.
+    if (!header_published) {
+        if (!offerText(shared, "")) return;
+    }
     if (report.spec.repeats == 1) {
-        for (report.positions, 0..) |record, index| {
-            const ebf = fixedDecimal(engine.bench.positionEbfCenti(record), 2);
-            if (!offerLine(shared, lineFmt(
-                "bench {d}/40  depth {d}  score {d}  nodes {d}  ebf {s}  time {d}ms  nps {d}",
-                .{ index + 1, record.completed_depth, record.score, record.nodes, ebf.slice(), record.time_ms, engine.bench.nps(record.nodes, record.time_ms) },
-            ))) return;
-        }
         const run_record = report.runs[0];
         const ebf = fixedDecimal(report.geomean_ebf_milli, 3);
         const top_share = fixedDecimal(engine.bench.topShareTenthsPercent(&report), 1);

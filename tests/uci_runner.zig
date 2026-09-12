@@ -206,6 +206,11 @@ fn runCase(
                 };
                 if (matchesExpected(expected, actual.slice())) break;
                 if (allow_info and validSearchInfo(actual.slice())) continue;
+                // A bench streams one row per completed position, so any line
+                // a transcript waits for during a bench may legitimately be
+                // preceded by rows. A cancelled bench is the case that races:
+                // whether a row lands before the stop depends on timing.
+                if (validBenchPositionLine(actual.slice())) continue;
                 std.debug.print("expected: {s}\nactual:   {s}\n", .{ expected, actual.slice() });
                 return error.UnexpectedOutput;
             }
@@ -524,6 +529,15 @@ fn parseDecimal(value: []const u8) bool {
         } else if (!std.ascii.isDigit(byte)) return false;
     }
     return true;
+}
+
+/// A streamed bench row, `bench {index}/40  depth ...`. Matching the prefix
+/// and the rendered shape is enough: the row's own fields are checked where a
+/// transcript asserts the report itself with `{{BENCH_POSITION_LINES}}`.
+fn validBenchPositionLine(line: []const u8) bool {
+    if (!std.mem.startsWith(u8, line, "bench ")) return false;
+    const slash = std.mem.indexOf(u8, line, "/40  depth ") orelse return false;
+    return parseUnsigned(line["bench ".len..slash], true);
 }
 
 fn validSearchInfo(line: []const u8) bool {

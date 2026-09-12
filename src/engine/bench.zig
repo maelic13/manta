@@ -219,6 +219,12 @@ pub fn runWithFeaturesAndParams(
                     .time_ms = elapsed_ms,
                     .completed_depth = if (result.completed) |completed| completed.depth else 0,
                 };
+                // A long bench is otherwise silent until the whole corpus is
+                // done. A caller that wants running feedback declares this
+                // hook; the report it receives at the end is unchanged, so no
+                // caller is obliged to consume progress.
+                if (@hasDecl(@TypeOf(control.*), "benchPosition"))
+                    control.benchPosition(position_index, report.positions[position_index]);
             }
             report.completed_positions += 1;
         }
