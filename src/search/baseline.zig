@@ -1328,10 +1328,19 @@ fn negamaxNode(
                     if (depth < core_null_verification_depth) {
                         context.observer.nullMoveCutoff();
                         context.observer.prune(.null_move);
-                        const cutoff = NodeValue{ .raw = beta, .bound = .lower, .provenance = .null_move };
-                        if (!exclusion_node)
-                            storeTable(context, value.current.key, .none, cutoff, tableStaticEval(features, shallow), depth, ply);
-                        return resolved(cutoff, active_depth);
+                        // ADR-0071 D as amended by the first review: this
+                        // cutoff stores nothing. Its whole evidence is one
+                        // reduced null probe at `depth - 1 - R`, and a stored
+                        // nominal-depth lower bound would be read back as a
+                        // full-depth cutoff at any later visit, including
+                        // principal nodes and nodes where the null move is
+                        // disallowed. ADR-0070's rule stands: only a completed
+                        // real-move verification carries searched authority.
+                        // The verified path from depth 10 keeps its storage.
+                        return resolved(
+                            .{ .raw = beta, .bound = .lower, .provenance = .null_move },
+                            active_depth,
+                        );
                     }
                 }
                 const saved_static_eval = context.thread.static_evals[ply];

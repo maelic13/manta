@@ -1425,6 +1425,71 @@ test "cancellation during a core aspiration retry keeps the last completed itera
     }
 }
 
+test "an unverified core null cutoff leaves no table authority behind" {
+    // The invariant, from ADR-0070 and ADR-0071 D as amended by the first
+    // review: a null-move fail-high that no real-move verification confirmed
+    // is speculative. It may end its own node and nothing more. Stored as a
+    // lower bound at the node's nominal depth it would be read back later as
+    // a full-depth cutoff -- at principal nodes, and at nodes where the null
+    // move itself is disallowed -- so only a completed verification carries
+    // searched authority.
+    //
+    // Stated without reference to the depth threshold, which is a seed that
+    // 6.5.11 may fit: a table entry produced by `null_move` can only follow a
+    // verification, so over any search
+    //
+    //     tt_stores_by_producer[null_move] <= null_move_verifications
+    //
+    // must hold. The oracle is the store site, not the branch under test:
+    // `ttStore` counts what the table actually received, by producer, wherever
+    // the call came from. Non-vacuity is asserted separately, because
+    // `null_move_cutoffs` counts accepted verifications plus unverified
+    // cutoffs, so any excess over `null_move_verifications` can only have come
+    // from the unverified branch.
+    const producer_index = @intFromEnum(search.types.Provenance.null_move);
+    var unverified_cutoffs: u64 = 0;
+    for (core_positions) |fen_text| {
+        for ([_]u16{ 5, 7, 9 }) |depth| {
+            var root: chess.position.PositionState = .{};
+            var position = try chess.fen.parse(fen_text, &root);
+            const original_key = position.current.key;
+            var harness: Harness = .{};
+            var storage: [4096]search.tt.Cluster = undefined;
+            var table = search.tt.Table.init(&storage);
+            var ordering: search.ordering.State = .{};
+            var counters: search.diagnostics.Counters = .{};
+            var control: search.types.NeverStop = .{};
+            const result = search.baseline.runWithFeatures(
+                core_features,
+                &position,
+                harness.binding(),
+                .{ .depth = depth },
+                &control,
+                &harness.thread,
+                &table,
+                &ordering,
+                &counters,
+            );
+
+            try std.testing.expect(
+                counters.tt_stores_by_producer[producer_index] <=
+                    counters.null_move_verifications,
+            );
+            unverified_cutoffs += counters.null_move_cutoffs -|
+                counters.null_move_verifications;
+
+            // The cutoff ends its node and changes nothing else, so the
+            // published line stays legal and the root is restored exactly.
+            try expectLegalPv(fen_text, result.completed.?.pv.slice());
+            try std.testing.expect(chess.movegen.isLegal(&position, result.best_move.?));
+            try std.testing.expect(chess.state.isConsistent(&position));
+            try std.testing.expectEqual(original_key, position.current.key);
+        }
+    }
+    // The mechanism under test actually fired somewhere in the corpus.
+    try std.testing.expect(unverified_cutoffs != 0);
+}
+
 test "mate windows are behavior-identical wherever no mate score enters the window" {
     // The clip removes only scores outside [matedIn(ply), mateIn(ply + 1)], so
     // on searches that never produce a mate score it must change nothing at
