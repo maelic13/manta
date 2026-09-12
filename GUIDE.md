@@ -210,6 +210,9 @@ values for Manta's contracts.
     ranges; Opus exposes them through the tune-only registry.
   - [ ] **6.5.11.2 — Fit and bake:** Maintainer-run Weather Factory fit on the
     designated host, one rounded vector, one 1T SPRT.
+  - [ ] **6.5.11.3 — Conditional clock refit:** The six MAN-T05 time
+    responses join the same campaign if it runs, because the core changes the
+    root statistics they were fitted to; no separate clock candidate.
 - [ ] **6.5.12 — Evaluator calibration:** The king-danger block was never
   fitted and disagrees with the classical reference by hundreds of centipawns
   in attacking positions; SPSA is necessary but not the whole answer.

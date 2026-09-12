@@ -1915,6 +1915,25 @@ maintainer runs it. Bake one rounded vector and gate it once as `MAN-S37`.
 contaminated gradients, one final production 1T H1. An inconclusive or rejected
 fit leaves the accepted seeds in place.
 
+**6.5.11.3 — Conditional clock refit (`MAN-T06`).** Reviewed on 2026-09-12:
+the integrated clock policy (ADR-0065, MAN-T05) is mature and safe. It has
+distinct optimum and maximum budgets, a contracting sudden-death horizon,
+increment credit net of future overhead, bounded stability, score, effort and
+helper factors fitted by a 1,000-iteration SPSA, once-consumed ponder credit,
+a fixed maximum rooted at receipt, a 1,024-node hard poll and two unspent
+overheads plus the bridge margin; the only forfeits ever seen were host stalls
+below 40 ms with both sides in the tens of milliseconds. Its structure matches
+the classical reference's optimum, maximum, falling-score and best-move
+instability factors, and it needs no redesign. Its six responses were,
+however, fitted to the old tree's root statistics. The core changes how often
+the best move changes between iterations, how effort concentrates and how
+scores move under aspiration, so after an accepted core the fitted responses
+may be off. If 6.5.11's search fit runs, add the six time coordinates to the
+same maintainer-run Weather Factory campaign under the time-sensitivity
+scoring that ADR-0065 already qualified; otherwise leave MAN-T05 in place. No
+separate clock candidate is authorized, and hard safety, minimum depth and
+publication authority stay outside the tuning surface.
+
 #### 6.5.12 — Evaluator calibration: king danger and the unfitted nonlinear terms
 
 **Model:** Fable derives the coordinate set and any structural change; Opus
