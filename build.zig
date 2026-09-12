@@ -61,6 +61,36 @@ pub fn build(b: *std.Build) void {
         "mate-windows",
         "Keep accepted Step-6.5.10.1 mate windows (false reconstructs the superseded MAN-S32 tree)",
     ) orelse true;
+    const selective_core = b.option(
+        bool,
+        "selective-core",
+        "Enable the Step-6.5.10 MAN-S36 coordinated selective-search core in this build",
+    ) orelse false;
+    const core_history = b.option(
+        bool,
+        "core-history",
+        "Ablation only: keep the core's linear history bonus and malus (needs -Dselective-core)",
+    ) orelse true;
+    const core_lmr = b.option(
+        bool,
+        "core-lmr",
+        "Ablation only: keep the core's log-log reduction surface (needs -Dselective-core)",
+    ) orelse true;
+    const core_move_pruning = b.option(
+        bool,
+        "core-move-pruning",
+        "Ablation only: keep the core's prospective-depth move omission (needs -Dselective-core)",
+    ) orelse true;
+    const core_node_pruning = b.option(
+        bool,
+        "core-node-pruning",
+        "Ablation only: keep the core's node-level forward proofs (needs -Dselective-core)",
+    ) orelse true;
+    const core_aspiration = b.option(
+        bool,
+        "core-aspiration",
+        "Ablation only: keep the core's root aspiration window (needs -Dselective-core)",
+    ) orelse true;
     const singular_exclusion_horizon = b.option(
         bool,
         "singular-exclusion-horizon",
@@ -125,6 +155,12 @@ pub fn build(b: *std.Build) void {
     search_build_options.addOption(bool, "mate_windows", mate_windows);
     search_build_options.addOption(bool, "singular_exclusion_horizon", singular_exclusion_horizon);
     search_build_options.addOption(bool, "qsearch_tactical_generation", qsearch_tactical_generation);
+    search_build_options.addOption(bool, "selective_core", selective_core);
+    search_build_options.addOption(bool, "core_history", core_history);
+    search_build_options.addOption(bool, "core_lmr", core_lmr);
+    search_build_options.addOption(bool, "core_move_pruning", core_move_pruning);
+    search_build_options.addOption(bool, "core_node_pruning", core_node_pruning);
+    search_build_options.addOption(bool, "core_aspiration", core_aspiration);
     search_build_options.addOption(bool, "search_evidence_observation", search_evidence_observation);
     const search_build_options_module = search_build_options.createModule();
     const omit_frame_pointer: ?bool = if (optimize == .ReleaseFast and
@@ -284,6 +320,12 @@ pub fn build(b: *std.Build) void {
     transcript_search_build_options.addOption(bool, "mate_windows", mate_windows);
     transcript_search_build_options.addOption(bool, "singular_exclusion_horizon", singular_exclusion_horizon);
     transcript_search_build_options.addOption(bool, "qsearch_tactical_generation", qsearch_tactical_generation);
+    transcript_search_build_options.addOption(bool, "selective_core", selective_core);
+    transcript_search_build_options.addOption(bool, "core_history", core_history);
+    transcript_search_build_options.addOption(bool, "core_lmr", core_lmr);
+    transcript_search_build_options.addOption(bool, "core_move_pruning", core_move_pruning);
+    transcript_search_build_options.addOption(bool, "core_node_pruning", core_node_pruning);
+    transcript_search_build_options.addOption(bool, "core_aspiration", core_aspiration);
     transcript_search_build_options.addOption(bool, "search_evidence_observation", search_evidence_observation);
     const transcript_manta = b.addModule("manta-transcript", .{
         .root_source_file = b.path("src/manta.zig"),

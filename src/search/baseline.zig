@@ -349,6 +349,11 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
     }
     if (comptime features.search_evidence_observation and !features.search_context)
         @compileError("search evidence observation requires search context");
+    // ADR-0071 reads the live picker's own ranking value as the core's
+    // per-move quiet evidence and skips the remaining quiets through it. The
+    // eager picker has neither, so the combination has no defined behavior.
+    if (comptime features.selective_core and !features.live_history_staging)
+        @compileError("the selective-search core requires live_history_staging");
     thread.reset();
     observer.reset();
     if (execution.advance_table_generation) if (table) |active| active.nextGeneration();

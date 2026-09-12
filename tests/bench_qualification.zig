@@ -34,10 +34,12 @@ fn runArchived(
     // live-history staged picker and before Step 6.5.10.1 promoted complete
     // mate windows, so faithful reconstruction restores the MAN-S19-era eager
     // picker and the superseded crossing-only mate test alongside the MAN-S19
-    // parameter vector.
+    // parameter vector, and pins the Step-6.5.10 selective-search umbrella off
+    // so no archived total is restated on a head it never ran on.
     comptime var archived = features;
     archived.live_history_staging = false;
     archived.mate_windows = false;
+    archived.selective_core = false;
     return bench.runWithFeaturesAndParams(
         archived,
         spec,

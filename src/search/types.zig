@@ -781,6 +781,46 @@ pub const Features = struct {
     /// authority. Its changed qsearch values may still change the later tree,
     /// as any evaluation change can.
     correction_history: bool = false,
+    /// Step-6.5.10 `MAN-S36` coordinated selective-search core (ADR-0071),
+    /// default off until its registered gate. The umbrella owns the whole
+    /// package; the five component switches below exist for ablation
+    /// diagnosis only and are never gated separately. Each is effective only
+    /// through its accessor below, so with the umbrella off the tree is
+    /// exactly the accepted MAN-S35 head whatever the components say.
+    selective_core: bool = false,
+    /// One bounded linear history bonus and equal malus, ADR-0071 A.
+    core_history: bool = true,
+    /// Compile-time log-log reduction surface, ADR-0071 B.
+    core_lmr: bool = true,
+    /// Prospective-depth move omission, ADR-0071 C.
+    core_move_pruning: bool = true,
+    /// Node-level forward proofs, ADR-0071 D.
+    core_node_pruning: bool = true,
+    /// Root aspiration, ADR-0071 E.
+    core_aspiration: bool = true,
+
+    /// The component switches are meaningless without the umbrella, so every
+    /// consumer asks through these accessors rather than reading the field.
+    /// A component left on in an umbrella-off build must not change one node.
+    pub fn coreHistory(self: Features) bool {
+        return self.selective_core and self.core_history;
+    }
+
+    pub fn coreLmr(self: Features) bool {
+        return self.selective_core and self.core_lmr;
+    }
+
+    pub fn coreMovePruning(self: Features) bool {
+        return self.selective_core and self.core_move_pruning;
+    }
+
+    pub fn coreNodePruning(self: Features) bool {
+        return self.selective_core and self.core_node_pruning;
+    }
+
+    pub fn coreAspiration(self: Features) bool {
+        return self.selective_core and self.core_aspiration;
+    }
 };
 
 test "production feature ledger freezes the MAN-S19 search policy" {
@@ -839,6 +879,27 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     try std.testing.expect(!features.main_selectivity_sync);
     try std.testing.expect(!features.depth_authority_sync);
     try std.testing.expect(!features.razoring);
+
+    // ADR-0071's umbrella is default off, and every component is inert while
+    // it is. The components themselves default on so that enabling the
+    // umbrella alone selects the whole package rather than an empty one.
+    try std.testing.expect(!features.selective_core);
+    try std.testing.expect(!features.coreHistory());
+    try std.testing.expect(!features.coreLmr());
+    try std.testing.expect(!features.coreMovePruning());
+    try std.testing.expect(!features.coreNodePruning());
+    try std.testing.expect(!features.coreAspiration());
+
+    const core: Features = .{ .selective_core = true };
+    try std.testing.expect(core.coreHistory());
+    try std.testing.expect(core.coreLmr());
+    try std.testing.expect(core.coreMovePruning());
+    try std.testing.expect(core.coreNodePruning());
+    try std.testing.expect(core.coreAspiration());
+
+    const ablated: Features = .{ .selective_core = true, .core_lmr = false };
+    try std.testing.expect(ablated.coreHistory());
+    try std.testing.expect(!ablated.coreLmr());
 }
 
 pub const PrincipalVariation = struct {
