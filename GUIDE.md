@@ -60,6 +60,10 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   implementation is approved and is next: Opus implements from the ADR, Fable
   reviews, then one registered 1T SPRT decides. After that verdict the
   maintainer decides between finishing Phase 6.5 and releasing 1.1.0.
+  Progress: tickets A to D are committed and E is implemented; the first
+  review found the core blind to a quiet-move mate threat that the classical
+  reference sees through first-ply quiescence checks, so ADR-0071 gained
+  component F `core_qs_checks` and ticket E2 precedes F and G.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 

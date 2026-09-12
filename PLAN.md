@@ -1556,6 +1556,51 @@ accept or reverse them rather than discover them.
 - `PruneCause` gained a `history` variant so the omission rules can be reported
   separately with their own denominators in ticket G.
 
+**Review resolution after ticket E (Fable, 2026-09-12).** The stop was
+correct and the diagnosis was not. On the workspace host the classical
+reference answers WAC.001 `g3g6` first at depth 5 (`mate 3`), the off arm at
+depth 3 (`mate 2`), and the core arm with tickets A to E never through depth 9
+(`cp 26`, `f6h5`). A mate in two invisible at depth nine is a missing relation:
+the count-based quiet skip drops the late quiet `Qh7#` unmade, and the
+unverified null probe at the defender's node falls into a quiescence that
+generates no quiet checks, so passing looks safe. The sacrifice itself is a
+quiet move, so the SEE-floor hypothesis does not apply, and ADR-0027's
+reverse-futility "refutation" was this same canary without games. ADR-0071 now
+records the resolution, adds component F `core_qs_checks`, amends the
+omission invariant (per-move tests never omit a checking move; the count skip
+may drop unmade quiets), confirms the IIR reading and accepts every decision
+Opus recorded. Ticket E is accepted for commit as implemented. The canary
+moves to ticket E2; F and G are unchanged and still pending.
+
+- **E2. `core_qs_checks` (ADR-0071 F).** Add `Mode.quiet_checks` to
+  `src/chess/movegen.zig`: legal non-capture, non-promotion moves giving direct
+  check, computed per moving piece from the enemy king square with the mover's
+  origin removed from the occupancy (knight, bishop, rook and queen attack sets
+  from the king; pawn single and double pushes into the squares from which a
+  pawn of the side to move attacks the king); no king moves, castling or
+  discovered checks; legality through the existing pin and check-mask
+  machinery. Thread a quiescence ply counter through `quiescence` (zero from
+  the depth-zero dispatch, razoring and ProbCut entries; plus one on
+  recursion). At a non-check node with the component on and quiescence ply
+  zero, after the tactical partition and only when stand-pat did not cut,
+  append the direct checks; a non-empty check set satisfies the terminal
+  witness, otherwise the MAN-S34 witness rule is unchanged. In the loop, quiet
+  moves are searched only when checks were generated (witness quiets and
+  checks never coexist in one list), each only if `seeAtLeast(move, 0)`,
+  without delta pruning; children enter in-check quiescence at ply one.
+  Verify first that `seeAtLeast` prices a quiet move whose mover is attacked
+  on its destination (a queen check onto a pawn-attacked square must return
+  false); if it does not, stop and report before implementing a filter.
+  Tests: for the existing property corpus, every generated quiet check is a
+  legal non-tactical quiet and gives check after `make`, and every
+  non-tactical quiet that gives check with the moved piece as the sole checker
+  is generated; witness verdicts (stalemate, quiet-only, check, EP, promotion
+  cases) unchanged with the component on; a mate in one by a quiet check found
+  from a depth-zero entry; off-arm quiescence and fingerprint exact. Then the
+  full core arm must answer WAC.001 `g3g6` at depth 5; add that case with
+  `.selective_core = true` to `tests/search_qualification.zig` and re-run the
+  per-component localisation table with F included.
+
 **6.5.10.3 — Review loop (Fable).** Review the implementation against ADR-0071
 and `SCORE-034`: verification before PV, cutoff, TT or feedback authority;
 provenance and scope through negation; null-verification scope; exclusion-node

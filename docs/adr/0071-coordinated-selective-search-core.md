@@ -58,10 +58,11 @@ on a head that lacks the others measures the wrong thing.
 
 Implement candidate `MAN-S36`, the coordinated selective-search core, behind
 one compile-time umbrella `-Dselective-core` (`features.selective_core`),
-default off until its registered gate accepts H1. Five component switches
+default off until its registered gate accepts H1. Six component switches
 exist only for ablation diagnosis and are never gated separately:
 `core_history`, `core_lmr`, `core_move_pruning`, `core_node_pruning`,
-`core_aspiration`. With the umbrella off, every component is off and the tree
+`core_aspiration` and `core_qs_checks` (added by the 2026-09-12 review
+resolution below). With the umbrella off, every component is off and the tree
 reproduces `642,336` exactly, in default and observation-enabled builds.
 
 All constants below are Manta's seeds in Manta's units. They are order-of-
@@ -215,6 +216,37 @@ publication. Mate or tablebase previous scores use the full window. The
 archived MAN-R02 `features.aspiration` stays off and `SCORE-029` describes it
 unchanged.
 
+### F. Quiet checks in the first quiescence ply (`core_qs_checks`)
+
+Added by the review resolution below. At a non-check quiescence node entered
+directly from the main search (quiescence ply zero: the depth-zero dispatch,
+razoring and ProbCut verification entries), after the tactical partition is
+generated and only when stand-pat did not already cut, generate the legal
+**direct** quiet checks: non-capture, non-promotion moves whose destination
+attacks the enemy king with the mover's origin removed from the occupancy.
+Knights, bishops, rooks and queens use the corresponding attack set from the
+king square; pawn single and double pushes use the squares from which a pawn
+of the side to move attacks the king; king moves, castling and discovered
+checks are not generated. This is a subset, not a partition: the MAN-S34
+terminal witness keeps its own rule, except that a non-empty check set is
+itself a legal-move witness.
+
+Search each generated check only if its destination is not a losing square
+(`seeAtLeast(move, 0)`), without delta pruning, in the picker's ordinary quiet
+position (after the TT move, good tacticals and killers, before bad
+tacticals). The checked child is an in-check quiescence node at ply one, which
+already generates complete evasions and has no stand-pat; checks are never
+generated below quiescence ply zero, so the extension is bounded by one ply.
+Storage, provenance, stand-pat, SEE and delta rules for tactical moves are
+unchanged, and the umbrella-off quiescence is exactly MAN-S34.
+
+Rationale: the core's count-based quiet skip, its unverified null-move cutoffs
+below depth 10 and its zero-depth probes all assume that a mate threat by a
+quiet move remains visible one ply later. In a tactical-only quiescence it is
+invisible, and the review found the whole core blind to WAC.001's mate in two
+at every depth through nine while the classical reference finds it at depth
+five with exactly this relation in place.
+
 ### Excluded from the package
 
 Capture history, correction history, singular and check-extension policy,
@@ -226,17 +258,23 @@ Step 6.5.12 follow-ons on the accepted core.
 
 - Legal PV and best move, terminal and draw precedence, mate-distance
   semantics, tablebase authority and cancellation restoration are unchanged.
-- Nothing is pruned or reduced in check, when giving check, for promotions,
-  at the root, before one move is actually searched, or under decisive
-  windows. The first two selected moves are never reduced.
+- Nothing is reduced in check, when giving check, for promotions or for the
+  first two selected moves. No per-move omission test (futility, history,
+  SEE) omits a move that gives check, and nothing is omitted at the root,
+  before one move is actually searched, or under decisive windows. The
+  late-move-count skip drops unmade quiets by picker source and may therefore
+  drop a quiet checking move; component F is the safety net that keeps the
+  resulting mate threat visible one ply later.
 - Null verification subtrees cannot null-prune at their root; exclusion
   searches keep today's behavior.
 - Off arm: `642,336`, identical PV and results, both build arms. Each
   component switch compiles in both states.
 - Canaries: mate in one at depth one, the hanging-queen capture, KQK and
-  KBNK positive, WAC.001 `g3g6` at depth 5. A change to the depth-3 WAC.001
-  expectation is possible under razoring and is recorded with its cause, not
-  silently re-blessed and not silently deleted.
+  KBNK positive, WAC.001 `g3g6` at depth 5 in the full core arm. Depth 5 is
+  anchored to the classical reference, which finds the move exactly there;
+  the off arm's depth-3 expectation is a property of the unpruned tree and is
+  not required of the core. A changed canary is recorded with its cause, never
+  silently re-blessed or deleted.
 - Focused properties for the new formulas: table monotonicity in both
   arguments, clamp bounds, sign of each adjustment, `lmp_count` monotonicity,
   prospective depth never exceeding `new_depth`, aspiration termination.
@@ -265,3 +303,46 @@ ablation order above then applies once before any re-plan.
 
 Node savings, branching factor and local matches are diagnostics. Only the
 registered SPRT promotes.
+
+## Review resolution after ticket E, 2026-09-12
+
+Opus stopped at ticket E because the core arm answered WAC.001 with `f6h5` at
+depth 5 and localised the failure to `core_move_pruning` and
+`core_node_pruning` independently. The review measured the position on the
+workspace host, Hash 64 MiB, one thread:
+
+| Engine and arm | First depth answering `g3g6` |
+|---|---|
+| Classical Stockfish `9587eeeb` | 5 (`mate 3`; `f6e8` at 3, `f6h5` at 4) |
+| Manta `596159e`, umbrella off | 3 (`mate 2`) |
+| Manta core arm with tickets A to E | never through depth 9 (`cp 26`, `f6h5`) |
+
+A mate in two that stays invisible at depth nine is a missing relation, not a
+strict canary. The position is `1.Qg6` with `Qh7#` and `Nxg6#` behind it, and
+both mating moves are quiet or checking moves whose refutation the core never
+reaches: after `1.Qg6 <defence>` the count-based skip drops the late quiet
+`Qh7#` unmade, and at the defender's node the unverified null probe descends
+straight into a quiescence that generates no quiet checks, so "pass" looks
+safe and the sacrifice fails low. The off arm survives only because it prunes
+almost nothing; the classical reference survives because its first quiescence
+ply generates quiet checks. Decisions:
+
+1. **Component F is added** as above. Neither the SEE floor, the reverse
+   futility depth nor the null policy is changed: Opus's capture hypothesis
+   does not apply (the sacrifice is a quiet move), and ADR-0027's "refutation"
+   of wider reverse futility was this same canary with no games, caused by the
+   same missing relation.
+2. **Late-move-count skip may drop quiet checks** by construction; the
+   invariant list is amended and F is the safety net. Per-move tests keep the
+   post-make check exemption.
+3. **IIR** keeps the root, in-check and exclusion exclusions; "every node type"
+   means every expectation.
+4. Opus's recorded decisions stand: component accessors on `Features`, the
+   bonus formula over its prose, a dedicated searched-quiet list for main
+   history, the one-sided null mate clamp and the `history` prune cause.
+5. **WAC.001 `g3g6` at depth 5** is required of the full core arm and is
+   re-anchored to the classical reference; the off arm keeps depth 3.
+
+Ticket E is accepted for commit as implemented; the canary moves to the new
+ticket E2, which implements F and must restore the depth-5 answer in the
+complete core arm before tickets F and G run.
