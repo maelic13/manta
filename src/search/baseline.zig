@@ -446,11 +446,21 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
 
     var depth: u16 = @max(execution.start_depth, 1);
     while (depth <= normalized_depth) : (depth += 1) {
-        var window = AspirationWindow.full();
-        if (comptime features.aspiration) {
+        const Window = comptime if (features.coreAspiration())
+            CoreAspirationWindow
+        else
+            AspirationWindow;
+        var window = Window.full();
+        if (comptime features.coreAspiration()) {
+            if (result.completed) |previous| {
+                if (coreAspirationCenter(depth, previous.evidence)) |center| {
+                    window = Window.around(center);
+                }
+            }
+        } else if (comptime features.aspiration) {
             if (result.completed) |previous| {
                 if (aspirationCenter(previous.evidence, previous.root_confidence)) |center| {
-                    window = AspirationWindow.around(center);
+                    window = Window.around(center);
                 }
             }
         }
@@ -478,10 +488,13 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
                 result.selective_depth = thread.selective_depth;
                 return result;
             };
+            // Only an exact attempt commits the iteration. A bounded attempt
+            // publishes nothing: `result` is untouched until the loop breaks,
+            // and the root evidence is reset at the top of every attempt.
             if (attempt.bound == .exact) break attempt;
             std.debug.assert(!window.isFull());
             observer.aspirationFailure(attempt.bound);
-            window.widen();
+            window.widen(attempt.bound);
         };
 
         var completed = types.CompletedIteration{
@@ -552,7 +565,10 @@ const AspirationWindow = struct {
         return @intCast(@as(i64, self.beta) - self.alpha);
     }
 
-    fn widen(self: *AspirationWindow) void {
+    fn widen(self: *AspirationWindow, bound: types.Bound) void {
+        // The archived window doubles symmetrically and ignores which side
+        // failed; the parameter exists so both windows share one call site.
+        _ = bound;
         const next_radius = self.radius * 2;
         self.* = if (next_radius >= score.infinity_raw)
             full()
@@ -571,6 +587,103 @@ const AspirationWindow = struct {
         };
     }
 };
+
+/// ADR-0071 E. The core's root window.
+///
+/// It differs from the archived MAN-R02 window in the two ways that matter: it
+/// needs only an exact ordinary previous score rather than two stable
+/// iterations, and it widens the side that actually failed instead of doubling
+/// symmetrically. A fail-low says the score is below the window, which is no
+/// evidence at all about the upper edge, so re-searching with a wider beta
+/// spends nodes proving something nobody doubted.
+///
+/// `delta = 20 + |s| / 32` starts at a fifth of a pawn near equality and grows
+/// with the score, because a position already won by several pawns is also one
+/// whose score moves in larger steps. Growth is `delta + delta / 2 + 5`, so a
+/// side that keeps failing reaches the full bound in a few attempts, and four
+/// failures on one side open it outright. Termination is therefore bounded
+/// whatever the search returns.
+const CoreAspirationWindow = struct {
+    alpha: i32,
+    beta: i32,
+    delta: i32,
+    low_failures: u8 = 0,
+    high_failures: u8 = 0,
+
+    /// Opening one side after this many failures bounds the attempt count even
+    /// if the growth below were much slower.
+    const failure_limit: u8 = 4;
+
+    fn full() CoreAspirationWindow {
+        return .{
+            .alpha = -score.infinity_raw,
+            .beta = score.infinity_raw,
+            .delta = score.infinity_raw,
+        };
+    }
+
+    fn around(center: i32) CoreAspirationWindow {
+        const delta = 20 + @divTrunc(@as(i32, @intCast(@abs(center))), 32);
+        return .{
+            .alpha = clampToBand(@as(i64, center) - delta),
+            .beta = clampToBand(@as(i64, center) + delta),
+            .delta = delta,
+        };
+    }
+
+    fn isFull(self: CoreAspirationWindow) bool {
+        return self.alpha == -score.infinity_raw and self.beta == score.infinity_raw;
+    }
+
+    fn width(self: CoreAspirationWindow) u32 {
+        std.debug.assert(self.alpha < self.beta);
+        return @intCast(@as(i64, self.beta) - self.alpha);
+    }
+
+    /// Widens the failed side only. An upper bound is a fail-low, a lower
+    /// bound a fail-high; an exact result never reaches here.
+    fn widen(self: *CoreAspirationWindow, bound: types.Bound) void {
+        std.debug.assert(bound != .exact);
+        switch (bound) {
+            .upper => {
+                self.low_failures += 1;
+                self.alpha = if (self.low_failures >= failure_limit)
+                    -score.infinity_raw
+                else
+                    clampToBand(@as(i64, self.alpha) - self.delta);
+            },
+            .lower => {
+                self.high_failures += 1;
+                self.beta = if (self.high_failures >= failure_limit)
+                    score.infinity_raw
+                else
+                    clampToBand(@as(i64, self.beta) + self.delta);
+            },
+            .exact => unreachable,
+        }
+        self.delta = @min(
+            score.infinity_raw,
+            self.delta + @divTrunc(self.delta, 2) + 5,
+        );
+    }
+
+    fn clampToBand(value: i64) i32 {
+        return @intCast(std.math.clamp(
+            value,
+            -@as(i64, score.infinity_raw),
+            @as(i64, score.infinity_raw),
+        ));
+    }
+};
+
+/// ADR-0071 E's entry rule: an exact ordinary completed score and nothing
+/// else. A mate or tablebase score uses the full window, because these
+/// centipawn deltas say nothing about a distance-to-mate scale.
+fn coreAspirationCenter(depth: u16, previous: types.Evidence) ?i32 {
+    if (depth < 4) return null;
+    if (previous.bound != .exact or !previous.value.isOrdinary()) return null;
+    return previous.value.raw();
+}
 
 /// A narrow window is useful only after two honest root populations agree on
 /// the best move and their latest exact scores remain within one pawn. The
@@ -592,6 +705,92 @@ fn aspirationCenter(
     return previous.value.raw();
 }
 
+test "the core root window widens only the side that failed" {
+    // ADR-0071 E. A fail-low is evidence about alpha and about nothing else,
+    // so beta must not move; a fail-high is the mirror. The oracle is that
+    // asymmetry, which the archived MAN-R02 window deliberately does not have.
+    var low = CoreAspirationWindow.around(0);
+    const opening_beta = low.beta;
+    try std.testing.expectEqual(@as(i32, -20), low.alpha);
+    try std.testing.expectEqual(@as(i32, 20), low.beta);
+    low.widen(.upper);
+    try std.testing.expect(low.alpha < -20);
+    try std.testing.expectEqual(opening_beta, low.beta);
+
+    var high = CoreAspirationWindow.around(0);
+    const opening_alpha = high.alpha;
+    high.widen(.lower);
+    try std.testing.expect(high.beta > 20);
+    try std.testing.expectEqual(opening_alpha, high.alpha);
+
+    // Delta scales with the score: a position won by several pawns moves in
+    // bigger steps than one near equality.
+    const wide = CoreAspirationWindow.around(640);
+    try std.testing.expectEqual(@as(i32, 40), wide.delta);
+    try std.testing.expect(wide.width() > CoreAspirationWindow.around(0).width());
+}
+
+test "the core root window always reaches the full band" {
+    // Termination, as a property over every failure sequence of a bounded
+    // length rather than one scripted path: whatever order the two bounds
+    // arrive in, the window must end up full, and it must never leave the
+    // representable band on the way. An unbounded retry loop at the root
+    // would stall a real search against its clock.
+    const sequences = [_][8]types.Bound{
+        .{ .upper, .upper, .upper, .upper, .upper, .upper, .upper, .upper },
+        .{ .lower, .lower, .lower, .lower, .lower, .lower, .lower, .lower },
+        .{ .upper, .lower, .upper, .lower, .upper, .lower, .upper, .lower },
+        .{ .lower, .upper, .upper, .lower, .lower, .upper, .lower, .upper },
+    };
+    for ([_]i32{ 0, -25, 25, -640, 640, score.ordinary_max_raw, -score.ordinary_max_raw }) |center| {
+        for (sequences) |sequence| {
+            var window = CoreAspirationWindow.around(center);
+            var attempts: usize = 0;
+            for (sequence) |bound| {
+                if (window.isFull()) break;
+                window.widen(bound);
+                attempts += 1;
+                try std.testing.expect(window.alpha >= -score.infinity_raw);
+                try std.testing.expect(window.beta <= score.infinity_raw);
+                try std.testing.expect(window.alpha < window.beta);
+            }
+            // Four failures open a side outright, so a one-sided sequence is
+            // full within four attempts and any sequence within eight.
+            try std.testing.expect(attempts <= 8);
+        }
+    }
+    // A one-sided run opens that side by the failure limit exactly.
+    var one_sided = CoreAspirationWindow.around(0);
+    for (0..CoreAspirationWindow.failure_limit) |_| one_sided.widen(.upper);
+    try std.testing.expectEqual(-score.infinity_raw, one_sided.alpha);
+}
+
+test "the core root window refuses every score it cannot reason about" {
+    // ADR-0071 E's entry rule. A bounded attempt is not a score, a mate or
+    // tablebase value is not on the centipawn scale these deltas assume, and
+    // the first three iterations have no settled score to narrow around.
+    const ordinary = evidence(120, .exact, .full_search);
+    try std.testing.expectEqual(@as(?i32, 120), coreAspirationCenter(4, ordinary));
+    try std.testing.expectEqual(@as(?i32, null), coreAspirationCenter(3, ordinary));
+    try std.testing.expectEqual(
+        @as(?i32, null),
+        coreAspirationCenter(8, evidence(120, .lower, .full_search)),
+    );
+    try std.testing.expectEqual(
+        @as(?i32, null),
+        coreAspirationCenter(8, evidence(120, .upper, .full_search)),
+    );
+    const mate = score.Score.mateIn(6).?.raw();
+    try std.testing.expectEqual(
+        @as(?i32, null),
+        coreAspirationCenter(8, evidence(mate, .exact, .full_search)),
+    );
+    try std.testing.expectEqual(
+        @as(?i32, null),
+        coreAspirationCenter(8, evidence(-mate, .exact, .full_search)),
+    );
+}
+
 test "aspiration windows use the search scale and widen to full bounds" {
     // SCORE-008/PERF-010: the candidate begins with one evaluator pawn of
     // uncertainty and must terminate in an ordinary full-window search.
@@ -600,7 +799,7 @@ test "aspiration windows use the search scale and widen to full bounds" {
     try std.testing.expectEqual(score.ordinary_max_raw + score.units_per_pawn, window.beta);
     var widenings: u8 = 0;
     while (!window.isFull()) {
-        window.widen();
+        window.widen(.upper);
         widenings += 1;
         try std.testing.expect(widenings < 16);
     }

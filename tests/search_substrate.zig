@@ -1333,6 +1333,98 @@ test "terminal witness verdicts are unchanged with first-ply checks on" {
     }
 }
 
+test "core aspiration retains a completed result across window retries" {
+    // ADR-0071 E: only an exact attempt commits, and a bounded attempt must
+    // reach neither the retained result nor the published line. The oracle is
+    // the deepest completed iteration itself -- whatever retries happened
+    // underneath, the search must end on an exact score with a legal line from
+    // the root, and the root must be restored exactly.
+    for (core_positions) |fen_text| {
+        var root: chess.position.PositionState = .{};
+        var position = try chess.fen.parse(fen_text, &root);
+        const original_key = position.current.key;
+        var harness: Harness = .{};
+        var storage: [8192]search.tt.Cluster = undefined;
+        var table = search.tt.Table.init(&storage);
+        var ordering: search.ordering.State = .{};
+        var counters: search.diagnostics.Counters = .{};
+        var control: search.types.NeverStop = .{};
+        const result = search.baseline.runWithFeatures(
+            core_features,
+            &position,
+            harness.binding(),
+            .{ .depth = 8 },
+            &control,
+            &harness.thread,
+            &table,
+            &ordering,
+            &counters,
+        );
+        const completed = result.completed.?;
+        try std.testing.expectEqual(search.types.Bound.exact, completed.evidence.bound);
+        try std.testing.expectEqual(@as(u16, 8), completed.depth);
+        try expectLegalPv(fen_text, completed.pv.slice());
+        try std.testing.expect(chess.movegen.isLegal(&position, result.best_move.?));
+        try std.testing.expect(chess.state.isConsistent(&position));
+        try std.testing.expectEqual(original_key, position.current.key);
+    }
+}
+
+/// Stops the search once a node budget is exhausted, so a stop can land at an
+/// arbitrary point including inside an aspiration retry.
+const NodeBudget = struct {
+    thread: *const search.types.ThreadState,
+    limit: u64,
+
+    pub fn shouldStop(self: *@This()) bool {
+        return self.thread.nodes >= self.limit;
+    }
+};
+
+test "cancellation during a core aspiration retry keeps the last completed iteration" {
+    // A stop that lands inside a retry must publish the previous completed
+    // iteration, never the bounded attempt in flight. The oracle is that the
+    // returned result is either a complete iteration shallower than requested
+    // or the fallback, and in both cases its move is legal at the restored
+    // root.
+    for ([_]u64{ 64, 256, 1024, 4096 }) |budget| {
+        var root: chess.position.PositionState = .{};
+        var position = try chess.fen.parse(
+            "3r1rk1/1ppb1pb1/p2npqnp/P5p1/3P4/1BN1BN1P/1PP2PP1/3RQR1K w - - 3 10",
+            &root,
+        );
+        const original_key = position.current.key;
+        var harness: Harness = .{};
+        var storage: [8192]search.tt.Cluster = undefined;
+        var table = search.tt.Table.init(&storage);
+        var ordering: search.ordering.State = .{};
+        var counters: search.diagnostics.Counters = .{};
+        var control = NodeBudget{ .thread = &harness.thread, .limit = budget };
+        const result = search.baseline.runWithFeatures(
+            core_features,
+            &position,
+            harness.binding(),
+            .{ .depth = 12 },
+            &control,
+            &harness.thread,
+            &table,
+            &ordering,
+            &counters,
+        );
+        try std.testing.expect(result.best_move != null);
+        try std.testing.expect(chess.movegen.isLegal(&position, result.best_move.?));
+        try std.testing.expect(chess.state.isConsistent(&position));
+        try std.testing.expectEqual(original_key, position.current.key);
+        if (result.completed) |completed| {
+            try std.testing.expectEqual(search.types.Bound.exact, completed.evidence.bound);
+            try expectLegalPv(
+                "3r1rk1/1ppb1pb1/p2npqnp/P5p1/3P4/1BN1BN1P/1PP2PP1/3RQR1K w - - 3 10",
+                completed.pv.slice(),
+            );
+        }
+    }
+}
+
 test "mate windows are behavior-identical wherever no mate score enters the window" {
     // The clip removes only scores outside [matedIn(ply), mateIn(ply + 1)], so
     // on searches that never produce a mate score it must change nothing at
