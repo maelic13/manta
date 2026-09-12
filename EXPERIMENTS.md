@@ -111,6 +111,36 @@ ordinary non-check qsearch nodes and generates the disjoint quiet subset solely
 when needed to distinguish quiet mobility from stalemate. The trusted harness
 boundary was unchanged, so setup-only validation replaced a pilot.
 
+`MAN-S36` is registered and **not yet run**. Step 6.5.10 replaced the whole
+selective-search policy with one coordinated core designed in ADR-0071 and
+contracted by `SCORE-034`: one informative quiet history, a compile-time
+log-log reduction surface, prospective-depth move omission, node-level forward
+proofs, a root aspiration window and direct quiet checks in the first
+quiescence ply, behind one default-off umbrella with six ablation switches.
+The step was motivated by measured tree shape rather than by a feature list:
+at head `596159e` Manta needed a geometric branching factor of `2.225` per ply
+against `1.88` for the pinned classical reference, and `82.2 M` nodes at depth
+12 against `2.6 M`.
+
+Pre-game diagnostics on the workspace host, forty positions, 64 MiB, one
+thread, fresh process per depth, both arms built from the clean commit
+`22419a8`: geometric branching falls from `2.225` to `1.775`, depth-12 nodes
+from `82,249,155` to `9,693,589`, and relative NPS at depth 12 is `0.964`.
+Both cohorts improve and the ordinary 38-position subset carries the gain
+(`0.114x` nodes at depth 12) rather than the two mate positions (`0.208x`).
+The off arm reproduces `642,336` exactly; the core arm's bench-6 fingerprint is
+`359,259`.
+
+Two local 500-game diagnostic matches were run on the workspace host at 1T
+`3+0.03`, before and after the review's authority repair: `+110.60 +/- 22.52`
+Elo and then `+117.55 +/- 22.68` Elo, both with zero anomalies and every game
+ended by a rule of chess. **Those matches authorize nothing.** They are fixed
+size, have no stopping rule, ran on the development machine rather than the
+designated host, and are diagnostics that told the implementer the package was
+worth registering. Only the 1T SPRT below can promote it, and the two
+candidates one review has already repaired are a reminder that node savings and
+a local Elo estimate are not the same evidence.
+
 `MAN-S35` is production **by an explicit maintainer exception on a neutral gate,
 not by an H1 verdict**. The registered `[1,5]` SPRT was stopped by the maintainer
 at 1,998 games with W/L/D `484/461/1053`, `+4.00 +/- 9.32` Elo
@@ -171,6 +201,7 @@ their original step labels; new numbered work lives in PLAN.
 
 | ID | Candidate and hypothesis | Registered gate | Result |
 |---|---|---|---|
+| `MAN-S36` | Phase-6.5.10 coordinated selective-search core against production MAN-S35. Manta's tree is roughly `2.2` times wider per ply where the pinned classical reference is `1.9`, and the accepted selectivity was gated one isolated mechanism at a time on heads that lacked the rest; replacing it with one coordinated system -- informative history carrying a log-log reduction surface, omission read at the depth a move will actually be searched, node-level forward proofs that trust their own margins, a failed-side root window and direct quiet checks at the first quiescence ply -- will narrow the tree enough to gain material strength at equal time without losing a forcing line. | Candidate A enables only `-Dselective-core=true` against the same-source baseline, both native ReleaseFast from commit `22419a8`; 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2` superseded by `natural-v1` game end (ADR-0071 requires no adjudication), normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed recorded at launch; completed time forfeits and every engine/protocol/affinity fault are fatal; setup-only preflight, no pilot | Registered and preflighted, not yet run |
 | `MAN-S35` | Phase-6.5.10.1 complete non-root mate windows against production MAN-S34. Searching every non-root node with its window clipped to the mate distances the rules still allow, rather than only returning when the requested window already lies outside them, will avoid work on unreachable scores without changing any chess verdict. | Candidate A enables only `-Dmate-windows=true`; 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed recorded at launch; completed time forfeits and every engine/protocol/affinity fault are fatal; setup-only preflight passed, no pilot | Maintainer stopped at 1,998 games, W/L/D `484/461/1053`, `+4.00 +/- 9.32` Elo (`+6.54 +/- 15.23` nElo), LLR `0.23`, seed `1079633543`, no anomaly; neutral, neither H0 nor H1. Retained in production by explicit documented maintainer exception, not by the gate |
 | `MAN-S34` | Phase-6.5.7 exact tactical-only non-check qsearch generation against production MAN-S30. Removing quiet generation/ranking that qsearch cannot consume will increase throughput without changing the searched tree or chess evidence. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `751289825`; completed time forfeits and every engine/protocol/affinity fault are fatal | Accepted H1 after 1,614 games at `+59.77 +/- 16.95` nElo (`+40.00 +/- 11.45` Elo, LLR `2.95`); no anomaly; promoted to production |
 | `MAN-S33` | Phase-6.5.5 half-depth singular exclusion horizon against production MAN-S30. A bounded shallower same-position proof will preserve useful singular decisions while spending less work on alternatives. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `1844484847` | Maintainer stopped inconclusive; supplied 6,640-game snapshot `+1.24 +/- 8.36` nElo, LLR `-0.39`; unpromoted, final artifacts pending reconciliation |

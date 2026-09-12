@@ -2025,6 +2025,148 @@ only the registered 1T gate of 6.5.10.4 can promote.
    property test. A position that repeatedly fails one side at the root would
    be the honest check.
 
+**Review-1 repair and re-run (2026-09-12, Opus).** The authority finding is
+repaired in `22419a8`: the core's unverified null cutoff below
+`core_null_verification_depth` returns beta with `null_move` provenance and
+stores nothing. The verified path from depth 10 keeps its storage unchanged.
+
+The focused test states the invariant without naming the threshold, which
+6.5.11 may fit: a table entry produced by `null_move` can only follow a
+verification, so over any search
+`tt_stores_by_producer[null_move] <= null_move_verifications`. The oracle is
+the store site, not the repaired branch -- `ttStore` counts what the table
+actually received, by producer, wherever the call came from. Non-vacuity is
+asserted separately, because `null_move_cutoffs` counts accepted verifications
+plus unverified cutoffs, so any excess over `null_move_verifications` can only
+come from the unverified branch. The test was verified to fail with the
+`storeTable` call reinstated and to pass with it removed.
+
+Gate: both arms compile, the off arm reads `642,336` with geomean EBF `4.703`,
+upper median `12,201`, top share `16.1%` and WAC.001 still `g3g6`/`mate 2` at
+depth 5, and the full suite passes.
+
+**Re-run of the affected ticket-G rows**, both arms rebuilt from the clean
+repair commit `22419a8`. Core arm SHA-256
+`90563AB69AAE2048E465894E61223C97D5FA4CBA25892979136C23BA6EEFA818`, base arm
+`63A30FD5386EAFDE...`, neither from a dirty tree this time.
+
+| Row | Pre-repair (`f9f82ad`) | Post-repair (`22419a8`) | Target |
+|---|---:|---:|---|
+| Off-arm `bench 6 1` | `642,336` | `642,336` | exact |
+| Core-arm `bench 6 1` | `339,821` | `359,259` | diagnostic |
+| Geometric branching, depths 4 to 12 | `1.765` | `1.775` | at most `1.95` |
+| Nodes at depth 12 | `9,327,682` | `9,693,589` | at most `25 M` |
+| Elapsed at depth 12 | `7,312 ms` | `7,120 ms` | |
+| NPS relative at depth 12 | `0.904` | `0.964` | at least `0.85` |
+| Local match | `+110.60 +/- 22.52` | `+117.55 +/- 22.68` | at least `+80` |
+
+Every target is still met. The tree grew about `3.9%` at depth 12, which is
+the cost of not reusing an unverified null bound, and the core bench rose from
+`339,821` to `359,259`. Elapsed time did not rise with it: the depth-12 run was
+slightly faster and relative NPS improved from `0.904` to `0.964`, because the
+refused entries were also refused TT work. The off-arm baseline row is
+unchanged and was not re-measured.
+
+**Cohorts, post-repair.** Both still improve, and the ordinary subset still
+carries the gain.
+
+| Cohort | Depth | Base nodes | Core nodes | Ratio | NPS rel |
+|---|---:|---:|---:|---:|---:|
+| Ordinary 38 | 10 | `14,091,873` | `3,044,057` | `0.216` | `1.060` |
+| Ordinary 38 | 12 | `78,660,840` | `8,947,601` | `0.114` | `0.959` |
+| Mate 6 and 30 | 10 | `1,459,111` | `204,339` | `0.140` | `0.829` |
+| Mate 6 and 30 | 12 | `3,588,315` | `745,988` | `0.208` | `0.843` |
+
+**Attribution, post-repair** (`--min-depth 4 --max-depth 10 --hash 64`), beside
+the pre-repair column.
+
+| Quantity | Pre-repair | Post-repair | Post share |
+|---|---:|---:|---|
+| Main nodes | `3,976,932` | `3,862,255` | |
+| Searched main moves | `3,803,718` | `3,679,535` | |
+| LMR probes | `390,783` | `403,303` | `10.96%` of searched main moves |
+| LMR re-searches | `8,726` | `9,953` | `2.47%` of probes |
+| Late-move count | `5,433,189` | `5,759,096` | `50.04%` of `11,508,251` selected |
+| Quiet futility | `291,697` | `279,619` | `2.43%` of selected |
+| History | `134,643` | `163,177` | `1.42%` of selected |
+| Losing-capture SEE | `1,584,571` | `1,626,824` | `14.14%` of selected |
+| Null attempts | `129,913` | `136,410` | |
+| Null cutoffs | `64,589` | `69,539` | `50.98%` of attempts |
+| Null verifications | `0` | `3` | `0.00%` of attempts |
+| Reverse futility | `444,367` | `450,549` | `11.67%` of main nodes |
+| Razoring | `108,046` | `100,996` | `2.61%` of main nodes |
+| Aspiration fail-low / fail-high | `407` / `391` | `414` / `413` | |
+
+Main nodes fell while selected moves rose: without the stored null bound more
+nodes run their move loop instead of taking a cached cutoff, so each surviving
+node does more work and the total node count still rises. Null verifications
+moved from `0` to `3`, which is the first direct evidence in these diagnostics
+that the depth-10 threshold is reachable at all; the review's answer to
+question 2 predicted it would only appear in deeper searches.
+
+**Canaries, post-repair.** Mate in one at depth 1 (`g6g7`, `mate 1`); hanging
+queen at depth 1, `cp 1361`; KQK `cp 1765` and KBNK `cp 1501` at depth 2;
+WAC.001 `g3g6` with `mate 2` at depth 5.
+
+**Local match, post-repair.** Same command, same thresholds.
+`MAN-S36-core` vs `MAN-S35-base`, 1T `3+0.03`, Hash 64 MiB, concurrency 8, 500
+fixed games, no adjudication: W/L/D `215/52/233`, **`+117.55 +/- 22.68` Elo,
+`+170.47 +/- 30.45` nElo**, LOS `100.00%`, pentanomial `[4, 21, 82, 94, 49]`,
+draw ratio `32.80%`, pairs ratio `5.72`. Zero anomalies. Terminations: `219`
+threefold, `144` white mates, `123` black mates, `12` insufficient material,
+`1` stalemate, `1` fifty-move. The repair did not cost strength on this
+sample; the point estimate rose by `7` Elo, well inside the intervals.
+
+**6.5.10.4 handoff (prepared and preflighted, not run).** `MAN-S36` is
+registered in `EXPERIMENTS.md` as registered-and-preflighted. Both arms are
+built from the clean repair commit `22419a8` by `tools/build_test.ps1`, so each
+carries a hash-bound provenance manifest and neither reports a dirty tree.
+
+| Arm | Binary | SHA-256 | `bench 6 1` |
+|---|---|---|---|
+| A `MAN-S36` | `tools/test_engines/manta-S36-core.exe` | `90563AB69AAE2048E465894E61223C97D5FA4CBA25892979136C23BA6EEFA818` | `359,259` |
+| B `MAN-S35` | `tools/test_engines/manta-S36-base.exe` | `63A30FD5386EAFDE9FA010A93C62F5B2D267071B90E6226999F92F4429435510` | `642,336` |
+
+Both native, same commit, same Zig `0.16.0`; their manifests differ in exactly
+one field, `selective_core`. `tools/sprt.ps1 -DryRun` passed its setup-only
+preflight: compiler equality, build-contract equality, option advertisement,
+physical-core placement and book resolution, with no game process started and
+no result artifact written. No pilot is warranted -- the harness boundaries are
+unchanged since the adjudication retirement of ADR-0071's own rule, which both
+arms already run under.
+
+The maintainer command, to run on the designated 5950X:
+
+```bash
+pwsh -NoProfile -File ./tools/sprt.ps1 -EngineA "tools\test_engines\manta-S36-core.exe" -EngineB "tools\test_engines\manta-S36-base.exe" -NameA "MAN-S36" -NameB "MAN-S35" -Elo0 1 -Elo1 5 -Alpha 0.05 -Beta 0.05 -MaxGames 16000 -Hash 64 -Threads 1 -TC "3+0.03"
+```
+
+It resolves to 1T `3+0.03`, Hash 64 MiB per engine, concurrency 14 on 16
+physical cores with an explicit CPU list, paired randomized UHO openings,
+`natural-v1` game end with no adjudication, normalized `[1,5]` at alpha/beta
+`0.05` and a 16,000-game cap. The opening seed is generated and recorded in the
+run manifest at launch. Completed time forfeits are fatal, because clock policy
+is not the measured subject; every engine, protocol, affinity or infrastructure
+fault is fatal as well.
+
+Budget, derived from the local 500-game match on this host (500 games in
+`563 s` at concurrency 8, `3,027` PGN bytes per game): about `93` games per
+minute at concurrency 14, so the full cap is roughly `2.9` hours of wall time
+and about `46 MiB` of PGN plus a log and the copied manifests. A decisive
+candidate resolves far sooner. The harness has no checkpoint or resume: an
+interrupted run keeps its partial PGN and log for inspection but must be
+restarted, and partial runs are never spliced.
+
+Stop rule: accept H1, accept H0, or exhaust the cap. Only H1 promotes, and it
+promotes the package rather than any component -- the six switches are
+ablation diagnostics and were never gated separately. On H1 the umbrella
+defaults on, `359,259` becomes the recorded production fingerprint, the off arm
+keeps reconstructing `642,336`, the archived fingerprints stay pinned, and
+`SCORE-034`, `EXPERIMENTS.md`, `GUIDE.md` and this section are reconciled. H0
+or an exhausted cap does not promote; one ablation cycle in ADR-0071's order is
+permitted, then a re-plan. Record the returned manifest, log, PGN and decision
+snapshot before any verdict is written.
+
 **6.5.10.3 — Review loop (Fable).** Review the implementation against ADR-0071
 and `SCORE-034`: verification before PV, cutoff, TT or feedback authority;
 provenance and scope through negation; null-verification scope; exclusion-node
