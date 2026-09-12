@@ -1872,6 +1872,159 @@ the amendments working as intended: the probe floor spends a main-search ply
 the old surface gave away, and razoring at depth one only stops replacing two
 further plies with quiescence.
 
+**F and G complete (2026-09-12, Opus). Every pre-game target is met and the
+local diagnostic match is `+110.60` Elo.** Commits: `aa22dd0` the root
+aspiration window, `5915468` two accounting repairs the observation build
+caught.
+
+Both arms are native ReleaseFast from the same source. Core arm SHA-256
+`AC7089964FEBAA2139A6B6B00D437B981169F77CC2035F3AEC628A661C2D72F7`
+(`-Dselective-core=true`, bench `339821`); base arm
+`AF14EC5FCDEB8E608349A6EE6329E63A6648B9253B13202B76318BBDB55B02C2`
+(bench `642336`). Both were built from a dirty tree, so they are diagnostic
+binaries only; 6.5.10.4 rebuilds from a clean commit.
+
+**Targets.** Forty positions, 64 MiB, one thread, fresh process per depth.
+
+| Diagnostic | Baseline | Target | Core arm | Verdict |
+|---|---:|---:|---:|---|
+| Geometric branching, depths 4 to 12 | `2.225` | at most `1.95` | **`1.765`** | met, and narrower than the reference's `1.88` |
+| Nodes at depth 12 | `82,249,155` | at most `25 M` | **`9,327,682`** | met, `0.113x` |
+| NPS relative to baseline at depth 12 | `1.00` | at least `0.85` | **`0.904`** | met |
+| Ordinary and mate cohorts | | both improving | see below | met |
+| Local diagnostic match | | at least `+80` Elo | **`+110.60`** | met |
+
+**Depth curve, both arms.**
+
+| Depth | Base nodes | Core nodes | Ratio | Base ms | Core ms | Base NPS | Core NPS | Rel |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 4 | `137,167` | `98,847` | `0.721` | `313` | `287` | `438,233` | `344,415` | `0.786` |
+| 6 | `655,442` | `342,560` | `0.523` | `693` | `452` | `945,804` | `757,876` | `0.801` |
+| 8 | `3,304,950` | `953,653` | `0.289` | `2,794` | `916` | `1,182,874` | `1,041,106` | `0.880` |
+| 10 | `15,550,984` | `3,690,152` | `0.237` | `11,985` | `2,828` | `1,297,537` | `1,304,863` | `1.006` |
+| 11 | `30,887,235` | `5,641,596` | `0.183` | `23,838` | `4,606` | `1,295,714` | `1,224,836` | `0.945` |
+| 12 | `82,249,155` | `9,327,682` | `0.113` | `58,267` | `7,312` | `1,411,591` | `1,275,668` | `0.904` |
+
+NPS is lowest at shallow depths, where the extra first-ply quiescence checks
+are a large share of a small tree, and recovers to about `0.9` by depth 12. The
+off-arm row reproduces PLAN's recorded baseline exactly -- branching `2.225`,
+depth-12 nodes `82,249,155` -- which is the check that the measurement setup
+is the same one that produced the baseline.
+
+**Cohorts, reported separately.** Both improve, and the ordinary subset carries
+the gain rather than the two mate positions.
+
+| Cohort | Depth | Base nodes | Core nodes | Ratio | Base ms | Core ms | NPS rel |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Ordinary 38 | 10 | `14,091,873` | `3,449,266` | `0.245` | `11,322` | `2,692` | `1.029` |
+| Ordinary 38 | 12 | `78,660,840` | `8,756,302` | `0.111` | `56,661` | `6,988` | `0.903` |
+| Mate 6 and 30 | 10 | `1,459,111` | `240,886` | `0.165` | `663` | `136` | `0.805` |
+| Mate 6 and 30 | 12 | `3,588,315` | `571,380` | `0.159` | `1,606` | `324` | `0.789` |
+
+**Attribution on the core arm**, `zig build search-attribution -- --min-depth 4
+--max-depth 10 --hash 64`, corpus totals with each rule's own denominator.
+
+| Quantity | Value | Denominator |
+|---|---:|---|
+| Main nodes | `3,976,932` | |
+| Searched main moves | `3,803,718` | |
+| LMR probes | `390,783` | `10.3%` of searched main moves |
+| LMR re-searches | `8,726` | `2.23%` of probes |
+| Late-move-count omissions | `5,433,189` | `48.30%` of `11,247,818` selected main moves |
+| Quiet-futility omissions | `291,697` | `2.59%` of selected |
+| History omissions | `134,643` | `1.20%` of selected |
+| Losing-capture SEE omissions | `1,584,571` | `14.09%` of selected |
+| Null attempts | `129,913` | |
+| Null cutoffs | `64,589` | `49.7%` of attempts |
+| Null verifications | `0` | `0%` of attempts; none of these nodes reached depth 10 |
+| Reverse-futility cuts | `444,367` | `11.17%` of main nodes |
+| Razoring cuts | `108,046` | `2.72%` of main nodes |
+| Aspiration fail-lows / fail-highs | `407` / `391` | |
+
+The `2.23%` re-search rate is a diagnostic, not evidence that the reductions
+are safe: a low re-search rate is equally consistent with reducing too little
+to matter and with reducing correctly. What it does say is that the surface is
+not thrashing. Two thirds of all selected moves are omitted before they are
+made, which is the shape change the branching factor reports.
+
+**Canaries on the core arm.** Mate in one at depth 1 (`g6g7`, `mate 1`);
+hanging queen at depth 1 taken by the king, `cp 1361`; KQK and KBNK positive at
+depth 2 (`cp 1765`, `cp 1501`); WAC.001 `g3g6` with `mate 2` at depth 5.
+
+**Full `zig build test` per arm: both pass.** One scoping change was needed and
+is recorded below.
+
+**Local diagnostic match**, this workstation, 1T `3+0.03`, Hash 64 MiB,
+concurrency 8, 500 fixed games, no adjudication (ADR-0071's own harness rule):
+
+`MAN-S36-core` vs `MAN-S35-base`: **W/L/D `219/65/216`, `+110.60 +/- 22.52`
+Elo, `+160.19 +/- 30.45` nElo, LOS `100.00%`**, pentanomial
+`[3, 29, 73, 101, 44]`, draw ratio `29.20%`, pairs ratio `4.53`. Zero
+anomalies: no time forfeit, crash, disconnect, illegal move or stall in the
+log. Terminations were `205` threefold draws, `149` white mates, `135` black
+mates, `9` insufficient material and `2` fifty-move draws -- every game ended
+by a rule of chess, as ADR-0071 requires.
+
+That is above the `+80` threshold, so by the ADR's own rule the package
+proceeds to review rather than to ablation. The match authorizes nothing: it is
+a fixed-size diagnostic on the development host with no SPRT stop rule, and
+only the registered 1T gate of 6.5.10.4 can promote.
+
+**Decisions beyond the ADR text, this session.**
+
+1. `PruneCause` gained a `history` variant and the attribution row gained
+   `prunes_history`, `prunes_razoring` and `null_verifications`, so ticket G
+   could report each omission rule against its own denominator.
+2. `diagnostics.Counters` gained `nullMoveCutoff`. ADR-0071 D cuts on a null
+   fail-high below depth 10 without verifying, and the observation build's
+   accounting invariant is `null_move_cutoffs == prunes_by_cause[.null_move]`.
+   Folding the unverified cutoff into `nullMoveVerification` would have
+   reported a verification that never ran and made the verification rate
+   meaningless.
+3. Each quiet dropped inside the picker is counted as both a late-move-count
+   candidate and an omission by that rule, so the aggregate never exceeds its
+   own candidate denominator.
+4. A quiet check dropped by F's exchange filter is counted as a quiescence SEE
+   omission, which keeps the cross-cutting `see` aggregate equal to the sum of
+   its two phase counters.
+5. `tools/search_observe.zig`'s twelve-case suite now skips under the umbrella.
+   It asserts in both directions that the **production** configuration reaches
+   every accepted stage and leaves every rejected one silent. The core arm
+   reaches no verified ProbCut in twelve fixed cases simply because its tree is
+   narrower, and it deliberately changes IIR and adds a root window, so neither
+   half of that contract describes it. Weakening the assertions instead would
+   have removed the protection the accepted head has; the core arm's accounting
+   is asserted by the substrate tests and by the table above.
+6. `build_test.ps1` gained `-SelectiveCore` so the two diagnostic binaries
+   carry hash-bound provenance manifests.
+7. The differential SEE floor is `captured - value(mover) - (queen - pawn)` on
+   the promotion ranks. `-value(mover)` is not a floor there, because a
+   recapturing pawn can promote; the corpus found it on `a8b8` immediately.
+   This is a property of the exact gain-array path `atLeast` already used for
+   ranks one and eight, not of quiet pricing.
+
+**Open questions for the review.**
+
+1. `core_node_pruning` alone still answers WAC.001 `f6e8` at depth 5, while the
+   full package answers `g3g6`. The canary is a full-arm contract and the
+   components are ablation diagnostics, so this blocks nothing, but which of
+   its four rules is responsible is still unresolved: one-at-a-time disabling
+   never isolated one, and one-at-a-time enabling needs temporary sub-switches.
+   Worth settling before 6.5.12 touches any of those rules.
+2. Null verifications are `0` over the whole depth-4-to-10 sweep, so the
+   depth-10 threshold is untested by these diagnostics. The first real evidence
+   about it will come from the registered gate's deeper searches.
+3. Shallow-depth NPS is `0.79` to `0.80`, recovering to `0.90` by depth 12.
+   If the registered gate runs at a control where shallow depths dominate, the
+   first-ply check generation is the obvious cost to re-examine; it is the only
+   component that adds work rather than removing it (`696,153` bench nodes
+   alone against `642,336`).
+4. The aspiration window fires `407` fail-lows and `391` fail-highs over the
+   sweep with no observed pathology, but ADR-0071 E's four-failure opening rule
+   has not been exercised by a real search in these diagnostics -- only by its
+   property test. A position that repeatedly fails one side at the root would
+   be the honest check.
+
 **6.5.10.3 — Review loop (Fable).** Review the implementation against ADR-0071
 and `SCORE-034`: verification before PV, cutoff, TT or feedback authority;
 provenance and scope through negation; null-verification scope; exclusion-node
