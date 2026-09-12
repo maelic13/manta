@@ -1372,15 +1372,52 @@ against candidate `12,541 / 12,360 / 12,389` ms, so the candidate's spread lies
 inside the baseline's own. No ordinary throughput change is claimed in either
 direction, and none of this is strength evidence.
 
-**6.5.10.1 SPRT handoff (prepared, not run).** The candidate is frozen and takes
-`MAN-S35`. The maintainer runs one registered 1T SPRT on the designated 5950X
-under the unchanged trusted harness: candidate `-Dmate-windows=true` as A against
-this head with the switch omitted as B, both built by `tools/build_test.ps1` from
-the same commit and compiler, `3+0.03`, Hash 64 MiB, paired randomized UHO book,
-`strength-v2`, normalized `[1,5]`, alpha/beta `0.05`, 16,000-game cap; completed
-time forfeits and every engine, protocol or affinity fault are fatal. A
-setup-only check precedes the run; no pilot is warranted because no operational
-boundary changed. 10.2 rebases on whichever arm is production afterwards.
+**6.5.10.1 SPRT handoff (prepared and preflighted, not run).** The candidate is
+frozen as `MAN-S35`. Both arms are built, and `tools/sprt.ps1 -DryRun` passed its
+setup-only preflight: compiler equality, build-contract equality, option
+advertisement, physical-core placement and book resolution. No pilot is
+warranted -- no operational boundary of the trusted harness changed.
+
+| Arm | Binary | SHA-256 | `bench 6 1` |
+|---|---|---|---|
+| A `MAN-S35` | `tools/test_engines/manta-MAN-S35-candidate.exe` | `82CA7B3396B0C84948838E3358F01937497BDA5A7DE521C0BF217DA606B0D125` | `642,336` |
+| B `MAN-S34` | `tools/test_engines/manta-MAN-S35-baseline.exe` | `04C0F60117D6B6A54AFDEB8BF76195DC75C09F6ACEF9CC18D942B1ADE577FFE4` | `775,451` |
+
+Both are native builds from the same clean revision and the same Zig `0.16.0`,
+and their manifests differ in exactly one field: `mate_windows`. A is
+`-Dmate-windows=true`; B omits the switch and is the same-source production
+reconstruction. The run command is
+
+```
+./tools/sprt.ps1 `
+    -EngineA "tools\test_engines\manta-MAN-S35-candidate.exe" `
+    -EngineB "tools\test_engines\manta-MAN-S35-baseline.exe" `
+    -NameA "MAN-S35" -NameB "MAN-S34" `
+    -Elo0 1 -Elo1 5 -Alpha 0.05 -Beta 0.05 -MaxGames 16000 `
+    -Hash 64 -Threads 1 -TC "3+0.03"
+```
+
+which resolves to 1T `3+0.03`, Hash 64 MiB per engine, concurrency 14 on 16
+physical cores with an explicit CPU list, paired randomized UHO openings,
+`strength-v2` adjudication, normalized `[1,5]` at alpha/beta `0.05` and a
+16,000-game cap. The opening seed is generated and recorded in the run manifest
+at launch. Completed time forfeits are fatal here, because clock policy is not
+the measured subject; every engine, protocol, affinity or infrastructure fault
+is fatal as well.
+
+Budget, derived from `MAN-S34` on this host at the same control and concurrency
+(1,616 games in 15.9 minutes, `2,489` PGN bytes per game): about 102 games per
+minute, so the 16,000-game cap is roughly 2 h 40 min of wall time and about
+40 MiB of PGN plus a 2 MiB log and the copied manifests. A decisive candidate
+resolves far sooner -- `MAN-S34` took 16 minutes. The harness has no checkpoint
+or resume: an interrupted run keeps its partial PGN and log for inspection but
+must be restarted, and partial runs are never spliced.
+
+Stop rule: accept H1, accept H0, or exhaust the cap. Only H1 promotes. H0, an
+exhausted cap and a maintainer stop all leave production at `MAN-S34`, and none
+of them authorizes tuning, splicing, extending or an automatic retry. Record the
+returned manifest, log, PGN and decision snapshot before any verdict is written.
+10.2 rebases on whichever arm is production afterwards.
 
 **6.5.10.2 decisions the A design must fix before B is coded.** Astra writes
 them as an ADR-0070 amendment or ADR-0071 and a new requirement; Terra

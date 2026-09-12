@@ -50,8 +50,10 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   `642,336`. The corpus saving is concentrated in the two mate positions
   (`-88.5%` at depth 10) while the ordinary 38-position subset moves `+0.21%`
   there and ordinary elapsed time is noise-dominated, so nothing about strength
-  is claimed yet. The ticket closes on the maintainer-run registered 1T SPRT
-  prepared in PLAN. 6.5.10.2 needs its own approval before its first edit.
+  is claimed yet. Both `MAN-S35` arms are built and the harness setup-only
+  preflight has passed; the ticket closes on the maintainer-run registered 1T
+  SPRT whose identities, command, budget and stop rule PLAN records.
+  6.5.10.2 needs its own approval before its first edit.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
