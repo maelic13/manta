@@ -2,7 +2,7 @@ const std = @import("std");
 
 const max_file_size = 2 * 1024 * 1024;
 // Includes the Markdown header row plus every stable requirement-ID row.
-const expected_requirement_count = 114;
+const expected_requirement_count = 115;
 
 const required_paths = [_][]const u8{
     ".github/workflows/ci.yml",

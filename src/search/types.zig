@@ -684,12 +684,15 @@ pub const Features = struct {
     continuation_distance_2: bool = true,
     continuation_distance_4: bool = true,
     continuation_distance_6: bool = true,
-    /// Step-6.5.5 `MAN-S32` playing candidate, default off until its gate. At
-    /// non-root main-search nodes whose alpha already matches or beats the
-    /// fastest mate still reachable, or whose beta is at or below the fastest
-    /// mate still sufferable, the window describes no reachable score and the
-    /// node returns the proven bound instead of searching.
-    mate_distance_pruning: bool = false,
+    /// Step-6.5.10.1 complete mate-window playing candidate, default off until
+    /// its gate. Every non-root main-search node clips its own window to the
+    /// band the rules of chess still allow at that ply, `[matedIn(ply),
+    /// mateIn(ply + 1)]`. A window that no longer holds a reachable score
+    /// returns the proven bound; otherwise the clipped window is the one the
+    /// table probe, forward proofs, move loop and bound classification read.
+    /// This supersedes `MAN-S32`, whose crossing-only path tightened nothing
+    /// in an open window.
+    mate_windows: bool = false,
     /// Step-6.5.5 singular-exclusion-horizon candidate. The same-position
     /// search still excludes exactly the legal ordinary TT move and alone
     /// decides whether that move extends; this switch only replaces the
@@ -827,7 +830,7 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     try std.testing.expect(!features.balanced_history);
     try std.testing.expect(!features.history_lmr);
     try std.testing.expect(!features.lmr_reply_feedback);
-    try std.testing.expect(!features.mate_distance_pruning);
+    try std.testing.expect(!features.mate_windows);
     try std.testing.expect(!features.singular_exclusion_horizon);
     try std.testing.expect(!features.main_selectivity_sync);
     try std.testing.expect(!features.depth_authority_sync);

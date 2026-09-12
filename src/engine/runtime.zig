@@ -695,7 +695,7 @@ fn executeSearch(
         .aspiration = search_build_options.stability_aspiration,
         .live_history_staging = search_build_options.live_history_staging,
         .nonroot_check_extension = search_build_options.nonroot_check_extension,
-        .mate_distance_pruning = search_build_options.mate_distance_pruning,
+        .mate_windows = search_build_options.mate_windows,
         .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
         .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
         .search_evidence_observation = search_build_options.search_evidence_observation,

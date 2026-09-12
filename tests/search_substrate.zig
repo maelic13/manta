@@ -962,11 +962,11 @@ test "check extension is independently ablatable and preserves legal evasion pub
     try std.testing.expect(chess.state.isConsistent(&disabled_position));
 }
 
-test "MAN-S32 is behavior-identical wherever no mate score enters the window" {
-    // The proof can only fire when alpha or beta already lies in the mate band,
-    // so on searches that never produce a mate score it must change nothing at
+test "mate windows are behavior-identical wherever no mate score enters the window" {
+    // The clip removes only scores outside [matedIn(ply), mateIn(ply + 1)], so
+    // on searches that never produce a mate score it must change nothing at
     // all. Equal node counts and an equal published PV are the oracle; a
-    // candidate that moved either would be pruning reachable scores.
+    // candidate that moved either would be clipping reachable scores.
     const quiet = [_][]const u8{
         chess.fen.start_position,
         "r2qr1k1/p4ppp/1pn1bn2/2b1p3/4P3/1BN1BN2/PPP2PPP/R2QR1K1 b - - 6 10",
@@ -1003,7 +1003,7 @@ test "MAN-S32 is behavior-identical wherever no mate score enters the window" {
             &baseline_counters,
         );
         const candidate = search.baseline.runWithFeatures(
-            .{ .mate_distance_pruning = true },
+            .{ .mate_windows = true },
             &candidate_position,
             candidate_harness.binding(),
             .{ .depth = 6 },
@@ -1030,22 +1030,29 @@ test "MAN-S32 is behavior-identical wherever no mate score enters the window" {
     }
 }
 
-test "MAN-S32 keeps the proven mate distance while removing unreachable work" {
+test "mate windows keep the proven mate distance for either side to move" {
     // Mate distance is an independent chess fact, so both arms must agree on it
-    // exactly and both must publish a legal PV from a restored root. Only the
-    // amount of work may differ, and on a proven mate it must actually fall:
-    // every sibling of a mate in one is searched under a window that no legal
-    // continuation can satisfy.
+    // exactly and both must publish a legal PV from a restored root. The cases
+    // cover both sides to move and mate at several plies, because the clip is
+    // derived from the ply and applies to whichever side stands to be mated.
+    // Only the amount of work may differ, and on a proven mate it must fall:
+    // once the fastest reachable mate is found, no sibling can beat it and the
+    // clipped window says so.
     const cases = [_]struct { fen: []const u8, distance: i32 }{
         .{ .fen = "r1bq1r2/pp2n3/4N2k/3pPppP/1b1n2Q1/2N5/PP3PP1/R1B1K2R w KQ g6 0 20", .distance = 1 },
         .{ .fen = "7k/8/5KQ1/8/8/8/8/8 w - - 0 1", .distance = 1 },
         .{ .fen = "2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1", .distance = 3 },
+        // Black to move, mating in one and in three plies. The second is the
+        // colour mirror of the case above it, so the same forced mate must be
+        // found with the clip derived for the other side.
+        .{ .fen = "8/8/8/8/8/6k1/q7/6K1 b - - 0 1", .distance = 1 },
+        .{ .fen = "r4rk1/ppb4p/2p3q1/2Pp4/3Pn3/1NNQBn1P/PP3PP1/2RR3K b - - 0 1", .distance = 3 },
     };
     for (cases) |case| {
         var smaller = false;
         var nodes_before: u64 = 0;
         var distances: [2]?i32 = .{ null, null };
-        inline for (.{ false, true }, 0..) |mate_distance_pruning, index| {
+        inline for (.{ false, true }, 0..) |mate_windows, index| {
             var root: chess.position.PositionState = .{};
             var position = try chess.fen.parse(case.fen, &root);
             const original_key = position.current.key;
@@ -1056,7 +1063,7 @@ test "MAN-S32 keeps the proven mate distance while removing unreachable work" {
             var counters: search.diagnostics.Counters = .{};
             var control: search.types.NeverStop = .{};
             const result = search.baseline.runWithFeatures(
-                .{ .mate_distance_pruning = mate_distance_pruning },
+                .{ .mate_windows = mate_windows },
                 &position,
                 harness.binding(),
                 .{ .depth = 6 },
@@ -1067,6 +1074,7 @@ test "MAN-S32 keeps the proven mate distance while removing unreachable work" {
                 &counters,
             );
             distances[index] = result.evidence.value.mateDistance();
+            try std.testing.expectEqual(search.types.Bound.exact, result.evidence.bound);
             try expectLegalPv(case.fen, result.completed.?.pv.slice());
             try std.testing.expect(chess.state.isConsistent(&position));
             try std.testing.expectEqual(original_key, position.current.key);
@@ -1079,6 +1087,170 @@ test "MAN-S32 keeps the proven mate distance while removing unreachable work" {
         try std.testing.expectEqual(case.distance, distances[0].?);
         try std.testing.expectEqual(distances[0].?, distances[1].?);
         try std.testing.expect(smaller);
+    }
+}
+
+test "the corpus mate positions complete identically in both arms" {
+    // Bench corpus indices 6 and 30 are the two positions the branching profile
+    // excludes from its ordinary subset, so they are exactly where a mate-window
+    // change would be mistaken for general strength. Index 6 is a proven mate
+    // at this depth and index 30 is not, and both must complete with the same
+    // best move, score and published line under either arm.
+    const corpus = [_][]const u8{
+        "r1bq1r2/pp2n3/4N2k/3pPppP/1b1n2Q1/2N5/PP3PP1/R1B1K2R w KQ g6 0 20",
+        "1Q4bk/3R2pp/p7/3p3P/1p6/1B6/P2q1PP1/6K1 w - - 2 17",
+    };
+    for (corpus) |fen_text| {
+        var baseline_root: chess.position.PositionState = .{};
+        var candidate_root: chess.position.PositionState = .{};
+        var baseline_position = try chess.fen.parse(fen_text, &baseline_root);
+        var candidate_position = try chess.fen.parse(fen_text, &candidate_root);
+        var baseline_harness: Harness = .{};
+        var candidate_harness: Harness = .{};
+        var baseline_storage: [8192]search.tt.Cluster = undefined;
+        var candidate_storage: [8192]search.tt.Cluster = undefined;
+        var baseline_table = search.tt.Table.init(&baseline_storage);
+        var candidate_table = search.tt.Table.init(&candidate_storage);
+        var baseline_ordering: search.ordering.State = .{};
+        var candidate_ordering: search.ordering.State = .{};
+        var baseline_counters: search.diagnostics.Counters = .{};
+        var candidate_counters: search.diagnostics.Counters = .{};
+        var baseline_control: search.types.NeverStop = .{};
+        var candidate_control: search.types.NeverStop = .{};
+
+        const production = search.baseline.runWithFeatures(
+            .{},
+            &baseline_position,
+            baseline_harness.binding(),
+            .{ .depth = 6 },
+            &baseline_control,
+            &baseline_harness.thread,
+            &baseline_table,
+            &baseline_ordering,
+            &baseline_counters,
+        );
+        const candidate = search.baseline.runWithFeatures(
+            .{ .mate_windows = true },
+            &candidate_position,
+            candidate_harness.binding(),
+            .{ .depth = 6 },
+            &candidate_control,
+            &candidate_harness.thread,
+            &candidate_table,
+            &candidate_ordering,
+            &candidate_counters,
+        );
+
+        try std.testing.expectEqual(production.evidence, candidate.evidence);
+        try std.testing.expectEqual(production.best_move.?, candidate.best_move.?);
+        try std.testing.expectEqualSlices(
+            chess.move.Move,
+            production.completed.?.pv.slice(),
+            candidate.completed.?.pv.slice(),
+        );
+        try expectLegalPv(fen_text, candidate.completed.?.pv.slice());
+        try std.testing.expect(chess.state.isConsistent(&candidate_position));
+    }
+}
+
+test "mate evidence stored under a clipped window survives the table round trip" {
+    // Mate scores are stored distance-relative, so a bound proven against a
+    // clipped window must still read back as the same chess fact. A warm table
+    // replays the position with every mate record already present: the second
+    // search consumes what the first stored, and both must report the same
+    // legal mate at the same distance as the cold production arm.
+    const cases = [_][]const u8{
+        "r1bq1r2/pp2n3/4N2k/3pPppP/1b1n2Q1/2N5/PP3PP1/R1B1K2R w KQ g6 0 20",
+        "2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1",
+    };
+    for (cases) |fen_text| {
+        var expected_root: chess.position.PositionState = .{};
+        var expected_position = try chess.fen.parse(fen_text, &expected_root);
+        var expected_harness: Harness = .{};
+        var expected_control: search.types.NeverStop = .{};
+        var expected_counters: search.diagnostics.Counters = .{};
+        const expected = search.baseline.runWithFeatures(
+            .{},
+            &expected_position,
+            expected_harness.binding(),
+            .{ .depth = 6 },
+            &expected_control,
+            &expected_harness.thread,
+            null,
+            null,
+            &expected_counters,
+        );
+
+        var storage: [8192]search.tt.Cluster = undefined;
+        var table = search.tt.Table.init(&storage);
+        var ordering: search.ordering.State = .{};
+        for (0..2) |pass| {
+            var root: chess.position.PositionState = .{};
+            var position = try chess.fen.parse(fen_text, &root);
+            var harness: Harness = .{};
+            var counters: search.diagnostics.Counters = .{};
+            var control: search.types.NeverStop = .{};
+            const result = search.baseline.runWithFeatures(
+                .{ .mate_windows = true },
+                &position,
+                harness.binding(),
+                .{ .depth = 6 },
+                &control,
+                &harness.thread,
+                &table,
+                &ordering,
+                &counters,
+            );
+            try std.testing.expectEqual(
+                expected.evidence.value.mateDistance().?,
+                result.evidence.value.mateDistance().?,
+            );
+            try std.testing.expectEqual(search.types.Bound.exact, result.evidence.bound);
+            try expectLegalPv(fen_text, result.completed.?.pv.slice());
+            try std.testing.expect(chess.state.isConsistent(&position));
+            // The warm pass must still publish a move, not merely a cached
+            // score with no continuation to play.
+            try std.testing.expect(result.best_move != null);
+            _ = pass;
+        }
+    }
+}
+
+test "mate windows leave terminal roots exactly as the rules decide" {
+    // Checkmate and stalemate are decided by the rules before any window is
+    // consulted, and the clip may not invent, delay or renumber them. The
+    // mate cases above cover the same precedence one ply down, where the
+    // checkmated child is a terminal node inside a clipped window.
+    const cases = [_]struct { fen: []const u8, expected: manta.score.Score }{
+        .{ .fen = "7k/6Q1/5K2/8/8/8/8/8 b - - 0 1", .expected = manta.score.Score.matedIn(0).? },
+        .{ .fen = "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", .expected = .zero },
+    };
+    for (cases) |case| {
+        inline for (.{ false, true }) |mate_windows| {
+            var root: chess.position.PositionState = .{};
+            var position = try chess.fen.parse(case.fen, &root);
+            const original_key = position.current.key;
+            var harness: Harness = .{};
+            var counters: search.diagnostics.Counters = .{};
+            var control: search.types.NeverStop = .{};
+            const result = search.baseline.runWithFeatures(
+                .{ .mate_windows = mate_windows },
+                &position,
+                harness.binding(),
+                .{ .depth = 6 },
+                &control,
+                &harness.thread,
+                null,
+                null,
+                &counters,
+            );
+            try std.testing.expectEqual(case.expected, result.evidence.value);
+            try std.testing.expectEqual(search.types.Provenance.terminal, result.evidence.provenance);
+            try std.testing.expectEqual(search.types.Termination.terminal, result.termination);
+            try std.testing.expect(result.best_move == null);
+            try std.testing.expect(chess.state.isConsistent(&position));
+            try std.testing.expectEqual(original_key, position.current.key);
+        }
     }
 }
 

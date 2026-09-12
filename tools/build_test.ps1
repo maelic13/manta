@@ -101,9 +101,9 @@
     Keep production non-root check extension. Pass
     -NonrootCheckExtension:$false for the archived MAN-S31 candidate.
 
-.PARAMETER MateDistancePruning
-    Build the Step-6.5.5 MAN-S32 mate-distance-pruning candidate arm. It
-    defaults off; the production arm omits the switch.
+.PARAMETER MateWindows
+    Build the Step-6.5.10.1 complete mate-window candidate arm. It defaults
+    off; the production arm omits the switch.
 
 .PARAMETER SingularExclusionHorizon
     Build the default-off Step-6.5.5 singular-exclusion-horizon candidate arm.
@@ -150,7 +150,7 @@ param(
     [switch]$StabilityAspiration,
     [switch]$LiveHistoryStaging,
     [switch]$NonrootCheckExtension,
-    [switch]$MateDistancePruning,
+    [switch]$MateWindows,
     [switch]$SingularExclusionHorizon,
     [switch]$QsearchTacticalGeneration,
     [switch]$BuildOnly,
@@ -217,7 +217,7 @@ function Write-EngineManifest {
         [Parameter(Mandatory)][bool]$StabilityAspiration,
         [Parameter(Mandatory)][bool]$LiveHistoryStaging,
         [Parameter(Mandatory)][bool]$NonrootCheckExtension,
-        [Parameter(Mandatory)][bool]$MateDistancePruning,
+        [Parameter(Mandatory)][bool]$MateWindows,
         [Parameter(Mandatory)][bool]$SingularExclusionHorizon,
         [Parameter(Mandatory)][bool]$QsearchTacticalGeneration,
         [switch]$SkipBench
@@ -260,7 +260,7 @@ function Write-EngineManifest {
         stability_aspiration = $StabilityAspiration
         live_history_staging = $LiveHistoryStaging
         nonroot_check_extension = $NonrootCheckExtension
-        mate_distance_pruning = $MateDistancePruning
+        mate_windows = $MateWindows
         singular_exclusion_horizon = $SingularExclusionHorizon
         qsearch_tactical_generation = $QsearchTacticalGeneration
         search_spsa_bake    = $false
@@ -310,11 +310,11 @@ try {
     $buildArgs += "-Dlive-history-staging=$liveHistoryStagingText"
     $nonrootCheckExtensionText = $nonrootCheckExtensionEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dnonroot-check-extension=$nonrootCheckExtensionText"
-    if ($MateDistancePruning) { $buildArgs += "-Dmate-distance-pruning=true" }
+    if ($MateWindows) { $buildArgs += "-Dmate-windows=true" }
     if ($SingularExclusionHorizon) { $buildArgs += "-Dsingular-exclusion-horizon=true" }
     $qsearchTacticalGenerationText = $qsearchTacticalGenerationEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dqsearch-tactical-generation=$qsearchTacticalGenerationText"
-    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($MateDistancePruning) { '-mate-distance-pruning' } else { '' })$(if ($SingularExclusionHorizon) { '-singular-exclusion-horizon' } else { '' })$(if ($qsearchTacticalGenerationEnabled) { '-qsearch-tacticals' } else { '-full-qsearch-generation' })"
+    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($MateWindows) { '-mate-windows' } else { '' })$(if ($SingularExclusionHorizon) { '-singular-exclusion-horizon' } else { '' })$(if ($qsearchTacticalGenerationEnabled) { '-qsearch-tacticals' } else { '-full-qsearch-generation' })"
 
     Write-Host ""
     Write-Host "Building Manta ($flavor) - suffix: $Suffix"
@@ -349,7 +349,7 @@ try {
         -StabilityAspiration ([bool]$StabilityAspiration) `
         -LiveHistoryStaging $liveHistoryStagingEnabled `
         -NonrootCheckExtension $nonrootCheckExtensionEnabled `
-        -MateDistancePruning ([bool]$MateDistancePruning) `
+        -MateWindows ([bool]$MateWindows) `
         -SingularExclusionHorizon ([bool]$SingularExclusionHorizon) `
         -QsearchTacticalGeneration $qsearchTacticalGenerationEnabled -SkipBench:$BuildOnly
     Write-Host ""

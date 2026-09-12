@@ -220,13 +220,16 @@ test "disabling MAN-S30 staging reconstructs the archived MAN-S29 fingerprint" {
     try std.testing.expectEqual(@as(u64, 799_610), report.fingerprint_nodes);
 }
 
-test "MAN-S32 mate-distance pruning builds on the current production head" {
+test "complete mate windows build on the current production head" {
     if (builtin.mode == .Debug) return;
-    // A prospective Step-6.5.5 candidate on the live MAN-S30 head. The exact
-    // total proves its artifact switch is live and records the tree it searches;
-    // only the registered games decide strength. The reduction is concentrated
-    // in the corpus positions that contain a proven mate, so this figure is not
-    // a general node-efficiency claim.
+    // The prospective Step-6.5.10.1 candidate on the live MAN-S34 head. The
+    // exact total proves its artifact switch is live and records the tree it
+    // searches; only the registered games decide strength. The reduction is
+    // concentrated in the corpus positions that contain a proven mate, so this
+    // figure is not a general node-efficiency claim. It replaces the
+    // crossing-only MAN-S32 total of 642,394: the complete clip narrows open
+    // principal windows the crossing test could not touch, so the same corpus
+    // is searched with slightly less work.
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -237,7 +240,7 @@ test "MAN-S32 mate-distance pruning builds on the current production head" {
     var control: manta.search.types.NeverStop = .{};
     var clock = IncrementingClock{};
     const report = bench.runWithFeatures(
-        .{ .mate_distance_pruning = true },
+        .{ .mate_windows = true },
         .{ .depth = bench.default_depth },
         &clock,
         &control,
@@ -246,7 +249,7 @@ test "MAN-S32 mate-distance pruning builds on the current production head" {
         &ordering,
     );
     try std.testing.expect(!report.cancelled and !report.failed);
-    try std.testing.expectEqual(@as(u64, 642_394), report.fingerprint_nodes);
+    try std.testing.expectEqual(@as(u64, 642_336), report.fingerprint_nodes);
 }
 
 test "MAN-S33 singular exclusion horizon builds on the current production head" {

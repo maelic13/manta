@@ -56,10 +56,10 @@ pub fn build(b: *std.Build) void {
         "nonroot-check-extension",
         "Retain blanket non-root check extension (false selects Step-6.5.3 MAN-S31)",
     ) orelse true;
-    const mate_distance_pruning = b.option(
+    const mate_windows = b.option(
         bool,
-        "mate-distance-pruning",
-        "Enable the Step-6.5.5 MAN-S32 mate-distance pruning candidate in this build",
+        "mate-windows",
+        "Enable the Step-6.5.10.1 complete mate-window candidate in this build",
     ) orelse false;
     const singular_exclusion_horizon = b.option(
         bool,
@@ -122,7 +122,7 @@ pub fn build(b: *std.Build) void {
     search_build_options.addOption(bool, "stability_aspiration", stability_aspiration);
     search_build_options.addOption(bool, "live_history_staging", live_history_staging);
     search_build_options.addOption(bool, "nonroot_check_extension", nonroot_check_extension);
-    search_build_options.addOption(bool, "mate_distance_pruning", mate_distance_pruning);
+    search_build_options.addOption(bool, "mate_windows", mate_windows);
     search_build_options.addOption(bool, "singular_exclusion_horizon", singular_exclusion_horizon);
     search_build_options.addOption(bool, "qsearch_tactical_generation", qsearch_tactical_generation);
     search_build_options.addOption(bool, "search_evidence_observation", search_evidence_observation);
@@ -281,7 +281,7 @@ pub fn build(b: *std.Build) void {
     transcript_search_build_options.addOption(bool, "stability_aspiration", stability_aspiration);
     transcript_search_build_options.addOption(bool, "live_history_staging", live_history_staging);
     transcript_search_build_options.addOption(bool, "nonroot_check_extension", nonroot_check_extension);
-    transcript_search_build_options.addOption(bool, "mate_distance_pruning", mate_distance_pruning);
+    transcript_search_build_options.addOption(bool, "mate_windows", mate_windows);
     transcript_search_build_options.addOption(bool, "singular_exclusion_horizon", singular_exclusion_horizon);
     transcript_search_build_options.addOption(bool, "qsearch_tactical_generation", qsearch_tactical_generation);
     transcript_search_build_options.addOption(bool, "search_evidence_observation", search_evidence_observation);

@@ -31,6 +31,12 @@ intermediate state is invalid.
 - Retain `MAN-S32` mate-distance pruning default-off. Its ordinary-position
   effect is below standalone SPRT resolution, so it waits for a compatible
   independently measured below-resolution component.
+  **Superseded by Step 6.5.10.1 (2026-09-12).** ADR-0070 made the complete
+  window the contract, and the crossing-only formulation proves nothing in an
+  open window. The `MAN-S32` switch is removed rather than kept beside the
+  complete clip, which would create an untested third configuration. Its
+  registration and recorded result stay historical; `SCORE-033` owns the
+  mechanism from here, and its own registered SPRT decides it.
 - Test `MAN-S33` singular-exclusion horizon independently. It replaces only
   the exclusion search's `depth - 2` horizon with `ceil(depth / 2)`, retaining
   at least three plies at the first eligible depth. The legal ordinary TT move,

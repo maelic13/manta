@@ -25,7 +25,7 @@ not a proof that its entire concept can never help, nor permission to retry.
 |---|---|---|
 | Iterative deepening, PVS, completed root authority | Present | Preserve through 6.5.8–6.5.10; root time/UCI consumes only final completed iterations |
 | Adaptive aspiration with a window-aware search consumer | Missing in production; isolated MAN-R02 ended at cap | 6.5.10 only with explicit root/current window evidence and retry authority |
-| Mate-distance window pruning | MAN-S32 default-off crossing-only candidate | 6.5.10 considers complete window/bound semantics; concentrated mate savings are not ordinary-position strength |
+| Mate-distance window pruning | `SCORE-033` default-off complete non-root window clip; MAN-S32's crossing-only arm removed | Implemented in 6.5.10.1 and awaiting its own registered 1T SPRT; the corpus saving is concentrated in the two mate positions and is not ordinary-position strength |
 | Upcoming-repetition bound pruning | Missing; current draw handling recognizes an already reached repetition | 6.5.11 derives a legal move/history witness for main/qsearch; possible draw is not an exact universal TT score |
 | TT authenticated score/depth/bound and raw-eval reuse | Present; richer confidence consumption is partial | 6.5.8–6.5.10 own provenance/depth consumers; 6.5.13 owns measured storage/cache cost |
 | Internal iterative reduction | Present; contextual extension of its policy is partial/off | Shared depth contract in 6.5.10 and proof review in 6.5.11 |

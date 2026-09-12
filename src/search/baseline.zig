@@ -39,6 +39,15 @@ const NodeValue = struct {
     observation: NodeObservationAuthority = .{},
 };
 
+/// The window an invocation searched, after any mate clip tightened the one
+/// its caller asked for. Observation records this rather than the requested
+/// window, so a diagnostic width is the width the node's consumers actually
+/// read.
+const SearchedWindow = struct {
+    alpha: i32,
+    beta: i32,
+};
+
 const NodeResolution = struct {
     value: NodeValue,
     depth: types.DepthIntent,
@@ -648,6 +657,10 @@ fn negamax(
             context.observer.extension(.check);
         }
     }
+    // A node that reaches its mate clip searches a window narrower than the one
+    // requested here. It reports that window back so the observation below
+    // describes the width its own consumers read, not the width asked for.
+    var searched_window = SearchedWindow{ .alpha = alpha_initial, .beta = beta };
     const result = negamaxNode(
         features,
         allow_null,
@@ -662,6 +675,7 @@ fn negamax(
         expectation,
         route,
         node_scope,
+        &searched_window,
     ) catch |err| {
         if (comptime features.search_evidence_observation)
             observeIncompleteOutcome(
@@ -675,8 +689,8 @@ fn negamax(
         const admitted_check = result.depth.extension -| depth_intent.extension;
         const admitted_iir = result.depth.reduction -| depth_intent.reduction;
         context.thread.search_evidence.observeWindow(types.WindowFacts.init(
-            alpha_initial,
-            beta,
+            searched_window.alpha,
+            searched_window.beta,
             context.root_reference_width,
             expectation,
         ));
@@ -736,14 +750,15 @@ fn negamaxNode(
     control: anytype,
     depth_intent: types.DepthIntent,
     ply: usize,
-    alpha_initial: i32,
-    beta: i32,
+    alpha_requested: i32,
+    beta_requested: i32,
     expectation: types.NodeExpectation,
     route: types.EntryRoute,
     node_scope: types.EvidenceScope,
+    searched_window: *SearchedWindow,
 ) Abort!NodeResolution {
     const pv_node = expectation.isPrincipal();
-    std.debug.assert(pv_node or beta == alpha_initial + 1);
+    std.debug.assert(pv_node or beta_requested == alpha_requested + 1);
     var active_depth = depth_intent;
     var depth = active_depth.searched();
     const excluded_move = if (comptime features.search_context and features.depth_authority and features.singular_extension)
@@ -779,10 +794,22 @@ fn negamaxNode(
             active_depth,
         );
 
-    if (comptime features.mate_distance_pruning) {
+    // The rules of chess bound what this ply can still produce, so the node
+    // searches the requested window intersected with that band. Everything
+    // below -- the table probe, the forward proofs, the move loop, the PVS
+    // test and the final bound classification -- reads the clipped window.
+    var alpha_initial = alpha_requested;
+    var beta = beta_requested;
+    if (comptime features.mate_windows) {
         if (ply != 0) {
-            if (mateDistanceBound(ply, alpha_initial, beta)) |proof|
-                return resolved(proof, active_depth);
+            switch (mateWindow(ply, alpha_initial, beta)) {
+                .proven => |proof| return resolved(proof, active_depth),
+                .searchable => |window| {
+                    alpha_initial = window.alpha;
+                    beta = window.beta;
+                    searched_window.* = window;
+                },
+            }
         }
     }
 
@@ -4084,36 +4111,56 @@ fn synchronizedLateMoveReduction(
 /// that resets the clock, or to establish that none exists.
 const tt_rule_fifty_guard_clock: u16 = 90;
 
-/// Step-6.5.5 `MAN-S32`. Mate distance is measured in plies from the root, so a
-/// node at `ply` can do no better than mating on the next ply and no worse than
-/// being mated on this one. Any window lying entirely outside
-/// `[matedIn(ply), mateIn(ply + 1)]` therefore describes outcomes the rules of
-/// chess cannot produce, and the node can return a proven bound instead of
-/// searching for a score it already knows is unreachable.
+/// Step-6.5.10.1 complete mate windows. Mate distance is measured in plies
+/// from the root, so a node at `ply` can do no better than mating on the next
+/// ply and no worse than being mated on this one. Every score the rules of
+/// chess allow it to return lies in `[matedIn(ply), mateIn(ply + 1)]`, so the
+/// node may intersect its caller's window with that band before searching:
+/// the clipped edges exclude only outcomes no legal continuation can produce.
 ///
-/// Only the two crossing cases are implemented, not a window clamp carried
-/// through the node. For a zero window the clamp is exactly equivalent: raising
-/// alpha above its own value already reaches beta, and lowering beta below its
-/// own value already reaches alpha, so any clamp that would change the window
-/// also crosses it. A principal node with a wide window could additionally be
-/// searched with a tightened window; that part is deliberately omitted so the
-/// zero-window contract asserted at node entry stays intact.
+/// When the intersection is empty the window described nothing reachable and
+/// the node returns a proven bound instead of searching. That happens in
+/// exactly two ways -- alpha already holds a mate at least as fast as this ply
+/// can deliver, or beta already sits at or below being mated on it -- because
+/// the band itself is never empty and the caller's own window never crosses.
 ///
-/// The returned evidence is a fact about ply, not about the position, and both
-/// facts survive the transposition table's distance-relative normalization: an
+/// A bound proven against the clipped window stays valid for the caller's
+/// wider one: a fail-low at the clipped alpha says the score is at most a
+/// value the true score cannot fall below, and a fail-high at the clipped beta
+/// says it is at least a value the true score cannot rise above. Both facts
+/// survive the transposition table's distance-relative normalization, since an
 /// upper bound of `mateIn(ply + 1)` normalizes to "no mate faster than one ply
 /// from here" and a lower bound of `matedIn(ply)` to "not already mated".
-fn mateDistanceBound(ply: usize, alpha: i32, beta: i32) ?NodeValue {
-    const fastest_mate = (score.Score.mateIn(ply + 1) orelse return null).raw();
-    const fastest_loss = (score.Score.matedIn(ply) orelse return null).raw();
+///
+/// For a zero window the clip is inert: raising alpha above its own value
+/// already reaches beta and lowering beta below its own value already reaches
+/// alpha, so a zero window either crosses and returns or is searched exactly
+/// as requested. The clip therefore changes only open windows -- the first ply
+/// below root, principal re-searches and full-window root retries -- which is
+/// where `MAN-S32`'s crossing-only test proved nothing.
+const MateWindow = union(enum) {
+    /// The clipped window still holds reachable scores; search it.
+    searchable: SearchedWindow,
+    /// No score the rules allow at this ply lies in the window.
+    proven: NodeValue,
+};
+
+fn mateWindow(ply: usize, alpha: i32, beta: i32) MateWindow {
+    const fastest_mate = (score.Score.mateIn(ply + 1) orelse
+        return .{ .searchable = .{ .alpha = alpha, .beta = beta } }).raw();
+    const fastest_loss = (score.Score.matedIn(ply) orelse
+        return .{ .searchable = .{ .alpha = alpha, .beta = beta } }).raw();
     // Alpha already holds a mate at least as fast as anything reachable here,
     // so nothing this node can find raises it.
     if (alpha >= fastest_mate)
-        return .{ .raw = fastest_mate, .bound = .upper, .provenance = .mate_distance };
+        return .{ .proven = .{ .raw = fastest_mate, .bound = .upper, .provenance = .mate_distance } };
     // Beta is at or below being mated immediately, which cannot be undercut.
     if (fastest_loss >= beta)
-        return .{ .raw = fastest_loss, .bound = .lower, .provenance = .mate_distance };
-    return null;
+        return .{ .proven = .{ .raw = fastest_loss, .bound = .lower, .provenance = .mate_distance } };
+    return .{ .searchable = .{
+        .alpha = @max(alpha, fastest_loss),
+        .beta = @min(beta, fastest_mate),
+    } };
 }
 
 fn tableDepth(provenance: types.Provenance, nominal_depth: u16, reduction: u16) u16 {
@@ -5408,7 +5455,7 @@ fn evidence(raw: i32, bound: types.Bound, provenance: types.Provenance) types.Ev
     return .{ .value = value, .bound = bound, .provenance = provenance };
 }
 
-test "mate-distance proof states only what the rules of chess guarantee" {
+test "a mate window states only what the rules of chess guarantee" {
     // Independent oracle: mate distance is counted in plies from the root, so
     // at ply p the reachable band is exactly [matedIn(p), mateIn(p + 1)]. The
     // asserted bounds are re-derived here from that definition rather than from
@@ -5418,29 +5465,117 @@ test "mate-distance proof states only what the rules of chess guarantee" {
     const fastest_loss = score.Score.matedIn(ply).?.raw();
 
     // Alpha already holds a mate at least as fast as anything reachable here.
-    const above = mateDistanceBound(ply, fastest_mate, fastest_mate + 1).?;
+    const above = mateWindow(ply, fastest_mate, fastest_mate + 1).proven;
     try std.testing.expectEqual(types.Bound.upper, above.bound);
     try std.testing.expectEqual(fastest_mate, above.raw);
     try std.testing.expectEqual(types.Provenance.mate_distance, above.provenance);
 
     // Beta sits at or below being mated on this very ply.
-    const below = mateDistanceBound(ply, fastest_loss - 1, fastest_loss).?;
+    const below = mateWindow(ply, fastest_loss - 1, fastest_loss).proven;
     try std.testing.expectEqual(types.Bound.lower, below.bound);
     try std.testing.expectEqual(fastest_loss, below.raw);
     try std.testing.expectEqual(types.Provenance.mate_distance, below.provenance);
 
-    // An ordinary window lies strictly inside the band and proves nothing.
-    try std.testing.expect(mateDistanceBound(ply, -50, 50) == null);
+    // An ordinary window lies strictly inside the band and is searched whole.
+    try std.testing.expectEqual(
+        SearchedWindow{ .alpha = -50, .beta = 50 },
+        mateWindow(ply, -50, 50).searchable,
+    );
     // One unit inside either edge is still reachable and must be searched.
-    try std.testing.expect(mateDistanceBound(ply, fastest_mate - 1, fastest_mate) == null);
-    try std.testing.expect(mateDistanceBound(ply, fastest_loss, fastest_loss + 1) == null);
+    try std.testing.expectEqual(
+        SearchedWindow{ .alpha = fastest_mate - 1, .beta = fastest_mate },
+        mateWindow(ply, fastest_mate - 1, fastest_mate).searchable,
+    );
+    try std.testing.expectEqual(
+        SearchedWindow{ .alpha = fastest_loss, .beta = fastest_loss + 1 },
+        mateWindow(ply, fastest_loss, fastest_loss + 1).searchable,
+    );
+
+    // An open window keeps exactly the reachable band. This is the whole
+    // difference from the crossing-only predecessor.
+    const open = mateWindow(ply, -score.infinity_raw, score.infinity_raw).searchable;
+    try std.testing.expectEqual(fastest_loss, open.alpha);
+    try std.testing.expectEqual(fastest_mate, open.beta);
 }
 
-test "mate-distance proof is exactly equivalent to a clamp on every zero window" {
-    // This is the property that licenses returning instead of carrying a
-    // clamped window through the node. For a zero window, any clamp that would
-    // change either edge also crosses them, so the omitted tightening can never
-    // have altered a searched zero-window node.
+test "a clipped mate window never excludes a searchable score" {
+    // The property that licenses searching the clipped window instead of the
+    // requested one. A node that still has a legal move cannot score worse than
+    // being mated after that move, nor better than mating on the next ply, so
+    // every score it can return lies strictly inside (matedIn(ply),
+    // mateIn(ply + 1)). For exactly those scores the clipped window must accept
+    // and reject the same values as the requested one. Both band edges are
+    // excluded on purpose and are checked separately below.
+    var ply: usize = 1;
+    while (ply < chess.types.max_ply - 1) : (ply += 37) {
+        const fastest_mate = score.Score.mateIn(ply + 1).?.raw();
+        const fastest_loss = score.Score.matedIn(ply).?.raw();
+        const edges = [_]i32{
+            -score.infinity_raw, fastest_loss - 2, fastest_loss - 1, fastest_loss,
+            fastest_loss + 1,    -300,             0,                300,
+            fastest_mate - 2,    fastest_mate - 1, fastest_mate,     fastest_mate + 1,
+            score.infinity_raw,
+        };
+        for (edges) |alpha| {
+            for (edges) |beta| {
+                if (beta <= alpha) continue;
+                switch (mateWindow(ply, alpha, beta)) {
+                    .proven => try std.testing.expect(alpha >= fastest_mate or beta <= fastest_loss),
+                    .searchable => |window| {
+                        try std.testing.expect(window.alpha < window.beta);
+                        // A clip only tightens, and never past the band.
+                        try std.testing.expect(window.alpha >= alpha and window.beta <= beta);
+                        try std.testing.expect(window.alpha >= fastest_loss and window.beta <= fastest_mate);
+                        for ([_]i32{
+                            fastest_loss + 1, fastest_loss + 2, -300,
+                            0,                300,              fastest_mate - 2,
+                            fastest_mate - 1,
+                        }) |searchable| {
+                            try std.testing.expectEqual(
+                                searchable > alpha and searchable < beta,
+                                searchable > window.alpha and searchable < window.beta,
+                            );
+                        }
+                    },
+                }
+            }
+        }
+    }
+}
+
+test "the clipped band edges are the two scores only a proof can name" {
+    // The clip deliberately drops both edges of the band from the searched
+    // window, and each drop is answered by an exact chess fact rather than by
+    // the search. Being mated on this ply is reachable only with no legal move
+    // at all, which the terminal rule decides before the window is consulted;
+    // mating on the next ply is the best any legal move can do, so a result
+    // that reaches it fails high with a lower bound that is already the whole
+    // truth. Nothing between the edges is affected, which is what keeps the
+    // clipped bound valid for a caller holding a wider window.
+    const ply: usize = 5;
+    const fastest_mate = score.Score.mateIn(ply + 1).?.raw();
+    const fastest_loss = score.Score.matedIn(ply).?.raw();
+    const window = mateWindow(ply, -score.infinity_raw, score.infinity_raw).searchable;
+    try std.testing.expectEqual(fastest_loss, window.alpha);
+    try std.testing.expectEqual(fastest_mate, window.beta);
+
+    // The worst a legal move can do is be mated one ply later than the node
+    // itself could be, and the best is the mate the clipped beta names.
+    const worst_with_a_move = score.Score.matedIn(ply + 2).?.raw();
+    const best_with_a_move = -score.Score.matedIn(ply + 1).?.raw();
+    try std.testing.expect(worst_with_a_move > window.alpha);
+    try std.testing.expectEqual(fastest_mate, best_with_a_move);
+
+    // Nothing strictly inside the band is lost at either edge.
+    try std.testing.expect(fastest_loss + 1 > window.alpha);
+    try std.testing.expect(fastest_mate - 1 < window.beta);
+}
+
+test "a zero window is clipped exactly as the crossing test decided it" {
+    // Zero windows carry the accepted production tree, so the complete clip
+    // must leave them identical to the crossing-only predecessor: any clip that
+    // would move an edge also crosses them, and no other zero window changes.
+    // This is what confines the new behavior to open windows.
     var ply: usize = 1;
     while (ply < chess.types.max_ply - 1) : (ply += 37) {
         const fastest_mate = score.Score.mateIn(ply + 1).?.raw();
@@ -5451,12 +5586,15 @@ test "mate-distance proof is exactly equivalent to a clamp on every zero window"
             fastest_mate - 1, fastest_mate,     fastest_mate + 1,
         }) |alpha| {
             const beta = alpha + 1;
-            const clamped_alpha = @max(alpha, fastest_loss);
-            const clamped_beta = @min(beta, fastest_mate);
-            const clamp_changed = clamped_alpha != alpha or clamped_beta != beta;
-            const proof = mateDistanceBound(ply, alpha, beta);
-            if (clamp_changed) try std.testing.expect(proof != null);
-            if (proof != null) try std.testing.expect(clamped_alpha >= clamped_beta);
+            const crossed = alpha >= fastest_mate or fastest_loss >= beta;
+            switch (mateWindow(ply, alpha, beta)) {
+                .proven => try std.testing.expect(crossed),
+                .searchable => |window| {
+                    try std.testing.expect(!crossed);
+                    try std.testing.expectEqual(alpha, window.alpha);
+                    try std.testing.expectEqual(beta, window.beta);
+                },
+            }
         }
     }
 }

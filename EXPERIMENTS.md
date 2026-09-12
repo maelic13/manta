@@ -102,6 +102,22 @@ ordinary non-check qsearch nodes and generates the disjoint quiet subset solely
 when needed to distinguish quiet mobility from stalemate. The trusted harness
 boundary was unchanged, so setup-only validation replaced a pilot.
 
+`MAN-S35` is registered and **not yet run**. Step 6.5.10.1 replaced `MAN-S32`'s
+crossing-only mate test with a complete non-root window clip (`SCORE-033`); the
+`MAN-S32` switch is removed rather than kept beside it, and ADR-0067's retention
+decision is superseded. Pre-game diagnostics on the development workstation,
+measured twice through independent harnesses with identical node counts: the
+depth-4..10 corpus total falls `41.9%` at depth 10, but the ordinary 38-position
+subset moves by at most `1.81%` at any depth and by `+0.21%` at depth 10, while
+the two mate positions fall `88.5%`. Only 13 of 38 ordinary positions change at
+all, two of them substantially and in opposite directions. Ordinary elapsed time
+is noise-dominated -- repeated depth-10 runs gave baseline `11,709 / 12,787 /
+12,156` ms against candidate `12,541 / 12,360 / 12,389` ms -- so no throughput
+change is claimed. The off arm reproduces `775,451`; the on arm's bench-6
+fingerprint is `642,336`, replacing `MAN-S32`'s `642,394`. None of this is
+strength evidence: the registered 1T SPRT below decides the candidate, and a
+mate-cohort node saving is not ordinary-position strength.
+
 MAN-S30 accepted H1 and remains production. MAN-S31 was **rejected by
 maintainer judgment**, not formal H0, after 7,958 games at
 `-3.08 +/- 7.63` nElo (`-2.14 +/- 5.30` Elo), LLR `-1.60`, without
@@ -129,6 +145,7 @@ their original step labels; new numbered work lives in PLAN.
 
 | ID | Candidate and hypothesis | Registered gate | Result |
 |---|---|---|---|
+| `MAN-S35` | Phase-6.5.10.1 complete non-root mate windows against production MAN-S34. Searching every non-root node with its window clipped to the mate distances the rules still allow, rather than only returning when the requested window already lies outside them, will avoid work on unreachable scores without changing any chess verdict. | Candidate A enables only `-Dmate-windows=true`; 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed recorded at launch; completed time forfeits and every engine/protocol/affinity fault are fatal; setup-only check, no pilot | Registered, not yet run |
 | `MAN-S34` | Phase-6.5.7 exact tactical-only non-check qsearch generation against production MAN-S30. Removing quiet generation/ranking that qsearch cannot consume will increase throughput without changing the searched tree or chess evidence. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `751289825`; completed time forfeits and every engine/protocol/affinity fault are fatal | Accepted H1 after 1,614 games at `+59.77 +/- 16.95` nElo (`+40.00 +/- 11.45` Elo, LLR `2.95`); no anomaly; promoted to production |
 | `MAN-S33` | Phase-6.5.5 half-depth singular exclusion horizon against production MAN-S30. A bounded shallower same-position proof will preserve useful singular decisions while spending less work on alternatives. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `1844484847` | Maintainer stopped inconclusive; supplied 6,640-game snapshot `+1.24 +/- 8.36` nElo, LLR `-0.39`; unpromoted, final artifacts pending reconciliation |
 | `MAN-S31` | Phase-6.5.3 non-root blanket check-extension ablation against production MAN-S30. Spending one extra ply at every checked interior node costs more time than its tactical protection earns. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `6533108` | Rejected by maintainer judgment after 7,958 games at `-3.08 +/- 7.63` nElo, LLR `-1.60`; candidate archived; production check extension stays on; new-policy review belongs to Step 6.5.10 |

@@ -1311,6 +1311,77 @@ these decisions today and become the production carrier only in 10.2.
    candidate takes the next free `MAN-S` identifier when it is frozen; nothing
    is registered now. 10.2 rebases on the accepted arm either way.
 
+**6.5.10.1 implementation record (2026-09-12).** Implemented as frozen, with
+one clarification the contract did not state and the code now documents. The
+clip drops *both* band edges from the searched window, because a window is an
+open interval: `alpha' = matedIn(ply)` excludes being mated on this ply and
+`beta' = mateIn(ply + 1)` excludes mating on the next. Neither exclusion loses
+a searchable outcome. A node that still has a legal move cannot score
+`matedIn(ply)` -- that value requires no legal move at all, and the terminal
+rule decides it above the window -- and a result that reaches `mateIn(ply + 1)`
+is the fastest mate the ply can hold, so the fail-high lower bound it returns
+is already the whole truth rather than a window artifact. Every score strictly
+inside the band keeps the same membership in the clipped and requested windows,
+which is what keeps a bound proven against the clipped edges valid for a caller
+holding a wider one.
+
+`features.mate_distance_pruning` and `-Dmate-distance-pruning` are replaced by
+`features.mate_windows` and `-Dmate-windows`, default off; `mateDistanceBound`
+becomes `mateWindow`, returning either the two unchanged crossing proofs or the
+clipped window. `negamaxNode` now searches that window, and the invocation
+reports it back so enabled observation records the width its own consumers
+read rather than the width requested. `MAN-S32`'s crossing-only arm is gone,
+ADR-0067's retention decision is marked superseded, and `SCORE-033` owns the
+mechanism.
+
+Gates that ran on this workstation. Focused and full `zig build test` pass,
+including the rewritten band/clip properties, zero-window equivalence, both-side
+mate distance, terminal precedence, clipped-window table round trip and corpus
+mate-position identity. Native ReleaseFast `bench 6 1` reproduces `775,451` in
+the off arm and records `642,336` in the on arm, replacing `MAN-S32`'s frozen
+`642,394`: the complete clip narrows open principal windows that the crossing
+test could not touch. `zig build fmt`, `zig build policy` and `git diff --check`
+pass. No games have been run.
+
+Evidence before games, from `zig build search-attribution` (depths 4-10, 64 MiB,
+40 positions) and `tools/branching_profile.ps1` (same range, fresh process per
+depth, engines `manta-6510-baseline` / `manta-6510-candidate`). Both harnesses
+report identical node counts, so the cohorts below are one measurement seen
+twice. Nodes, elapsed and NPS are separate columns on purpose.
+
+| Cohort | Depth | Nodes off | Nodes on | Change |
+|---|---:|---:|---:|---:|
+| Ordinary 38 | 6 | 639,198 | 638,250 | `-0.15%` |
+| Ordinary 38 | 8 | 3,280,907 | 3,266,629 | `-0.44%` |
+| Ordinary 38 | 9 | 6,491,409 | 6,373,812 | `-1.81%` |
+| Ordinary 38 | 10 | 14,063,000 | 14,091,873 | `+0.21%` |
+| Mate 6 and 30 | 8 | 1,143,314 | 38,321 | `-96.65%` |
+| Mate 6 and 30 | 10 | 12,715,901 | 1,459,111 | `-88.53%` |
+| Full corpus 40 | 10 | 26,778,901 | 15,550,984 | `-41.93%` |
+
+The full-corpus total is the attribution error this ticket was told to avoid:
+`-41.9%` at depth 10 is almost entirely the two mate positions. On the ordinary
+subset the effect is within half a percent at every depth, positive at depth 10,
+and only 13 of 38 ordinary positions change at all -- those whose trees contain
+a mate score somewhere. Two of them move substantially in opposite directions
+(position 33 `-25.2%`, position 38 `+33.2%`), which is legal window-dependent
+behavior, not a saving. Ordinary elapsed time is noise-dominated here: the
+in-process sweep read `-2.95%` at depth 10 while the first cross-engine run read
+`+7.11%`, and repeated depth-10 runs gave baseline `11,709 / 12,787 / 12,156` ms
+against candidate `12,541 / 12,360 / 12,389` ms, so the candidate's spread lies
+inside the baseline's own. No ordinary throughput change is claimed in either
+direction, and none of this is strength evidence.
+
+**6.5.10.1 SPRT handoff (prepared, not run).** The candidate is frozen and takes
+`MAN-S35`. The maintainer runs one registered 1T SPRT on the designated 5950X
+under the unchanged trusted harness: candidate `-Dmate-windows=true` as A against
+this head with the switch omitted as B, both built by `tools/build_test.ps1` from
+the same commit and compiler, `3+0.03`, Hash 64 MiB, paired randomized UHO book,
+`strength-v2`, normalized `[1,5]`, alpha/beta `0.05`, 16,000-game cap; completed
+time forfeits and every engine, protocol or affinity fault are fatal. A
+setup-only check precedes the run; no pilot is warranted because no operational
+boundary changed. 10.2 rebases on whichever arm is production afterwards.
+
 **6.5.10.2 decisions the A design must fix before B is coded.** Astra writes
 them as an ADR-0070 amendment or ADR-0071 and a new requirement; Terra
 implements only after that text exists.
