@@ -1788,6 +1788,48 @@ still withheld: adding either now commits a red suite for a failure the review
 has not resolved. Both are one edit away once it is. Tickets F and G, the
 diagnostic table and the local match are untouched.
 
+**Third review resolution (Fable, 2026-09-12): traced, not hypothesised.** A
+scratch build of two component arms printed every decision at plies one and
+two on `go depth 5 searchmoves f6h5 g3g6`. The first root move scores `-206`,
+so the black node after `Qg6` runs in `[205, 206]` and must return at least
+`206` for the sacrifice to fail. It did, for two different reasons:
+
+| Arm | Node | What the trace shows |
+|---|---|---|
+| `core_move_pruning` + F | white after `1.Qg6 Nxe5`, depth 3, eval `-838` | `dxe5` searched; three king moves futility-pruned; the fourth quiet `a2a3` hit the late-move count and the picker skipped every remaining quiet **unmade, including `Qh7#`**; only `Qxh6+` and `Qxg7+` were then searched; white returned `-206` |
+| `core_node_pruning` + F | black after `1.Qg6`, depth 4 reduced to 3 by IIR, eval `+570` | reverse futility cut at once: `570 - (68 + 50) * 3 = 216 >= 206`; the HCE prices the attacked queen at more than five pawns and the seed margin was the depth-one fitted value |
+
+F was correct and irrelevant to both: the skip never made the checking move,
+and the static cut never reached a move loop. Opus's three questions are
+answered by the amendments now in ADR-0071 and `SCORE-034`: the count skip
+keeps direct quiet checks (question 1); the node-pruning rule was reverse
+futility with a margin far below Manta's evaluation swings, and razoring
+returns to depth one (question 2); depth 5 stays the anchor, because the
+traced failures are design defects that the reference does not have, not
+depth equivalence (question 3). A third amendment follows from the same
+mechanism: reduced probes keep one main-search ply, since a zero-depth probe
+hands the opponent a quiescence where our own quiet mate threats are invisible.
+
+- **E3. Apply the three amendments.** (1) `coreReduction` clamps to
+  `[0, new_depth - 1]` and does not reduce when `new_depth == 0`; the
+  prospective-depth estimate uses the same clamp. (2) When the late-move count
+  first triggers at a node, compute the node's direct-check squares once, per
+  piece type from the enemy king with the mover's origin removed, through a
+  helper shared with `generateQuietChecks`, and make `skipRemainingQuiets`
+  keep any quiet whose destination is in that set for its piece type; a kept
+  move is then made and judged by the existing post-make check exemption.
+  (3) Reverse futility margin `(150 + (improving ? 0 : 60)) * depth` to depth
+  8; razoring only at `depth == 1` with `pruning_eval + 300 <= alpha`. Update
+  the focused tests these formulas already have. Gate: both arms compile, off
+  arm `642,336` exact, focused tests pass, one commit.
+- **E4. Canary and table.** The full core arm must answer WAC.001 `g3g6` at
+  depth 5. Add that case with `.selective_core = true` to
+  `tests/search_qualification.zig`, restore the two mate-in-two substrate
+  cases, re-run the per-component localisation table with all six components
+  and record it here. If depth 5 still fails, trace it the same way (ply one
+  and two decisions on the two-move root) and report the trace, not a guess.
+  Then F and G proceed unchanged.
+
 **6.5.10.3 — Review loop (Fable).** Review the implementation against ADR-0071
 and `SCORE-034`: verification before PV, cutoff, TT or feedback authority;
 provenance and scope through negation; null-verification scope; exclusion-node

@@ -125,12 +125,14 @@ r += cut_node ? 768 : 0
 r += (tt move present and search_index >= 4) ? 512 : 0
 r -= stat * 1024 / 8192                           (about +/- 2 plies)
 r -= ply == 0 ? 1024 : 0
-reduction = clamp(floor(r / 1024), 0, new_depth)
+reduction = clamp(floor(r / 1024), 0, new_depth - 1)     (no reduction when new_depth == 0)
 ```
 
 `new_depth = depth - 1 + singular plies`. The table is generated at compile
-time with `@log` on `f64`. A reduction may reach `new_depth`, so a probe may
-run in quiescence; that is deliberate and is the single largest lever.
+time with `@log` on `f64`. A reduced probe keeps at least one main-search ply
+(amended 2026-09-12, third review): a zero-depth probe hands the opponent a
+quiescence in which our own quiet mate threats are invisible, because F
+generates checks only for the side to move at the first quiescence ply.
 Rationale per term: later moves at deeper nodes are less likely to matter
 (log-log table); PV nodes carry the answer and cut nodes are expected to be
 refuted by one move; a present TT move that already failed means late
@@ -164,8 +166,13 @@ Quiet non-promotion moves:
    `lmp_count = max(2, late_move_base + late_move_depth_scale * pd * pd / 4 +
    (improving ? late_move_improving_bonus : 0))`, MAN-S29 parameters
    `4 / 3 / 4`, giving about `7, 10, 16, 22, 31, 40, 52` for `pd = 2..8`.
-   When it first triggers at a node, the picker skips every remaining quiet
-   without making it; bad captures are still emitted.
+   When it first triggers at a node, the picker skips the remaining quiets
+   without making them, **except direct quiet checks** (amended 2026-09-12,
+   third review): the node computes its direct-check squares once, per piece
+   type from the enemy king with the mover's origin removed, exactly as F's
+   generator does, and a quiet whose destination is in that set is still made
+   and searched. Discovered checks are not recognised and may be skipped. Bad
+   captures are still emitted.
 2. **Futility.** `pd <= 8` and
    `pruning_eval + quiet_futility_unit * (pd + 1) + shallowConfidenceBonus(improving) <= alpha`.
 3. **History.** `pd <= 6` and `stat < -4000 * pd`.
@@ -185,12 +192,17 @@ Gate: `!pv_node`, node not in check, not an exclusion node, static evaluation
 known, ordinary beta, non-pawn material.
 
 1. **Reverse futility.** `depth <= 8` and
-   `pruning_eval - (reverse_futility_margin * depth + (improving ? 0 : 50 * depth)) >= beta`
-   returns the existing speculative lower bound at beta.
-2. **Razoring.** `depth <= 3`, ordinary alpha, and
-   `pruning_eval + 200 * depth <= alpha` returns the quiescence result through
-   the existing parked razoring path.
-3. **Null move.** `depth >= 3`, not directly after a null move,
+   `pruning_eval - (150 + (improving ? 0 : 60)) * depth >= beta` returns the
+   existing speculative lower bound at beta. Amended 2026-09-12, third review:
+   the first seed reused the depth-one fitted margin of 68 plus 50 per ply,
+   and Manta's HCE swings by more than 500 for an attacked queen, so that
+   margin let a static claim override a mate in one at depth 3.
+3. **Razoring.** `depth == 1`, ordinary alpha, and `pruning_eval + 300 <= alpha`
+   returns the quiescence result through the existing parked razoring path.
+   Amended 2026-09-12, third review: razoring at depth 2 and 3 replaces a
+   main-search ply in which the razored side's own quiet mate threats would
+   be visible with a quiescence in which they are not.
+2. **Null move.** `depth >= 3`, not directly after a null move,
    `pruning_eval >= beta`; `R = 3 + depth / 4 + min(3, (pruning_eval - beta) / 200)`;
    probe the child at `depth - 1 - R` (saturating to a quiescence probe). A
    fail-high at `depth < 10` is a cutoff at beta with `null_move` provenance.
@@ -267,12 +279,13 @@ Step 6.5.12 follow-ons on the accepted core.
 - Legal PV and best move, terminal and draw precedence, mate-distance
   semantics, tablebase authority and cancellation restoration are unchanged.
 - Nothing is reduced in check, when giving check, for promotions or for the
-  first two selected moves. No per-move omission test (futility, history,
-  SEE) omits a move that gives check, and nothing is omitted at the root,
-  before one move is actually searched, or under decisive windows. The
-  late-move-count skip drops unmade quiets by picker source and may therefore
-  drop a quiet checking move; component F is the safety net that keeps the
-  resulting mate threat visible one ply later.
+  first two selected moves, and a reduced probe keeps at least one main-search
+  ply. No per-move omission test (futility, history, SEE) omits a move that
+  gives check, the late-move-count skip keeps direct quiet checks, and
+  nothing is omitted at the root, before one move is actually searched, or
+  under decisive windows. Component F keeps a mate threat by the side to move
+  visible at the first quiescence ply; it does not cover the side not to move,
+  which is why the probe floor and the skip exemption exist.
 - Null verification subtrees cannot null-prune at their root; exclusion
   searches keep today's behavior.
 - Off arm: `642,336`, identical PV and results, both build arms. Each
@@ -365,3 +378,35 @@ added to the ticket's files for this one change; the differential SEE
 properties extend to quiet moves (bounds, monotonicity in the threshold and
 the floor of minus the mover's value), and the off-arm fingerprint proves the
 accepted tree is untouched.
+
+## Third review, 2026-09-12: the traced failure
+
+With F in place the core arm still answered `f6h5`, and F alone was correct, so
+the review traced a scratch build of two component arms on
+`go depth 5 searchmoves f6h5 g3g6`, printing every decision at plies one and
+two. The first root move scores `-206`, so the black node after `Qg6` runs in
+the window `[205, 206]` and must return at least `206` for the sacrifice to
+fail.
+
+- **Move-pruning arm.** After `1.Qg6 Nxe5` the white node at depth 3 has
+  static eval `-838`. It searched `dxe5`, futility-pruned three king moves,
+  and on the fourth quiet (`a2a3`) the late-move count triggered and the
+  picker skipped every remaining quiet unmade, including `Qh7#`. Only the bad
+  captures `Qxh6+` and `Qxg7+` were then searched. White returned `-206`,
+  black's `Nxe5` scored `206`, and the node failed high on its first move.
+  The per-move check exemption never ran because the move was never made.
+- **Node-pruning arm.** The black node after `Qg6` has static eval `+570`,
+  the HCE pricing the queen attacked by a pawn. Internal iterative reduction
+  took it from depth 4 to 3 because its table entries came from cutoffs with
+  no move, and reverse futility then cut with `570 - (68 + 50) * 3 = 216 >=
+  206`. A static claim overrode a mate in one.
+
+Both are design defects of the seeds, not properties of the canary. The three
+amendments above follow: the count skip keeps direct quiet checks, reverse
+futility margins scale with Manta's own evaluation swings and razoring returns
+to depth one, and reduced probes keep one main-search ply so the side not to
+move cannot lose its quiet mate threats in a quiescence that generates no
+checks for it. The classical reference has the last two properties; the first
+is Manta's answer to an exemption the reference does not need because its
+killers and countermoves usually surface the check first. The traces are kept
+in the session scratchpad and summarised in PLAN.
