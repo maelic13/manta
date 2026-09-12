@@ -192,7 +192,7 @@ job.
 | `go` | Search form in §6 or diagnostic `go perft <depth>` | Search info and one `bestmove`, or perft records only | Replaces an active job in order. |
 | `stop` | `stop` | Required search or diagnostic completion, if active | Urgent and epoch-tagged; otherwise no-op. |
 | `ponderhit` | `ponderhit` | Retained or eventual `bestmove` when normal limits end | Valid only for matching ponder epoch; otherwise no-op. |
-| `bench` | `bench [depth] [repeats]` | Rarog-compatible bench records and summary only | Diagnostic job; contract is in `PLAN.md` §4.2. |
+| `bench` | `bench [depth] [repeats]` | Frozen bench position records and summary only | Diagnostic job; contract is in `PLAN.md` §4.2 and ADR-0021. |
 | `quit` | `quit` | None required | Urgent bounded shutdown with exit code 0. |
 | EOF | Input stream closes | None required | Same lifecycle as `quit`. |
 
@@ -289,7 +289,8 @@ Perft never emits search `info` or `bestmove` records.
 `bench` follows the versioned 40-position work contract in `PLAN.md` §4.2.
 Arguments are positive decimal integers and requested depth shares the
 authoritative depth ceiling. `manta-search-bench-v1` defaults to depth `6`;
-its optional arguments are depth then whole-suite repeat count, matching Rarog.
+its optional arguments are depth then whole-suite repeat count, in the
+order frozen by ADR-0021.
 Single-run output reports each position's completed depth, score, nodes, EBF,
 elapsed milliseconds and NPS, followed by the same aggregate summary layout.
 Repeats default to one and are capped at `16`; the deterministic bench keeps

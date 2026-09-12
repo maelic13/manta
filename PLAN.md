@@ -959,10 +959,10 @@ Verification: `git diff --check` passes. `zig build policy` reports no issue in
 this step's documents, but repository-wide success is blocked by three unchanged
 bench-contract reference-name violations in `docs/adr/0021-search-benchmark-and-qualification.md`,
 `docs/UCI.md` and `tests/uci/README.md`. These are already present at the source
-head above; no policy repair is bundled. The smallest separate repair is to
-allowlist those intentional reference documents, then rerun policy. The design
-is complete; this outstanding repository gate must be resolved before claiming
-a clean implementation gate for 6.5.9.
+head above; no policy repair is bundled. The design is complete. The separate
+repair landed on 2026-09-12: the two format documents now cite ADR-0021
+instead of naming the outside engine, that ADR is allowlisted as the design
+record, and `zig build policy` passes repository-wide.
 
 Write a Manta-native node/move pipeline from the pinned modern reference:
 terminal/draw and mate bounds -> authenticated TT/static evidence -> safe
@@ -1385,8 +1385,7 @@ stay excluded. The output is a written disposition in PLAN and ADR-0070.
 
 **Per-ticket verification.** While editing, `zig build check` and the focused
 test root; the deterministic gate is native ReleaseFast `bench 6 1` in each
-arm. Documentation-only edits run `zig build policy` and `git diff --check`;
-the three known bench-reference policy violations remain a separate repair.
+arm. Documentation-only edits run `zig build policy` and `git diff --check`.
 Full suites run before a release, not per ticket.
 
 #### 6.5.11 — Forward proofs matched to the accepted depth policy

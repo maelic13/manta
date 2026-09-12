@@ -92,6 +92,7 @@ const allowed_reference_files = [_][]const u8{
     "config/phase-5.1.1-reference.json",
     "config/eval-reference.json",
     "docs/adr/0020-uci-search-and-clock-baseline.md",
+    "docs/adr/0021-search-benchmark-and-qualification.md",
     "docs/adr/0023-late-move-reduction-candidate.md",
     "docs/adr/0024-search-reference-observation.md",
     "docs/adr/0033-lmr-reply-feedback-candidate.md",

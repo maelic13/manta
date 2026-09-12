@@ -40,7 +40,7 @@ The harness substitutes these typed placeholders:
 | `{{SEARCH_INFO}}` | One valid coalescible root-move or completed-iteration line; it does not require both optional forms to survive coalescing. |
 | `{{BESTMOVE_LINE}}` | One legal `bestmove`, with an optional legal `ponder` continuation. |
 | `{{PONDER}}` | Either nothing or one ` ponder <legal UCI move>` continuation. |
-| `{{BENCH_POSITION_LINES}}` | Exactly 40 ordered Rarog-compatible lines of `bench <index>/40  depth {{U64}}  score {{I64}}  nodes {{U64}}  ebf {{DECIMAL}}  time {{U64}}ms  nps {{U64}}`, with contiguous indices 1 through 40. |
+| `{{BENCH_POSITION_LINES}}` | Exactly 40 ordered ADR-0021 bench record lines of `bench <index>/40  depth {{U64}}  score {{I64}}  nodes {{U64}}  ebf {{DECIMAL}}  time {{U64}}ms  nps {{U64}}`, with contiguous indices 1 through 40. |
 
 Placeholders never match line endings or arbitrary text. Phase 1.2 owns the
 parser for this notation and must reject unknown directives or placeholders.

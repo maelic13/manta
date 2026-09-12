@@ -39,8 +39,8 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   together with the measured admission profile, which shows the paired relation
   is trained mostly at shallow remaining depth by construction. Default and
   observation-enabled builds keep exact fingerprint parity at `775,451`.
-  Three pre-existing bench-document policy violations remain; PLAN records the
-  separate repair.
+  The repository policy gate passes again after the separate bench-document
+  repair of 2026-09-12.
 - Step 6.5.10 is prepared, not started. PLAN records the current-mechanism
   inventory, the frozen contract of each sub-ticket, the decisions its design
   must fix before coding and each ticket's gate. 6.5.10.1 complete mate
