@@ -64,7 +64,10 @@ const Row = struct {
     prunes_late_move: u64,
     prunes_quiet_futility: u64,
     prunes_see: u64,
+    prunes_history: u64,
+    prunes_razoring: u64,
     prunes_reverse_futility: u64,
+    null_verifications: u64,
     tt_move_available: u64,
     tt_move_best: u64,
     cutoffs: u64,
@@ -217,6 +220,8 @@ fn measure(
     const late_move_index = @intFromEnum(search.diagnostics.PruneCause.late_move);
     const futility_index = @intFromEnum(search.diagnostics.PruneCause.futility);
     const see_index = @intFromEnum(search.diagnostics.PruneCause.see);
+    const history_index = @intFromEnum(search.diagnostics.PruneCause.history);
+    const razoring_index = @intFromEnum(search.diagnostics.PruneCause.razoring);
     const reverse_index = @intFromEnum(search.diagnostics.PruneCause.reverse_futility);
     const first_index = @intFromEnum(search.diagnostics.FailHighBucket.first);
     return .{
@@ -233,7 +238,10 @@ fn measure(
         .prunes_late_move = counters.prunes_by_cause[late_move_index],
         .prunes_quiet_futility = counters.prunes_by_cause[futility_index],
         .prunes_see = counters.prunes_by_cause[see_index],
+        .prunes_history = counters.prunes_by_cause[history_index],
+        .prunes_razoring = counters.prunes_by_cause[razoring_index],
         .prunes_reverse_futility = counters.prunes_by_cause[reverse_index],
+        .null_verifications = counters.null_move_verifications,
         .tt_move_available = counters.tt_move_available,
         .tt_move_best = counters.tt_move_best,
         .cutoffs = counters.main_cutoffs + counters.quiescence_cutoffs,
@@ -378,6 +386,17 @@ fn renderJson(allocator: std.mem.Allocator, rows: []const Row, options: Options)
                 row.lmr_probes,                row.lmr_researches,        row.null_attempts,
                 row.null_cutoffs,              row.probcut_nodes,         row.probcut_cutoffs,
                 row.aspiration_fail_lows,      row.aspiration_fail_highs,
+            },
+        ));
+        // A second call: one format call takes at most 32 arguments.
+        try output.appendSlice(allocator, try std.fmt.bufPrint(
+            &buffer,
+            ", \"prunes_late_move\": {d}, \"prunes_quiet_futility\": {d}, \"prunes_history\": {d}, \"prunes_see\": {d}, \"prunes_reverse_futility\": {d}, \"prunes_razoring\": {d}, \"null_verifications\": {d}",
+            .{
+                row.prunes_late_move,        row.prunes_quiet_futility,
+                row.prunes_history,          row.prunes_see,
+                row.prunes_reverse_futility, row.prunes_razoring,
+                row.null_verifications,
             },
         ));
         try output.appendSlice(allocator, try std.fmt.bufPrint(

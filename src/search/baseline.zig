@@ -951,7 +951,8 @@ fn negamaxNode(
     // Shared zugzwang guard: a position with no non-pawn material for the
     // side to move can reverse under a single tempo, so no shallow-
     // selectivity consumer below may treat a quiet move as safely futile.
-    const shallow_has_non_pawn_material = if (comptime features.shallow_selectivity or features.probcut)
+    const shallow_has_non_pawn_material = if (comptime features.shallow_selectivity or
+        features.probcut or features.selective_core)
         hasNonPawnMaterial(value)
     else
         false;
@@ -1561,10 +1562,83 @@ fn negamaxNode(
         )) context.observer.lmrHistoryProtection();
 
         var shallow_cause: ?diagnostics.PruneCause = null;
+        var core_skip_quiets = false;
         var main_see_candidate = false;
         var capture_futility_candidate = false;
         var capture_futility_failed = false;
-        if (comptime features.shallow_selectivity) {
+        if (comptime features.coreMovePruning()) {
+            // ADR-0071 C. Every rule reads one prospective depth: the depth
+            // this move would really be searched at once the reduction surface
+            // has had its say. Judging a move by the parent's nominal depth,
+            // as the accepted head does, prices work the search was never
+            // going to do.
+            const new_depth: u16 = depth - 1;
+            const premake_singular = singular_move.isChessMove() and
+                chess_move.raw() == singular_move.raw();
+            // The estimate differs from the applied reduction in exactly one
+            // input: a checking move is exempt from omission after `make`, so
+            // asking the surface about it before `make` is pointless.
+            const estimate: u16 = if (coreReductionEligible(
+                depth,
+                search_index,
+                in_check,
+                false,
+                premake_singular,
+                quiet,
+                is_capture and !is_promotion and move_source == .bad_tactical,
+            )) coreReduction(.{
+                .depth = depth,
+                .search_index = search_index,
+                .pv_node = pv_node,
+                .cut_node = expectation == .cut,
+                .improving = shallow.known and shallow.improving,
+                .has_tt_move = table_evidence.chess_move != null,
+                .stat = core_stat,
+                .root = ply == 0,
+            }, new_depth) else 0;
+            const prospective_depth = new_depth -| estimate;
+            std.debug.assert(prospective_depth <= new_depth);
+            // One gate for every rule. A node that has not yet searched a move
+            // has no honest bound to prune against, and a decisive window is
+            // not a quantity these margins can reason about.
+            const omission_gate = coreOmissionGate(
+                shallow.known,
+                pv_node,
+                in_check,
+                actually_searched_count,
+                shallow_has_non_pawn_material,
+                alpha,
+                beta,
+            );
+            if (omission_gate) {
+                if (quiet) {
+                    if (prospective_depth <= 8 and search_index >=
+                        coreLateMoveCount(context.params, prospective_depth, shallow.improving))
+                    {
+                        context.observer.lateMovePruningCandidate();
+                        shallow_cause = .late_move;
+                        core_skip_quiets = true;
+                    } else if (prospective_depth <= 8 and shallow.pruning_eval +
+                        context.params.quiet_futility_unit * (@as(i32, prospective_depth) + 1) +
+                        shallowConfidenceBonus(shallow.improving) <= alpha)
+                    {
+                        context.observer.quietFutilityCandidate();
+                        shallow_cause = .futility;
+                    } else if (prospective_depth <= 6 and
+                        core_stat < -4000 * @as(i32, prospective_depth))
+                    {
+                        shallow_cause = .history;
+                    }
+                } else if (is_capture and !is_promotion and prospective_depth <= 8) {
+                    const threshold = @max(
+                        @as(i32, -1000),
+                        -context.params.see_pruning_unit * @as(i32, prospective_depth),
+                    );
+                    main_see_candidate = true;
+                    if (!binding.seeAtLeast(value, chess_move, threshold)) shallow_cause = .see;
+                }
+            }
+        } else if (comptime features.shallow_selectivity) {
             if (quiet) {
                 if (lateMovePruneEligible(
                     features,
@@ -1687,6 +1761,9 @@ fn negamaxNode(
             );
         if (shallow_cause) |cause| {
             if (!gives_check) {
+                if (comptime features.coreMovePruning()) {
+                    if (core_skip_quiets) picker.skipRemainingQuiets();
+                }
                 if (comptime features.search_evidence_observation)
                     context.thread.search_evidence.observeMovePlan(move_facts, .{
                         .full = full_child_depth,
@@ -2116,6 +2193,11 @@ fn negamaxNode(
             return resolution;
         }
     }
+    if (comptime features.coreMovePruning()) {
+        // Quiets dropped inside the picker were omitted by the same rule as
+        // the move that triggered it, so they are counted the same way.
+        for (0..picker.skippedQuiets()) |_| context.observer.prune(.late_move);
+    }
     if (exclusion_node and searched_move_count == 0) {
         return resolvedWithAuthority(
             .{
@@ -2207,7 +2289,14 @@ fn negamaxNode(
         // speculative in the same sense as a reduced fail-low: some legal
         // sibling was never searched, so it cannot claim full nominal-depth
         // TT authority even though the winning move's own evidence is exact.
-        const stored_result = speculativeStoreValue(result, pruned_late_move);
+        // ADR-0071 C. Alpha-beta exactness is defined inside the engine's own
+        // selective policy, so an omission no longer downgrades the entry;
+        // relabelling these made the table refuse most non-PV upper bounds.
+        // The certificate still records the omission for diagnostics.
+        const stored_result = if (comptime features.coreMovePruning())
+            result
+        else
+            speculativeStoreValue(result, pruned_late_move);
         storeTableWithReduction(
             context,
             value.current.key,
@@ -4658,6 +4747,41 @@ fn lateMovePruneEligible(
         );
 }
 
+/// ADR-0071 C. One gate for every omission rule.
+///
+/// `actually_searched >= 1` is the load-bearing term: a node that has recursed
+/// nothing has no honest bound to prune against, and omitting its first move
+/// could leave it with no searched move at all. The window terms keep these
+/// centipawn margins away from mate and tablebase scores, which they cannot
+/// reason about, and the zugzwang guard keeps a quiet move from being called
+/// futile in a position where any move loses.
+fn coreOmissionGate(
+    static_known: bool,
+    pv_node: bool,
+    in_check: bool,
+    actually_searched: usize,
+    has_non_pawn_material: bool,
+    alpha: i32,
+    beta: i32,
+) bool {
+    return static_known and !pv_node and !in_check and actually_searched >= 1 and
+        has_non_pawn_material and
+        (score.Score{ .raw_value = alpha }).isOrdinary() and
+        (score.Score{ .raw_value = beta }).isOrdinary();
+}
+
+/// ADR-0071 C. The count grows with the square of the prospective depth, so a
+/// node that will really be searched deeply keeps looking at alternatives while
+/// one that will be reduced to nothing stops early. MAN-S29's fitted `4/3/4`
+/// are reused as the seed; the quadratic shape is the change.
+fn coreLateMoveCount(search_params: params.Values, prospective_depth: u16, improving: bool) usize {
+    const pd: i32 = @intCast(prospective_depth);
+    const quadratic = @divTrunc(search_params.late_move_depth_scale * pd * pd, 4);
+    const improving_bonus: i32 = if (improving) search_params.late_move_improving_bonus else 0;
+    const count = search_params.late_move_base + quadratic + improving_bonus;
+    return @intCast(@max(@as(i32, 2), count));
+}
+
 fn lateMovePruneThreshold(search_params: params.Values, depth: u16, improving: bool) usize {
     const base = @as(usize, @intCast(search_params.late_move_base)) +
         @as(usize, depth) * @as(usize, @intCast(search_params.late_move_depth_scale));
@@ -5955,6 +6079,86 @@ test "core reduction eligibility keeps every legality exemption" {
     try std.testing.expect(!coreReductionEligible(8, 9, false, false, false, false, false));
     // A losing capture is reducible on its own.
     try std.testing.expect(coreReductionEligible(8, 9, false, false, false, false, true));
+}
+
+test "the core omission gate refuses every unsafe node" {
+    // Each assertion flips exactly one conjunct of ADR-0071 C's gate against a
+    // reference that passes, so the test names the reason each term exists
+    // rather than restating the expression.
+    const mate = score.Score.mateIn(6).?.raw();
+    try std.testing.expect(coreOmissionGate(true, false, false, 1, true, -50, 50));
+    // No static evaluation to price the margin against.
+    try std.testing.expect(!coreOmissionGate(false, false, false, 1, true, -50, 50));
+    // A principal node carries the answer.
+    try std.testing.expect(!coreOmissionGate(true, true, false, 1, true, -50, 50));
+    // In check every legal move is forced evidence.
+    try std.testing.expect(!coreOmissionGate(true, false, true, 1, true, -50, 50));
+    // Nothing has been searched yet, so there is no bound to prune against.
+    try std.testing.expect(!coreOmissionGate(true, false, false, 0, true, -50, 50));
+    // Zugzwang: without non-pawn material a quiet move can reverse the verdict.
+    try std.testing.expect(!coreOmissionGate(true, false, false, 1, false, -50, 50));
+    // Decisive windows are not a quantity these centipawn margins can price.
+    try std.testing.expect(!coreOmissionGate(true, false, false, 1, true, mate, mate + 1));
+    try std.testing.expect(!coreOmissionGate(true, false, false, 1, true, -mate - 1, -mate));
+}
+
+test "the core late-move count grows with prospective depth" {
+    // ADR-0071 C. The count must never fall as the prospective depth rises,
+    // must never drop below the two-move floor, and improving must widen it.
+    // The floor is the load-bearing part: a count below two could omit a move
+    // at a node that has searched only one.
+    var previous: usize = 0;
+    for (0..9) |pd| {
+        const count = coreLateMoveCount(.{}, @intCast(pd), false);
+        try std.testing.expect(count >= 2);
+        try std.testing.expect(count >= previous);
+        try std.testing.expect(count >= coreLateMoveCount(.{}, @intCast(pd), false) - 1);
+        try std.testing.expect(coreLateMoveCount(.{}, @intCast(pd), true) >= count);
+        previous = count;
+    }
+    // The stated seed curve for pd = 2..8 with MAN-S29's 4/3/4.
+    try std.testing.expectEqual(@as(usize, 7), coreLateMoveCount(.{}, 2, false));
+    try std.testing.expectEqual(@as(usize, 10), coreLateMoveCount(.{}, 3, false));
+    try std.testing.expectEqual(@as(usize, 16), coreLateMoveCount(.{}, 4, false));
+    try std.testing.expectEqual(@as(usize, 22), coreLateMoveCount(.{}, 5, false));
+    try std.testing.expectEqual(@as(usize, 31), coreLateMoveCount(.{}, 6, false));
+    try std.testing.expectEqual(@as(usize, 40), coreLateMoveCount(.{}, 7, false));
+    try std.testing.expectEqual(@as(usize, 52), coreLateMoveCount(.{}, 8, false));
+}
+
+test "prospective depth never exceeds the depth the move would be searched at" {
+    // SCORE-034's bound. The estimate is the same surface the dispatcher uses,
+    // and the surface is clamped to the child depth, so the prospective depth
+    // is in [0, new_depth] for every input combination. A prospective depth
+    // above the real one would price work the search will actually do.
+    for (1..40) |depth| {
+        const new_depth: u16 = @intCast(depth - 1);
+        for (0..40) |index| {
+            for ([_]i32{ -history_stat_limit, -1, 0, 4000, history_stat_limit }) |stat| {
+                const eligible = coreReductionEligible(
+                    @intCast(depth),
+                    index,
+                    false,
+                    false,
+                    false,
+                    true,
+                    false,
+                );
+                const estimate: u16 = if (eligible) coreReduction(.{
+                    .depth = @intCast(depth),
+                    .search_index = index,
+                    .pv_node = false,
+                    .cut_node = true,
+                    .improving = false,
+                    .has_tt_move = true,
+                    .stat = stat,
+                    .root = false,
+                }, new_depth) else 0;
+                const prospective = new_depth -| estimate;
+                try std.testing.expect(prospective <= new_depth);
+            }
+        }
+    }
 }
 
 test "mate-distance evidence never acquires ordinary search authority" {

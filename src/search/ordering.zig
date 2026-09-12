@@ -652,6 +652,12 @@ pub const LiveHistoryPicker = struct {
     inner: Picker,
     phase: Phase,
     classify_sources: bool,
+    /// ADR-0071 C. Once a node's late-move count triggers, the remaining
+    /// quiets are dropped without being made. Bad tacticals keep being
+    /// emitted: the count says the node has seen enough quiet alternatives,
+    /// not that it has seen enough of everything.
+    skip_quiets: bool = false,
+    skipped_quiets: usize = 0,
 
     const Phase = enum { tactical, complete };
 
@@ -691,10 +697,30 @@ pub const LiveHistoryPicker = struct {
     }
 
     pub fn next(self: *LiveHistoryPicker) ?Selection {
-        const selected_index = self.inner.bestRemainingIndex() orelse return null;
-        if (self.phase == .tactical and
-            self.inner.ranks[selected_index].source == .bad_tactical) return null;
-        return self.inner.takeAt(selected_index);
+        while (true) {
+            const selected_index = self.inner.bestRemainingIndex() orelse return null;
+            if (self.phase == .tactical and
+                self.inner.ranks[selected_index].source == .bad_tactical) return null;
+            if (self.skip_quiets) switch (self.inner.ranks[selected_index].source) {
+                // A quiet TT move is emitted first and therefore always before
+                // any count can trigger, so it is never dropped here.
+                .primary_killer, .secondary_killer, .quiet_history => {
+                    _ = self.inner.takeAt(selected_index);
+                    self.skipped_quiets += 1;
+                    continue;
+                },
+                else => {},
+            };
+            return self.inner.takeAt(selected_index);
+        }
+    }
+
+    pub fn skipRemainingQuiets(self: *LiveHistoryPicker) void {
+        self.skip_quiets = true;
+    }
+
+    pub fn skippedQuiets(self: *const LiveHistoryPicker) usize {
+        return self.skipped_quiets;
     }
 
     /// Opens the delayed quiet stage exactly once and returns the number of

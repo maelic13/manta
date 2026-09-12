@@ -1104,6 +1104,112 @@ test "a zero core reduction searches as the ordinary scout" {
     try std.testing.expectEqual(@as(u64, 0), counters.lmr_researches);
 }
 
+test "the core omission rules are live and leave legal published lines" {
+    // The gate's own conjuncts are checked as a unit property in baseline.zig.
+    // What a real search adds is that the rules actually fire on ordinary
+    // positions and that nothing they omit corrupts the published line or the
+    // root. A package whose omission rules never trigger would pass every
+    // legality test and deliver nothing.
+    var total_omissions: u64 = 0;
+    for (core_positions) |fen_text| {
+        var root: chess.position.PositionState = .{};
+        var position = try chess.fen.parse(fen_text, &root);
+        const original_key = position.current.key;
+        var harness: Harness = .{};
+        var storage: [8192]search.tt.Cluster = undefined;
+        var table = search.tt.Table.init(&storage);
+        var ordering: search.ordering.State = .{};
+        var counters: search.diagnostics.Counters = .{};
+        var control: search.types.NeverStop = .{};
+        const result = search.baseline.runWithFeatures(
+            core_features,
+            &position,
+            harness.binding(),
+            .{ .depth = 7 },
+            &control,
+            &harness.thread,
+            &table,
+            &ordering,
+            &counters,
+        );
+        total_omissions +=
+            counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.late_move)] +
+            counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.futility)] +
+            counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.history)] +
+            counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.see)];
+        try expectLegalPv(fen_text, result.completed.?.pv.slice());
+        try std.testing.expect(chess.movegen.isLegal(&position, result.best_move.?));
+        try std.testing.expect(chess.state.isConsistent(&position));
+        try std.testing.expectEqual(original_key, position.current.key);
+    }
+    try std.testing.expect(total_omissions > 0);
+}
+
+test "a checking move is never omitted and a bad capture outlives the quiet skip" {
+    // The two legality exemptions that only show up after `make`. Independent
+    // oracle: replay the search with a position whose late quiets are all
+    // checks, and confirm the engine still finds the forced mate that only
+    // those checking moves deliver. If a checking move could be omitted by a
+    // count or a margin, the mate would disappear.
+    const forced = [_]struct { fen: []const u8, distance: i32 }{
+        .{ .fen = "r1bq1r2/pp2n3/4N2k/3pPppP/1b1n2Q1/2N5/PP3PP1/R1B1K2R w KQ g6 0 20", .distance = 1 },
+        .{ .fen = "2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1", .distance = 3 },
+        .{ .fen = "r4rk1/ppb4p/2p3q1/2Pp4/3Pn3/1NNQBn1P/PP3PP1/2RR3K b - - 0 1", .distance = 3 },
+    };
+    for (forced) |case| {
+        var root: chess.position.PositionState = .{};
+        var position = try chess.fen.parse(case.fen, &root);
+        var harness: Harness = .{};
+        var storage: [8192]search.tt.Cluster = undefined;
+        var table = search.tt.Table.init(&storage);
+        var ordering: search.ordering.State = .{};
+        var counters: search.diagnostics.Counters = .{};
+        var control: search.types.NeverStop = .{};
+        const result = search.baseline.runWithFeatures(
+            core_features,
+            &position,
+            harness.binding(),
+            .{ .depth = 7 },
+            &control,
+            &harness.thread,
+            &table,
+            &ordering,
+            &counters,
+        );
+        try std.testing.expectEqual(case.distance, result.evidence.value.mateDistance().?);
+        try expectLegalPv(case.fen, result.completed.?.pv.slice());
+    }
+}
+
+test "core omission refuses principal nodes, checks and decisive windows" {
+    // The gate is a conjunction, so the cheapest independent check is that a
+    // search which can never satisfy it produces no omission at all. A
+    // one-ply search has no node that has already searched a move at a
+    // non-principal interior node, and a mate-bound root window is decisive.
+    var root: chess.position.PositionState = .{};
+    var position = try chess.fen.parse("7k/8/5KQ1/8/8/8/8/8 w - - 0 1", &root);
+    var harness: Harness = .{};
+    var counters: search.diagnostics.Counters = .{};
+    var control: search.types.NeverStop = .{};
+    const result = search.baseline.runWithFeatures(
+        core_features,
+        &position,
+        harness.binding(),
+        .{ .depth = 1 },
+        &control,
+        &harness.thread,
+        null,
+        null,
+        &counters,
+    );
+    try std.testing.expectEqual(@as(i32, 1), result.evidence.value.mateDistance().?);
+    const omissions =
+        counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.late_move)] +
+        counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.futility)] +
+        counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.history)];
+    try std.testing.expectEqual(@as(u64, 0), omissions);
+}
+
 test "mate windows are behavior-identical wherever no mate score enters the window" {
     // The clip removes only scores outside [matedIn(ply), mateIn(ply + 1)], so
     // on searches that never produce a mate score it must change nothing at

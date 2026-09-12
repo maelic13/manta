@@ -76,7 +76,7 @@ pub const TableLookup = enum {
 };
 
 pub const FailHighBucket = enum { first, second, third, fourth_to_eighth, later };
-pub const PruneCause = enum { null_move, reverse_futility, razoring, probcut, multi_cut, late_move, futility, see, qsearch_delta };
+pub const PruneCause = enum { null_move, reverse_futility, razoring, probcut, multi_cut, late_move, futility, see, history, qsearch_delta };
 pub const ExtensionCause = enum { check, singular, recapture, passed_pawn };
 
 const charge_count = @typeInfo(WorkCharge).@"enum".fields.len;
