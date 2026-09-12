@@ -463,10 +463,9 @@ move, a fail-low by the conservative aggregate across searched siblings, while
 restrictive scope and omission stay aggregated in every case. A restriction
 survives negation and recursive return, and shadow admission can refuse
 reduced, restricted or non-searched evidence. Three Astra reviews each produced
-a bounded repair whose functional and deterministic parity gates pass; the
-third accepted the authority boundary itself. A repeated
-Astra review remains required before 6.5.9 closes; later
-consumers need separately approved implementation and playing gates.
+a bounded repair whose functional and deterministic parity gates pass, and the
+fourth accepted the authority and lifetime boundaries, closing Step 6.5.9.
+Later consumers need separately approved implementation and playing gates.
 
 The Step-4.0 baseline realizes the single-worker subset with a borrowed root,
 concrete evaluator binding, injected stop policy and caller-owned `ThreadState`.

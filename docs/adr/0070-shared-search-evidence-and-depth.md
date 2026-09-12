@@ -218,14 +218,21 @@ correction does not make the paired relation depth-stratified. Counting nodes
 reaching the shadow admission predicate, enabled build, depth-9 search of
 `r2qr1k1/p4ppp/1pn1bn2/2b1p3/4P3/1BN1BN2/PPP2PPP/R2QR1K1 b - - 6 10`:
 
-| Node depth | Admitted before | Admitted after | Refused after |
-|---|---|---|---|
-| 1 | 0 | 0 | 6895 |
-| 2 | 3037 | 2906 | 1130 |
-| 3 | 25 | 37 | 498 |
-| 4 | 61 | 64 | 20 |
-| 5 | 0 | 2 | 22 |
-| 6-7 | 0 | 0 | 9 |
+| Node depth | Admitted | Refused |
+|---|---|---|
+| 1 | 0 | 6895 |
+| 2 | 2906 | 1130 |
+| 3 | 37 | 498 |
+| 4 | 64 | 20 |
+| 5 | 2 | 22 |
+| 6-7 | 0 | 9 |
+
+These are the substrate's own per-search counters for one run and are exact. No
+before/after comparison is published: the pre-repair figures available during
+review came from temporary module-level probes that accumulated across every
+test in their binary, so their totals exceed what a single search can reach and
+are not comparable to this table. The repair's effect on admission is small in
+any case, for the reason below.
 
 Per candidate, the first failing admission condition in that run is the
 producer rule in about 90% of refusals, reduced-only verification in about 6%,

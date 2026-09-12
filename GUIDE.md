@@ -31,15 +31,17 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   Its registered final 1T SPRT accepted H1 after 1,614 games without anomaly,
   so the mechanism is production and the full-generation arm reconstructs
   MAN-S30.
-- Step 6.5.8's shared search design is complete in ADR-0070. Step 6.5.9 has had
-  three Astra authority reviews. The third accepted the authority and lifetime
-  boundaries with no evidence leak, and blocked closure only on certificate
-  labeling plus one implicit design decision, now recorded in ADR-0070: the
-  returned bound chooses whether a node is certified by its winner or by the
-  conservative aggregate. All three bounded repairs are complete with exact
-  default/enabled fingerprint parity at `775,451`; the repeated Astra High
-  review is next. Step 6.5.10 remains blocked. Three pre-existing bench-document
-  policy violations remain; PLAN records the separate repair.
+- Step 6.5.8's shared search design is complete in ADR-0070. Step 6.5.9 is
+  complete: four Astra authority reviews, three bounded repairs and an accepted
+  authority and lifetime boundary with no evidence leak. ADR-0070 now records
+  the decision the reviews found implicit -- the returned bound chooses whether
+  a node is certified by its winning move or by the conservative aggregate --
+  together with the measured admission profile, which shows the paired relation
+  is trained mostly at shallow remaining depth by construction. Default and
+  observation-enabled builds keep exact fingerprint parity at `775,451`.
+  Step 6.5.10 is unblocked but still needs its own approval before coding.
+  Three pre-existing bench-document policy violations remain; PLAN records the
+  separate repair.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
@@ -164,10 +166,10 @@ relationships, reimplemented in original Zig for Manta's contracts.
   behavior; its final 1T SPRT accepted H1 and the mechanism is production.
 - [x] **6.5.8 — Modern search design and one evidence/depth contract:** ADR-0070
   freezes the shared pipeline, authority and independently gated packages.
-- [ ] **6.5.9 — Shared ordering and outcome-evidence substrate:** One reliable
-  history/TT/move-evidence model for ordering and selective search.
-  **Implemented and three times repaired; next:** repeated GPT-6 Astra High
-  authority review.
+- [x] **6.5.9 — Shared ordering and outcome-evidence substrate:** One reliable
+  history/TT/move-evidence model for ordering and selective search, behavior-
+  neutral and default-off. Three authority repairs closed; the fourth Astra
+  High review accepted the authority and lifetime boundaries.
 - [ ] **6.5.10 — Integrated ordering, aspiration and selective depth:** Connect
   mate bounds, root windows, contextual LMR, shallow pruning and forcing depth.
 - [ ] **6.5.11 — Forward proofs matched to the accepted depth policy:** Derive

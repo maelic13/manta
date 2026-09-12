@@ -104,6 +104,12 @@ depth consumer shall distinguish selected ordinal from actually searched moves,
 count check/IIR/extension depth once, and verify reduced alpha rises at its
 declared authoritative horizon before winner publication or learning. Source,
 scope and bound restrictions shall survive return/negation and TT handling.
+The bound a completed node returns shall select which certificate describes it:
+a fail-high or exact result carries its winning move's producer, horizon and
+verification state, a fail-low the conservative aggregate across searched
+siblings, while restrictive scope and omitted siblings remain aggregated in
+every case. A sibling searched only as a reduced probe shall be reported as its
+own fact and shall not shorten the winner's horizon.
 `SCORE-031` live staging and `SCORE-032` qsearch terminal witnesses remain intact.
 The Step-6.5.9 implementation selector shall be compile-time-only, default off,
 and absent from UCI. Its disabled worker storage shall be zero bytes. Enabled
@@ -111,8 +117,11 @@ observation shall preserve the accepted result, legal PV and `775451` node
 fingerprint while bounding worker-local storage and reporting collision drops
 without merging unrelated samples. It shall not require games or a pilot.
 
-This is a future-candidate contract, not a declaration that the new interfaces
-already exist or permission to replace accepted policies. Any incompatible
+Step 6.5.9 is complete and its clauses above are verified: the interfaces exist,
+the selector is compile-time-only and default off, and both arms reproduce
+`775451`. For Steps 6.5.10-6.5.12 this remains a future-candidate contract, not
+a declaration that their consumers already exist or permission to replace
+accepted policies. Any incompatible
 change to an existing requirement needs an explicit owning candidate decision
 and verification gate; a rejected or disabled mechanism gains no authority here.
 

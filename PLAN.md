@@ -1003,7 +1003,9 @@ Implement these bounded sub-tickets in order, as one behavior-neutral step.
 Names, fields and admission rules are in ADR-0070; no coefficient fitting or
 new production consumer is part of this work.
 
-**Third repair complete; the repeated Astra High review is next.** The first Astra review rejected the initial
+**Step 6.5.9 is complete.** Three Astra High authority reviews each rejected a
+defect class and each was repaired inside the step; the fourth accepted the
+result. The first Astra review rejected the initial
 substrate: shadow feedback inherited legacy admission, restrictive scopes did
 not survive descendant routes, several shortcuts overstated searched horizon,
 move plans did not exactly describe legacy depth use, and `HistoryFacts` was
@@ -1025,8 +1027,13 @@ through; stored `speculative_cutoff` records labelled exclusion evidence; a
 qsearch cutoff inheriting every searched child's omission instead of its
 winner's; and no written rule for which certificate describes a completed node.
 All were diagnostic-substrate defects, not evidence that production playing
-strength regressed. All three repairs stay inside 6.5.9; do not advance to
-6.5.10 until the repeated review re-confirms them.
+strength regressed. The repeated review confirmed every third-repair fix,
+reproduced ADR-0070's admission profile from the substrate's own per-search
+counters, and accepted the authority and lifetime boundaries. Its one
+documentation correction is applied: the pre-repair admission figures were
+produced by module-level probes that accumulated across a whole test binary,
+so ADR-0070 publishes only the exact per-search profile and no before/after
+comparison. Step 6.5.9 closes; Step 6.5.10 is unblocked.
 
 1. **6.5.9.1 — Exact fact adapters (`types`, `baseline`).** Add `StaticFacts`,
    `TtFacts`, `WindowFacts` and `MoveFacts` views at existing producers. Preserve
@@ -1141,6 +1148,15 @@ make no throughput claim. The three unchanged bench-reference policy violations
 listed under 6.5.8 still fail their policy dependency. `zig build fmt` and
 `git diff --check` pass. No games, pilot or experiment registration applies.
 
+The accepting review independently reran the gates on the third-repair commit:
+default `test-fast` `227/232` with the five enabled-only tests skipped, enabled
+`232/232`, only the three known bench-reference policy failures, ReleaseFast
+`bench 6 1` at `775451` with all 40 records identical across arms, and clean
+formatting and whitespace. Because full suites are no longer a routine per-step
+gate, the pre-release run still owes 6.5.9 one full `zig build test` in both
+arms; the second repair's full-suite pass plus these focused gates are the
+evidence of record until then.
+
 The Astra review owns 6.5.9.4 closure. It must verify that table collisions are
 diagnostic drops rather than merged samples; support is lifetime count rather
 than probability/recency; shadow reset matches its per-search owner; qsearch,
@@ -1155,8 +1171,10 @@ observed before descendants can mutate it. It also re-confirms the third
 repair: the bound chooses the certificate, a reduced probe keeps that label
 through an internal verification, a stored speculative cutoff is not exclusion
 evidence, qsearch cutoffs follow their winner, and ADR-0070's recorded
-admission profile matches the substrate's own counters. Review findings are
-fixed inside 6.5.9 before marking it complete. Step 6.5.10 remains blocked.
+admission profile matches the substrate's own counters. That review is
+complete and accepted, so 6.5.9.4 is closed. Step 6.5.10 may begin; it is a
+separately approved package and inherits no permission from this step beyond
+the frozen contract and the recorded admission profile.
 
 #### 6.5.10 — Integrated ordering, aspiration and selective depth
 

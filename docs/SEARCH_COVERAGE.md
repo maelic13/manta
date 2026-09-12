@@ -81,9 +81,9 @@ or interpret three lookups as independent support. Paired outcome/support stays
 disabled until a distinct consumer is qualified. Neither this design nor the
 positive MAN-S34 strength result closes the board or depth-13 performance target.
 
-### Step 6.5.9 implementation map — awaiting Astra review
+### Step 6.5.9 implementation map — accepted
 
-The behavior-neutral substrate is implemented but not reviewed or closed. Its
+The behavior-neutral substrate is implemented, reviewed and closed. Its
 default and observation-enabled builds reproduce fingerprint `775451`; neither
 configuration changes a search consumer. Actual ownership is:
 
@@ -118,8 +118,10 @@ is reported as its own fact rather than by shortening the winner's horizon. That
 correction does not make the paired relation depth-stratified; the accepted
 producer rule is the dominant admission gate, so 6.5.10 must not expect a
 depth-balanced sample. All three bounded repairs pass their functional and
-deterministic parity gates; a repeated Astra review remains required before
-6.5.9 closes or any 6.5.10 consumer is implemented.
+deterministic parity gates, and the fourth Astra review accepted the authority
+and lifetime boundaries, so 6.5.9 is closed. A 6.5.10 consumer still needs its
+own approval, and inherits the frozen contract and this admission profile
+rather than any permission from 6.5.9.
 
 ### Reduction and pruning are a coordinated depth decision
 
