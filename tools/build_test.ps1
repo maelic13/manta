@@ -105,6 +105,10 @@
     Keep the accepted Step-6.5.10.1 MAN-S35 mate windows. Pass
     -MateWindows:$false to reconstruct the superseded MAN-S32 tree.
 
+.PARAMETER SelectiveCore
+    Build the Step-6.5.10 MAN-S36 coordinated selective-search core arm. It
+    defaults off; the production arm omits the switch.
+
 .PARAMETER SingularExclusionHorizon
     Build the default-off Step-6.5.5 singular-exclusion-horizon candidate arm.
     It changes only the depth of the same-position exclusion probe.
@@ -151,6 +155,7 @@ param(
     [switch]$LiveHistoryStaging,
     [switch]$NonrootCheckExtension,
     [switch]$MateWindows,
+    [switch]$SelectiveCore,
     [switch]$SingularExclusionHorizon,
     [switch]$QsearchTacticalGeneration,
     [switch]$BuildOnly,
@@ -224,6 +229,7 @@ function Write-EngineManifest {
         [Parameter(Mandatory)][bool]$LiveHistoryStaging,
         [Parameter(Mandatory)][bool]$NonrootCheckExtension,
         [Parameter(Mandatory)][bool]$MateWindows,
+        [Parameter(Mandatory)][bool]$SelectiveCore,
         [Parameter(Mandatory)][bool]$SingularExclusionHorizon,
         [Parameter(Mandatory)][bool]$QsearchTacticalGeneration,
         [switch]$SkipBench
@@ -267,6 +273,7 @@ function Write-EngineManifest {
         live_history_staging = $LiveHistoryStaging
         nonroot_check_extension = $NonrootCheckExtension
         mate_windows = $MateWindows
+        selective_core = $SelectiveCore
         singular_exclusion_horizon = $SingularExclusionHorizon
         qsearch_tactical_generation = $QsearchTacticalGeneration
         search_spsa_bake    = $false
@@ -318,10 +325,11 @@ try {
     $buildArgs += "-Dnonroot-check-extension=$nonrootCheckExtensionText"
     $mateWindowsText = $mateWindowsEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dmate-windows=$mateWindowsText"
+    if ($SelectiveCore) { $buildArgs += "-Dselective-core=true" }
     if ($SingularExclusionHorizon) { $buildArgs += "-Dsingular-exclusion-horizon=true" }
     $qsearchTacticalGenerationText = $qsearchTacticalGenerationEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dqsearch-tactical-generation=$qsearchTacticalGenerationText"
-    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($mateWindowsEnabled) { '' } else { '-crossing-mate-test' })$(if ($SingularExclusionHorizon) { '-singular-exclusion-horizon' } else { '' })$(if ($qsearchTacticalGenerationEnabled) { '-qsearch-tacticals' } else { '-full-qsearch-generation' })"
+    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($mateWindowsEnabled) { '' } else { '-crossing-mate-test' })$(if ($SelectiveCore) { '-selective-core' } else { '' })$(if ($SingularExclusionHorizon) { '-singular-exclusion-horizon' } else { '' })$(if ($qsearchTacticalGenerationEnabled) { '-qsearch-tacticals' } else { '-full-qsearch-generation' })"
 
     Write-Host ""
     Write-Host "Building Manta ($flavor) - suffix: $Suffix"
@@ -357,6 +365,7 @@ try {
         -LiveHistoryStaging $liveHistoryStagingEnabled `
         -NonrootCheckExtension $nonrootCheckExtensionEnabled `
         -MateWindows $mateWindowsEnabled `
+        -SelectiveCore ([bool]$SelectiveCore) `
         -SingularExclusionHorizon ([bool]$SingularExclusionHorizon) `
         -QsearchTacticalGeneration $qsearchTacticalGenerationEnabled -SkipBench:$BuildOnly
     Write-Host ""

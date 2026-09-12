@@ -146,6 +146,7 @@ pub const Disabled = struct {
     pub inline fn nullMoveReduction(_: *Disabled, _: u16) void {}
     pub inline fn nullMoveFailHigh(_: *Disabled) void {}
     pub inline fn nullMoveVerification(_: *Disabled, _: bool) void {}
+    pub inline fn nullMoveCutoff(_: *Disabled) void {}
     pub inline fn probCutNode(_: *Disabled) void {}
     pub inline fn probCutTableCutoff(_: *Disabled) void {}
     pub inline fn probCutTableSkip(_: *Disabled) void {}
@@ -827,6 +828,14 @@ pub const Counters = struct {
     pub inline fn nullMoveVerification(self: *Counters, accepted: bool) void {
         self.null_move_verifications += 1;
         if (accepted) self.null_move_cutoffs += 1;
+    }
+
+    /// ADR-0071 D cuts on a null fail-high below depth ten without running a
+    /// verification, so the cutoff must be counted on its own. Folding it into
+    /// `nullMoveVerification` would report a verification that never ran and
+    /// would make the verification rate meaningless.
+    pub inline fn nullMoveCutoff(self: *Counters) void {
+        self.null_move_cutoffs += 1;
     }
 
     pub inline fn probCutNode(self: *Counters) void {

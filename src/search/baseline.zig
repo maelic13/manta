@@ -1326,6 +1326,7 @@ fn negamaxNode(
                 context.observer.nullMoveFailHigh();
                 if (comptime features.coreNodePruning()) {
                     if (depth < core_null_verification_depth) {
+                        context.observer.nullMoveCutoff();
                         context.observer.prune(.null_move);
                         const cutoff = NodeValue{ .raw = beta, .bound = .lower, .provenance = .null_move };
                         if (!exclusion_node)
@@ -2473,8 +2474,13 @@ fn negamaxNode(
     }
     if (comptime features.coreMovePruning()) {
         // Quiets dropped inside the picker were omitted by the same rule as
-        // the move that triggered it, so they are counted the same way.
-        for (0..picker.skippedQuiets()) |_| context.observer.prune(.late_move);
+        // the move that triggered it, so each is counted as both a candidate
+        // of that rule and an omission by it. Counting only the omission would
+        // leave the aggregate above its own candidate denominator.
+        for (0..picker.skippedQuiets()) |_| {
+            context.observer.lateMovePruningCandidate();
+            context.observer.prune(.late_move);
+        }
     }
     if (exclusion_node and searched_move_count == 0) {
         return resolvedWithAuthority(
@@ -3281,7 +3287,13 @@ fn quiescenceNode(
             // `seeAtLeast` prices a quiet move's destination since ADR-0071 F's
             // review decision; before that it answered every quiet move `true`.
             if (!quiet_check or !binding.seeAtLeast(value, chess_move, 0)) {
-                if (quiet_check) context.observer.prune(.see);
+                if (quiet_check) {
+                    // A dropped check is a quiescence SEE omission and is
+                    // accounted as one, so the cross-cutting `see` aggregate
+                    // stays the sum of its two phase counters.
+                    context.observer.qsearchSee(false);
+                    context.observer.prune(.see);
+                }
                 continue;
             }
         }

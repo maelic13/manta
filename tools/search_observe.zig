@@ -654,6 +654,17 @@ fn printEnumCounts(comptime Enum: type, label: []const u8, values: anytype) void
 test "fixed observation suite has complete behavior-neutral accounting" {
     // PERF-006/QUAL-013: the offline observer must describe every searched
     // move and cutoff without changing legal root/PV evidence or node work.
+    //
+    // This suite is a contract about the production configuration, in both
+    // directions: every accepted stage must be reached on the fixed twelve
+    // cases, and every rejected or default-off candidate must stay silent.
+    // Neither half describes the Step-6.5.10 umbrella, which deliberately
+    // changes internal iterative reduction, adds a root window and narrows the
+    // tree far enough that a stage like a verified ProbCut need not appear in
+    // twelve fixed cases. The core arm's own accounting is asserted by the
+    // substrate tests and by the ticket-G attribution table; weakening the
+    // assertions here would remove the protection the accepted head has.
+    if (search_build_options.selective_core) return error.SkipZigTest;
     var hash = try manta.engine.runtime.HashResource.init(std.testing.allocator, 1);
     defer hash.deinit(std.testing.allocator);
     var thread = search.types.ThreadState.init();
