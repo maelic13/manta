@@ -1830,6 +1830,47 @@ hands the opponent a quiescence where our own quiet mate threats are invisible.
   and two decisions on the two-move root) and report the trace, not a guess.
   Then F and G proceed unchanged.
 
+**E3 and E4 complete (2026-09-12, Opus).** The three amendments are committed
+as `77375b6` and the canary passes: the full core arm answers WAC.001 `g3g6`
+with `mate 2` and PV `g3g6 g7f6 g6h7` at depth 5, and again at depth 7. The
+off arm is untouched at `642,336`, geomean EBF `4.703`, upper median `12,201`,
+top share `16.1%`, still answering `g3g6` at depth 5.
+
+The canary case is now in `tests/search_qualification.zig` with
+`.selective_core = true`, and the two mate-in-two substrate cases are restored.
+
+**Per-component localisation, WAC.001 at depth 5, one build flag per
+component.** `core_aspiration` is inert until ticket F.
+
+| Arm | Best move | Core `bench 6 1` |
+|---|---|---:|
+| Umbrella off | `g3g6` | `642,336` |
+| Umbrella on, all six off | `g3g6` | `642,336` |
+| `core_history` only | `g3g6` | `609,509` |
+| `core_lmr` only | `g3g6` | `565,953` |
+| `core_move_pruning` only | `g3g6` | `422,504` |
+| `core_node_pruning` only | **`f6e8`** | `471,033` |
+| `core_qs_checks` only | `g3g6` | `696,153` |
+| **All six on** | **`g3g6`** | `342,929` |
+
+Two rows deserve comment. `core_qs_checks` alone costs nodes rather than
+saving them, which is expected: it adds forcing moves to the first quiescence
+ply and removes nothing. And `core_node_pruning` alone still answers `f6e8`,
+while the complete package answers `g3g6`. The contract's canary is the full
+core arm and the components are ablation diagnostics that are never gated
+separately, so this is not a gate failure, but it is recorded rather than
+left for someone to rediscover: with node pruning as the only live component
+the tree is wide everywhere else, and whatever visibility its remaining rules
+remove is restored in the full package by the probe floor and the skip
+exemption that live in the other components. Which of its four rules is
+responsible is unresolved; the earlier one-at-a-time disabling never isolated
+one, and one-at-a-time enabling needs temporary sub-switches.
+
+The bench total rose from `252,091` before E3 to `342,929` after it. That is
+the amendments working as intended: the probe floor spends a main-search ply
+the old surface gave away, and razoring at depth one only stops replacing two
+further plies with quiescence.
+
 **6.5.10.3 — Review loop (Fable).** Review the implementation against ADR-0071
 and `SCORE-034`: verification before PV, cutoff, TT or feedback authority;
 provenance and scope through negation; null-verification scope; exclusion-node
