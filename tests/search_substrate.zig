@@ -2135,8 +2135,6 @@ test "search evidence observation preserves the accepted search result" {
     try std.testing.expect(summary.outcomes != 0);
     try std.testing.expect(summary.reduced_only_outcomes != 0);
     try std.testing.expect(summary.updates != 0);
-    std.debug.print("REVIEWPROBE outcomes={d} reduced_only={d} updates={d} dropped={d} history={d} ranking={d} depthpt={d} nodes={d}\n", .{ summary.outcomes, summary.reduced_only_outcomes, summary.updates, summary.dropped, summary.history_facts, summary.ranking_history_facts, summary.depth_history_facts, observed.nodes }); // REVIEWPROBE
-    try std.testing.expect(false); // REVIEWPROBE2
     const snapshot = observed_harness.thread.search_evidence.snapshot();
     try std.testing.expect(snapshot.static_facts != null);
     try std.testing.expect(snapshot.tt_facts != null);
