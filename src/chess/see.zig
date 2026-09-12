@@ -38,9 +38,21 @@ pub const PieceValues = struct {
     }
 };
 
-/// Reports whether a legal capture or promotion meets `threshold`. Ordinary
-/// quiet moves have conventional SEE value zero. Recaptures are filtered by
-/// full king safety, which covers absolute pins and illegal king captures.
+/// Reports whether a legal move meets `threshold` under static exchange.
+///
+/// A quiet move is priced by the same exchange as a capture, with no initial
+/// gain: the mover arrives on an empty square and the opponent may take it
+/// there. That is what makes "this square is not losing" a statement about the
+/// board rather than about the move's kind, which ADR-0071 F's first-ply
+/// quiescence checks need -- a queen delivering a spite check onto a
+/// pawn-attacked square must price as losing a queen.
+///
+/// Castling is the one exception and keeps the conventional zero: it moves two
+/// pieces at once, and the king can never be captured, so an exchange on the
+/// king's destination alone says nothing about the move.
+///
+/// Recaptures are filtered by full king safety, which covers absolute pins and
+/// illegal king captures.
 pub fn atLeast(
     value: *const position.Position,
     chess_move: move.Move,
@@ -49,7 +61,7 @@ pub fn atLeast(
 ) bool {
     std.debug.assert(values.isValid());
     std.debug.assert(movegen.isLegal(value, chess_move));
-    if (!movegen.isCapture(value, chess_move) and chess_move.kind() != .promotion) {
+    if (chess_move.kind() == .castling) {
         return threshold <= 0;
     }
     if (chess_move.to().rank() == .one or chess_move.to().rank() == .eight) {

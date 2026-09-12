@@ -94,9 +94,11 @@ fn expectSeeProperties(value: *const chess.position.Position) !void {
     for (legal.slice()) |chess_move| {
         try std.testing.expect(chess.see.atLeast(value, chess_move, -40_000, see_values));
         try std.testing.expect(!chess.see.atLeast(value, chess_move, 40_000, see_values));
-        if (!chess.movegen.isCapture(value, chess_move) and chess_move.kind() != .promotion) {
-            continue;
-        }
+        // Castling keeps the conventional zero value: it moves two pieces and
+        // the king is never capturable, so there is no exchange to price. Every
+        // other legal move, quiet moves included, is priced by the exchange on
+        // its destination and must satisfy the properties below.
+        if (chess_move.kind() == .castling) continue;
 
         var seen_false = false;
         var threshold: i32 = -1_200;
@@ -113,7 +115,22 @@ fn expectSeeProperties(value: *const chess.position.Position) !void {
             break :blk if (captured == .none) 0 else see_values.of(captured.pieceType());
         };
         const moving = value.physical.pieceOn(chess_move.from()).pieceType();
-        const guaranteed_floor = captured_value - see_values.of(moving);
+        // Worst case: the mover is taken on its destination and nothing is
+        // recaptured. For a quiet move `captured_value` is zero, so this is the
+        // floor of minus the mover's value that ADR-0071 F's filter relies on.
+        //
+        // On the promotion ranks one more loss is possible: the recapturing
+        // pawn promotes, so the exchange costs the mover plus the upgrade from
+        // a pawn to a queen. That is a property of the exact gain-array path
+        // this function already used for those ranks, not of quiet pricing --
+        // a capture landing on rank one or eight has always been able to reach
+        // it; quiet moves simply arrive there far more often.
+        const promotable_rank =
+            chess_move.to().rank() == .one or chess_move.to().rank() == .eight;
+        const promotion_headroom: i32 =
+            if (promotable_rank) see_values.queen - see_values.pawn else 0;
+        const guaranteed_floor =
+            captured_value - see_values.of(moving) - promotion_headroom;
         try std.testing.expect(chess.see.atLeast(
             value,
             chess_move,
@@ -121,4 +138,28 @@ fn expectSeeProperties(value: *const chess.position.Position) !void {
             see_values,
         ));
     }
+}
+
+test "static exchange prices a quiet move that hangs its mover" {
+    // The case that motivated ADR-0071 F's review decision. Black king g8,
+    // black pawn h3 attacking g2, black pawn d5 blocking the long diagonal,
+    // white queen a2. Qa2-g2 is a legal quiet check onto a square the pawn
+    // attacks with no white defender, so the exchange on g2 costs a queen and
+    // wins nothing. The oracle is the position, not the implementation: a
+    // filter that admits this move admits every spite check.
+    var root: chess.position.PositionState = .{};
+    var value = try chess.fen.parse("6k1/8/8/3p4/8/7p/Q7/4K3 w - - 0 1", &root);
+    const quiet_check = chess.move.Move.normal(.a2, .g2);
+    try std.testing.expect(chess.movegen.isLegal(&value, quiet_check));
+    try std.testing.expect(!chess.movegen.isCapture(&value, quiet_check));
+
+    try std.testing.expect(!chess.see.atLeast(&value, quiet_check, 0, see_values));
+    try std.testing.expect(chess.see.atLeast(&value, quiet_check, -see_values.queen, see_values));
+    try std.testing.expect(chess.see.atLeast(&value, quiet_check, -900, see_values));
+
+    // A quiet move to a square the opponent does not attack loses nothing, so
+    // the same function must accept it at zero. Qa2-b2 is unattacked.
+    const safe_quiet = chess.move.Move.normal(.a2, .b2);
+    try std.testing.expect(chess.movegen.isLegal(&value, safe_quiet));
+    try std.testing.expect(chess.see.atLeast(&value, safe_quiet, 0, see_values));
 }
