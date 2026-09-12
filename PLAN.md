@@ -2034,6 +2034,67 @@ their denominators; and test independence. Each finding returns to Opus as a
 bounded repair that re-runs its ticket gate and the affected G rows. The loop
 ends when Fable records acceptance here with the final diagnostic table.
 
+**Review 1 (Fable, 2026-09-12) on `f9f82ad`.** Read the whole code diff
+since `ed1553c` against ADR-0071 and `SCORE-034`, and reproduced the headline
+diagnostics from a clean build of that head: off arm `bench 6 1` `642,336`,
+core arm `339,821`, core-arm `branching_profile.ps1` geometric branching
+`1.765` and `9,327,682` nodes at depth 12, identical to the ticket-G table.
+Timing rows were not reproduced because the host was compiling concurrently.
+
+Accepted as implemented: the six component switches behind accessors and the
+`live_history_staging` compile guard; the linear bonus and gravity malus for
+main, reply and continuation with a dedicated searched-quiet list; the
+compile-time log-log surface with its adjustments, the `stat` taken from the
+picker's own ranking value, the `[0, new_depth - 1]` clamp and the zero
+reduction as an ordinary scout; the pre-make estimate that differs from the
+applied reduction only in `gives_check`; the omission gate, the four rules,
+the count skip that keeps direct quiet checks through `givesDirectCheck`, the
+post-make check exemption and the nominal-depth storage of omission fail-lows;
+reverse futility, depth-one razoring and all-node IIR behind one node-proof
+gate; the root window that widens the failed side and commits only exact
+attempts; the direct quiet checks generated after stand-pat at quiescence ply
+zero, filtered by the extended exchange, never delta-pruned and never generated
+deeper; the quiet-move exchange path with castling as the one shortcut; the
+`nullMoveCutoff` counter and the observe-suite skip under the umbrella. The
+new tests carry independent oracles: make-and-look for the check generator in
+both directions, monotonicity and clamp properties for the surface and count,
+the traced reverse-futility node as a regression case, legal PV and restored
+root for every core search, and the WAC.001 canary on the full arm.
+
+Opus's four questions: (1) no rule change; the canary is a full-arm contract
+and the ablation arms are diagnostics, and 6.5.11 fits the margins the
+node-pruning arm alone trips over. (2) Zero verifications in a depth-10 sweep
+is expected, since only the root reaches depth 10 and the root never
+null-prunes; the local match's deeper searches exercised the threshold, and
+the registered gate exercises it further. (3) The shallow-depth NPS deficit is
+the first-ply check generation and exchange filter; it recovers to `0.90` by
+depth 12 and stays inside the `0.85` floor, so it is a 6.5.14 cost item, not a
+review block. (4) The four-failure opening rule is property-tested for
+termination and needs no real-search witness.
+
+**One finding, authority class, to repair before the gate.** Under the core
+an unverified null-move fail-high below depth 10 is stored in the table as a
+lower bound at the node's nominal depth with no move (the `storeTable` call in
+the new early-cutoff branch, inherited from the verified path). The evidence
+behind it is one reduced null probe at `depth - 1 - R`. Stored that way it is
+reused as a full-depth cutoff at any later visit, including principal nodes
+and nodes where the null move itself would not be allowed. ADR-0070's rule
+that a null probe is speculative and only a completed real-move verification
+carries searched authority is the standing contract, and the classical
+reference does not store null results at all. Repair: the unverified cutoff
+returns beta with `null_move` provenance and stores nothing; the verified path
+at depth 10 and above is unchanged. ADR-0071 D is amended to say so. This
+changes the core tree, so the affected rows are re-run after the repair:
+both-arm `bench 6 1`, the branching profile, the attribution sweep, the
+canaries and the 500-game local match; the off arm must still read `642,336`.
+
+Two observations recorded for 6.5.11, not repairs: history pruning at
+prospective depth zero prunes any quiet with negative history because its
+threshold is `-4000 * 0`, which only matters at depth-one nodes and is a seed
+to fit; and reverse futility, razoring and the count skip all read the
+TT-refined pruning evaluation, which is the accepted MAN-S19 producer and is
+left as is.
+
 **6.5.10.4 — Registered gate and decision.** Prepare `MAN-S36` per the
 EXPERIMENTS template: candidate `-Dselective-core=true` against the same-source
 baseline, both native ReleaseFast with recorded SHA-256, bench fingerprints

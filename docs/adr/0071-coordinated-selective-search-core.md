@@ -206,9 +206,14 @@ known, ordinary beta, non-pawn material.
 2. **Null move.** `depth >= 3`, not directly after a null move,
    `pruning_eval >= beta`; `R = 3 + depth / 4 + min(3, (pruning_eval - beta) / 200)`;
    probe the child at `depth - 1 - R` (saturating to a quiescence probe). A
-   fail-high at `depth < 10` is a cutoff at beta with `null_move` provenance.
-   At `depth >= 10` the existing same-node verification at `depth - R` with
-   null disabled decides. Mate-range null scores are clamped to beta.
+   fail-high at `depth < 10` is a cutoff at beta with `null_move` provenance
+   and **stores nothing in the table** (amended by the first review: the
+   evidence is one reduced null probe, and a stored nominal-depth lower bound
+   would be reused as a full-depth cutoff at principal nodes and at nodes
+   where the null move itself is disallowed, against ADR-0070's rule that a
+   null probe is speculative). At `depth >= 10` the existing same-node
+   verification at `depth - R` with null disabled decides and keeps its
+   existing storage. Mate-range null scores are clamped to beta.
 4. **Internal iterative reduction.** `depth >= 4` and no legal TT move, at
    every node type, reduces the active depth by one ply. The PV-only rule is
    retired under the core.
