@@ -231,10 +231,18 @@ checks are not generated. This is a subset, not a partition: the MAN-S34
 terminal witness keeps its own rule, except that a non-empty check set is
 itself a legal-move witness.
 
-Search each generated check only if its destination is not a losing square
-(`seeAtLeast(move, 0)`), without delta pruning, in the picker's ordinary quiet
-position (after the TT move, good tacticals and killers, before bad
-tacticals). The checked child is an in-check quiescence node at ply one, which
+Search each generated check only if its destination is not a losing square,
+meaning the static exchange on the destination with zero initial gain and the
+mover as first occupant is at least zero. Manta's `see.atLeast` returned
+`threshold <= 0` for every quiet move without reading the board, so the
+review of 2026-09-12 extends it: a non-capture, non-promotion, non-castling
+move runs the existing exchange sequence from its destination with the mover's
+origin removed from the occupancy. Capture and promotion paths are unchanged
+by construction, no umbrella-off consumer prices a quiet move, and the board
+benchmark's threshold-SEE cell prices captures only, so the accepted tree and
+the frozen board workload are untouched. Checks are searched without delta
+pruning, in the picker's ordinary quiet position (after the TT move, good
+tacticals and killers, before bad tacticals). The checked child is an in-check quiescence node at ply one, which
 already generates complete evasions and has no stand-pat; checks are never
 generated below quiescence ply zero, so the extension is bounded by one ply.
 Storage, provenance, stand-pat, SEE and delta rules for tactical moves are
@@ -346,3 +354,14 @@ ply generates quiet checks. Decisions:
 Ticket E is accepted for commit as implemented; the canary moves to the new
 ticket E2, which implements F and must restore the depth-5 answer in the
 complete core arm before tickets F and G run.
+
+**Second stop, quiet-move SEE.** Opus found and demonstrated that
+`see.atLeast` ignores the board for quiet moves, so F's filter was a no-op as
+written. Decision: the faithful reading, a real quiet-move exchange path in
+`src/chess/see.zig`, which the classical reference also applies to its
+quiescence checks. The cheaper pawn-attack predicate would be a different rule
+and dropping the filter spends nodes on spite checks. `src/chess/see.zig` is
+added to the ticket's files for this one change; the differential SEE
+properties extend to quiet moves (bounds, monotonicity in the threshold and
+the floor of minus the mover's value), and the off-arm fingerprint proves the
+accepted tree is untouched.

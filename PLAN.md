@@ -1192,7 +1192,9 @@ production head `596159e` (MAN-S35, fingerprint `642,336`). **Files:**
 `src/search/baseline.zig`, `ordering.zig`, `types.zig`, `params.zig`,
 `build.zig`, `tests/search_substrate.zig`, `tests/search_qualification.zig`,
 `tests/bench_qualification.zig`; `tt.zig` only if the storage-authority change
-needs it. No board, evaluation, UCI, clock or SMP files.
+needs it; `src/chess/movegen.zig` for the quiet-check generation mode and
+`src/chess/see.zig` for the quiet-move exchange path that ticket E2 needs. No
+other board file and no evaluation, UCI, clock or SMP files.
 
 **Search-shape reference.** By maintainer direction the comparison engine for
 tree shape is the final pre-NNUE Stockfish pinned in `config/eval-reference.json`
@@ -1662,6 +1664,24 @@ Nothing else in E2 was implemented: `Mode.quiet_checks`, the quiescence ply
 counter and the loop wiring all depend on which of these the review picks,
 because the filter sits inside the same loop. The working tree is clean at
 `fa142fc`; tickets F and G are untouched and still pending.
+
+**Review decision on the E2 pre-check (Fable, 2026-09-12).** Option 1. The
+filter's meaning is the exchange on the destination square, and the classical
+reference applies exactly that to its quiescence checks. Extend `see.atLeast`
+so a non-capture, non-promotion, non-castling move takes the existing
+`exchangeAtLeast` path with zero initial gain and the mover as the first
+occupant, origin removed from the occupancy; `capturedType` already yields
+`.none` for it. Castling keeps `threshold <= 0`. Evidence that the accepted
+tree cannot move: every umbrella-off caller in `baseline.zig` and
+`ordering.zig` prices captures or promotions only, and the board benchmark's
+threshold-SEE cell prices legal captures only, so no frozen workload changes.
+Extend `tests/chess_differential.zig`'s `expectSeeProperties` to quiet moves:
+the existing bounds, threshold monotonicity, and the floor `-value(mover)`
+instead of the capture floor. Add Opus's constructed position as a focused
+case: `Qa2-g2+` in `6k1/8/8/3p4/8/7p/Q7/4K3 w - - 0 1` must fail
+`seeAtLeast(move, 0)` and pass at `-900`. `src/chess/see.zig` joins the
+ticket's files for this change only. Then implement the rest of E2 as
+specified and continue.
 
 **6.5.10.3 — Review loop (Fable).** Review the implementation against ADR-0071
 and `SCORE-034`: verification before PV, cutoff, TT or feedback authority;
