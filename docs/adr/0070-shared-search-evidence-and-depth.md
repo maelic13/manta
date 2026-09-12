@@ -190,6 +190,55 @@ renaming the route. Step 9 records these facts but leaves the existing storage
 policy exact; any changed TT authority/encoding requires a separately frozen
 contract before the dependent playing package, not an incidental substrate fix.
 
+### Which certificate describes a completed node
+
+Amended 2026-09-12 by the Step-6.5.9 third repair, after the repeated authority
+review found the rule implicit. The bound that a node returns decides which
+certificate describes it:
+
+- **Fail-high.** The cutting move alone establishes the bound, so the winner's
+  certificate applies: its producer, horizon and verification state.
+- **Exact.** The winning move establishes the value. Its producer, horizon and
+  verification state apply. Restrictive scope and omitted siblings stay
+  aggregated across searched siblings, because those describe the regime the
+  node ran in rather than the value it returned.
+- **Fail-low.** No move reached alpha, so the claim rests on every searched
+  sibling and the weakest one bounds it: aggregate horizon, scope, verification
+  and omission.
+
+A sibling searched only as a reduced probe is reported as `reduced_siblings`,
+never by shortening the winner's horizon. This follows the authority rule above:
+an ordinary completed search establishes an outcome for its own horizon, and
+the rejected alternative -- a subtree minimum -- made a node's horizon one plus
+the shortest searched path to a quiescence leaf through any sibling anywhere
+below it, which is not a statement about the returned value at all.
+
+**Measured consequence, recorded so 6.5.10 does not assume otherwise.** The
+correction does not make the paired relation depth-stratified. Counting nodes
+reaching the shadow admission predicate, enabled build, depth-9 search of
+`r2qr1k1/p4ppp/1pn1bn2/2b1p3/4P3/1BN1BN2/PPP2PPP/R2QR1K1 b - - 6 10`:
+
+| Node depth | Admitted before | Admitted after | Refused after |
+|---|---|---|---|
+| 1 | 0 | 0 | 6895 |
+| 2 | 3037 | 2906 | 1130 |
+| 3 | 25 | 37 | 498 |
+| 4 | 61 | 64 | 20 |
+| 5 | 0 | 2 | 22 |
+| 6-7 | 0 | 0 | 9 |
+
+Per candidate, the first failing admission condition in that run is the
+producer rule in about 90% of refusals, reduced-only verification in about 6%,
+horizon in about 3% and restrictive scope in about 1%. The horizon rule was
+never the gate. The gate is this ADR's own feedback rule: only a
+`full_search`/`pvs_probe` winner trains the relation, which excludes
+transposition cutoffs, reduced-search winners and every depth-one node, whose
+winning child is a quiescence leaf. The relation is therefore trained mostly at
+low remaining depth by construction. Step 6.5.10 must not expect a
+depth-balanced sample, and must not read a low deep-node count as evidence that
+deep outcomes are unreliable. Widening the producer rule is a separate decision
+for the consumer package, not a substrate repair.
+
 ## Candidate boundaries and refutation
 
 1. **10.1 complete mate windows:** independent from ordering/depth changes;

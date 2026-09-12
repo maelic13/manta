@@ -347,7 +347,18 @@ pub const SearchOutcome = struct {
     omitted_siblings: bool,
     complete: bool,
     original_producer: ?Provenance = null,
+    /// Some searched sibling was only a reduced probe. This is distinct from
+    /// `omitted_siblings`, which means a legal sibling was never searched, and
+    /// from `verification`, which describes how this result itself was
+    /// established. An exact or cutoff result keeps its winner's horizon and
+    /// reports probe-only siblings here rather than shortening that horizon.
+    reduced_siblings: bool = false,
 };
+
+/// Shadow admission is counted per node depth so the admitted/refused profile
+/// of the paired relation stays measurable without a temporary probe. Depths
+/// at or above the last bucket saturate into it.
+pub const shadow_depth_buckets = 17;
 
 /// Signed outcome and support are updated as one diagnostic sample. Support is
 /// a saturated admitted-update count, not a probability or recency estimate.
@@ -402,6 +413,11 @@ const ObservationStorage = if (search_evidence_observation_compiled) struct {
     outcomes: u64 = 0,
     qsearch_outcomes_with_omissions: u64 = 0,
     reduced_only_outcomes: u64 = 0,
+    reduced_sibling_outcomes: u64 = 0,
+    shadow_admitted: u64 = 0,
+    shadow_refused: u64 = 0,
+    shadow_admitted_by_depth: [shadow_depth_buckets]u64 = @splat(0),
+    shadow_refused_by_depth: [shadow_depth_buckets]u64 = @splat(0),
     updates: u64 = 0,
     dropped: u64 = 0,
     last_static: ?StaticFacts = null,
@@ -428,6 +444,11 @@ pub const SearchEvidenceSummary = struct {
     outcomes: u64 = 0,
     qsearch_outcomes_with_omissions: u64 = 0,
     reduced_only_outcomes: u64 = 0,
+    reduced_sibling_outcomes: u64 = 0,
+    shadow_admitted: u64 = 0,
+    shadow_refused: u64 = 0,
+    shadow_admitted_by_depth: [shadow_depth_buckets]u64 = @splat(0),
+    shadow_refused_by_depth: [shadow_depth_buckets]u64 = @splat(0),
     updates: u64 = 0,
     dropped: u64 = 0,
 };
@@ -516,6 +537,27 @@ pub const SearchEvidenceObservation = struct {
                 self.storage.qsearch_outcomes_with_omissions += 1;
             if (outcome.verification == .reduced_only)
                 self.storage.reduced_only_outcomes += 1;
+            if (outcome.reduced_siblings)
+                self.storage.reduced_sibling_outcomes += 1;
+        }
+    }
+
+    /// Records whether one completed quiet outcome reached the shadow relation,
+    /// keyed by the node depth that produced it.
+    pub fn observeShadowAdmission(
+        self: *SearchEvidenceObservation,
+        depth: u16,
+        admitted: bool,
+    ) void {
+        if (comptime search_evidence_observation_compiled) {
+            const bucket = @min(@as(usize, depth), shadow_depth_buckets - 1);
+            if (admitted) {
+                self.storage.shadow_admitted += 1;
+                self.storage.shadow_admitted_by_depth[bucket] += 1;
+            } else {
+                self.storage.shadow_refused += 1;
+                self.storage.shadow_refused_by_depth[bucket] += 1;
+            }
         }
     }
 
@@ -562,6 +604,11 @@ pub const SearchEvidenceObservation = struct {
             .outcomes = self.storage.outcomes,
             .qsearch_outcomes_with_omissions = self.storage.qsearch_outcomes_with_omissions,
             .reduced_only_outcomes = self.storage.reduced_only_outcomes,
+            .reduced_sibling_outcomes = self.storage.reduced_sibling_outcomes,
+            .shadow_admitted = self.storage.shadow_admitted,
+            .shadow_refused = self.storage.shadow_refused,
+            .shadow_admitted_by_depth = self.storage.shadow_admitted_by_depth,
+            .shadow_refused_by_depth = self.storage.shadow_refused_by_depth,
             .updates = self.storage.updates,
             .dropped = self.storage.dropped,
         };

@@ -95,7 +95,7 @@ configuration changes a search consumer. Actual ownership is:
 | `MoveFacts` | Made legal main/qsearch candidate, including EP victim, promoted result, check/evasion and both ordinals | Enabled diagnostic snapshot/count only |
 | `HistoryFacts` | Live worker-local main/reply/shared-continuation values and exact keys, captured at an explicit `ranking` point when a quiet stage is ranked and again at each selected move's `depth` decision, with optional paired shadows | Enabled diagnostic snapshot/count only; no ranking consumer |
 | `NodeDepthPlan` / `MoveDepthPlan` | Existing check/IIR and current shallow/LMR/PVS/qsearch dispatch decisions | Enabled diagnostic snapshot/count only; no shared-depth consumer yet |
-| `SearchOutcome` | Completed main/qsearch return with route, restrictive scope, actually searched horizon, verification, established producer and omitted-sibling fact, each inherited from the child certificate rather than the parent's own request | Enabled diagnostic snapshot/count only; ordinary publication remains unchanged |
+| `SearchOutcome` | Completed main/qsearch return with route, restrictive scope, actually searched horizon, verification, established producer, omitted-sibling and probe-only-sibling facts. The returned bound selects the winner's certificate for exact/cutoff results and the aggregate for fail-lows; scope and omission stay aggregated | Enabled diagnostic snapshot/count only; ordinary publication remains unchanged |
 | `OutcomeSupportCell` | Completed non-root ordinary quiet exact/cutoff update packet under existing main/reply/shared-continuation keys; winner and alternatives each require an ordinary main entry route and a non-reduced, unrestricted, fully searched certificate | Bounded shadow table only; no ordering, pruning, LMR, TT or feedback consumer |
 
 The selector `-Dsearch-evidence-observation=true` compiles bounded worker-local
@@ -109,8 +109,16 @@ admission still accepted unchecked and reduced-probe evidence, restrictive
 scope and `history_local` draw scope were lost on return, reduced-only and
 null-verification results reported nominal rather than actual horizon, qsearch
 outcomes hid SEE/delta omissions and the stored TT producer, and ranking-time
-history was never observed. Both bounded repairs pass their idle-PC functional
-and deterministic parity gates; a repeated Astra review remains required before
+history was never observed. The third review accepted the authority and
+lifetime boundaries with no evidence leak and blocked closure on certificate
+labeling plus one implicit decision, now recorded in ADR-0070 together with its
+measured admission profile: an exact or cutoff result is certified by its
+winning move, a fail-low by the conservative aggregate, and a probe-only sibling
+is reported as its own fact rather than by shortening the winner's horizon. That
+correction does not make the paired relation depth-stratified; the accepted
+producer rule is the dominant admission gate, so 6.5.10 must not expect a
+depth-balanced sample. All three bounded repairs pass their functional and
+deterministic parity gates; a repeated Astra review remains required before
 6.5.9 closes or any 6.5.10 consumer is implemented.
 
 ### Reduction and pruning are a coordinated depth decision

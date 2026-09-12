@@ -26,6 +26,10 @@ const NodeAggregateAuthority = if (types.search_evidence_observation_compiled) s
     verification: types.Verification = .not_required,
     omitted_siblings: bool = false,
     original_producer: ?types.Provenance = null,
+    /// Node-local: some searched sibling was only a reduced probe. It is not
+    /// inherited from a child certificate, because a subtree-wide accumulation
+    /// would be true almost everywhere and carry no information.
+    reduced_siblings: bool = false,
 } else struct {};
 
 const NodeValue = struct {
@@ -43,6 +47,7 @@ const NodeResolution = struct {
     original_producer: ?types.Provenance = null,
     verification: types.Verification = .not_required,
     scope_override: ?types.EvidenceScope = null,
+    reduced_siblings: bool = false,
 };
 
 fn Context(comptime Observer: type, comptime Prober: type) type {
@@ -689,13 +694,7 @@ fn negamax(
             expectation,
             evidence(result.value.raw, result.value.bound, result.value.provenance),
         );
-        const verification_status: types.Verification = if (result.verification != .not_required)
-            result.verification
-        else switch (route) {
-            .reduced_probe => .reduced_only,
-            .reduction_research, .pv_research, .null_verification => .completed,
-            else => .not_required,
-        };
+        const verification_status = routeVerification(route, result.verification);
         context.thread.search_evidence.observeOutcome(.{
             .attribution = attribution,
             .scope = result.scope_override orelse node_scope,
@@ -705,6 +704,7 @@ fn negamax(
             .omitted_siblings = result.omitted_siblings,
             .complete = true,
             .original_producer = result.original_producer orelse result.value.provenance,
+            .reduced_siblings = result.reduced_siblings,
         });
     }
     if (comptime features.search_context)
@@ -720,13 +720,7 @@ fn negamax(
             .producer = result.original_producer orelse result.value.provenance,
             .searched_horizon = result.searched_horizon orelse result.depth.searched(),
             .scope = result.scope_override orelse node_scope,
-            .verification = if (result.verification != .not_required)
-                result.verification
-            else switch (route) {
-                .reduced_probe => .reduced_only,
-                .reduction_research, .pv_research, .null_verification => .completed,
-                else => .not_required,
-            },
+            .verification = routeVerification(route, result.verification),
             .omitted_siblings = result.omitted_siblings,
         };
     }
@@ -2018,7 +2012,11 @@ fn negamaxNode(
             recordCorrectionEvidence(features, context, value, shallow, cutoff, depth, exclusion_node, false);
             var resolution = resolvedWithOmission(cutoff, active_depth, pruned_late_move);
             if (comptime types.search_evidence_observation_compiled)
-                applyAggregateAuthority(&resolution, best_authority, pruned_late_move);
+                applyAggregateAuthority(
+                    &resolution,
+                    resultAuthority(.lower, best_authority, aggregate_authority),
+                    pruned_late_move,
+                );
             return resolution;
         }
     }
@@ -2112,10 +2110,12 @@ fn negamaxNode(
         context.observer.ttBest(tt_move.raw() == best_move.raw());
     recordCorrectionEvidence(features, context, value, shallow, result, depth, exclusion_node, pruned_late_move);
     var resolution = resolvedWithOmission(result, active_depth, pruned_late_move);
-    if (comptime types.search_evidence_observation_compiled) {
-        const authority = if (result.bound == .lower) best_authority else aggregate_authority;
-        applyAggregateAuthority(&resolution, authority, pruned_late_move);
-    }
+    if (comptime types.search_evidence_observation_compiled)
+        applyAggregateAuthority(
+            &resolution,
+            resultAuthority(result.bound, best_authority, aggregate_authority),
+            pruned_late_move,
+        );
     return resolution;
 }
 
@@ -2217,6 +2217,7 @@ fn recordContextualQuietOutcome(
     std.debug.assert(!chess.movegen.isCapture(value, winner) and winner.kind() != .promotion);
     const winner_pretrained = containsMove(pretrained_winners, winner);
     if (comptime observe_search_evidence) {
+        search_evidence.observeShadowAdmission(depth, shadow_admitted);
         if (shadow_admitted)
             recordShadowQuietOutcome(
                 search_evidence,
@@ -2677,6 +2678,7 @@ fn quiescenceNode(
     var best_original_producer: types.Provenance = .qsearch_move;
     var aggregate_original_producer: types.Provenance = .qsearch_move;
     var inherited_omission = false;
+    var best_inherited_omission = false;
     var static_evidence: ShallowEvidence = .{};
     var baseline_provenance: types.Provenance = .qsearch_move;
     if (!in_check) {
@@ -2850,6 +2852,7 @@ fn quiescenceNode(
             if (comptime types.search_evidence_observation_compiled) {
                 best_scope = restrictiveScope(q_scope, candidate.observation.scope);
                 best_original_producer = candidate.observation.producer orelse candidate.provenance;
+                best_inherited_omission = candidate.observation.omitted_siblings;
             }
             extendPv(context.thread, ply, chess_move);
         }
@@ -2865,7 +2868,7 @@ fn quiescenceNode(
             return qsearchValue(
                 cutoff,
                 best_scope,
-                omitted_siblings or inherited_omission,
+                qsearchOmission(.lower, omitted_siblings, best_inherited_omission, inherited_omission),
                 best_original_producer,
             );
         }
@@ -2883,7 +2886,7 @@ fn quiescenceNode(
         return qsearchValue(
             result,
             aggregate_scope,
-            omitted_siblings or inherited_omission,
+            qsearchOmission(result.bound, omitted_siblings, best_inherited_omission, inherited_omission),
             baseline_provenance,
         );
     }
@@ -2899,9 +2902,24 @@ fn quiescenceNode(
     return qsearchValue(
         result,
         if (result.bound == .upper) aggregate_scope else best_scope,
-        omitted_siblings or inherited_omission,
+        qsearchOmission(result.bound, omitted_siblings, best_inherited_omission, inherited_omission),
         if (result.bound == .upper) aggregate_original_producer else best_original_producer,
     );
+}
+
+/// A qsearch fail-low rests on every searched child, so it inherits the
+/// aggregate omission. A cutoff or a returned best value is established by its
+/// winner alone and inherits only that child's omission, matching how the main
+/// search certifies a fail-high. This node's own SEE/delta omissions always
+/// count.
+fn qsearchOmission(
+    bound: types.Bound,
+    local: bool,
+    winner_inherited: bool,
+    aggregate_inherited: bool,
+) bool {
+    if (local) return true;
+    return if (bound == .upper) aggregate_inherited else winner_inherited;
 }
 
 fn qsearchValue(
@@ -3540,9 +3558,59 @@ fn storedProducerScope(scope: types.EvidenceScope, producer: types.Provenance) t
     return restrictiveScope(scope, switch (producer) {
         .null_move => .null_verification,
         .probcut => .probcut,
-        .exclusion_search, .speculative_cutoff => .exclusion,
+        .exclusion_search => .exclusion,
+        // Reverse futility and singular multi-cut both store
+        // `speculative_cutoff`, so a stored record cannot say which produced
+        // it. Reverse futility is a static shortcut and is not exclusion
+        // evidence, so labelling every such record `exclusion` is wrong. The
+        // producer is preserved instead: it establishes no horizon and is not
+        // an ordinary searched producer, so it can never train the paired
+        // relation or claim ordinary authority on its own.
         else => .ordinary,
     });
+}
+
+/// The entry route dominates the verification label. A reduced probe stays a
+/// reduced probe even when it returns through an internal null-move or ProbCut
+/// verification: that verification proves the shortcut it guards, not the
+/// reduced invocation that happened to reach it.
+fn routeVerification(
+    route: types.EntryRoute,
+    resolved_verification: types.Verification,
+) types.Verification {
+    if (route == .reduced_probe) return .reduced_only;
+    if (resolved_verification != .not_required) return resolved_verification;
+    return switch (route) {
+        .reduction_research, .pv_research, .null_verification => .completed,
+        else => .not_required,
+    };
+}
+
+/// Chooses which certificate describes a completed node, by the bound it
+/// returns. A fail-high is established by the cutting move alone. A fail-low
+/// rests on every searched sibling, so the weakest one bounds the claim. An
+/// exact value is established by its winner: sibling selectivity is reported
+/// as `reduced_siblings`/`omitted_siblings` rather than by shortening the
+/// winner's horizon. See ADR-0070 for the decision and its admission profile.
+fn resultAuthority(
+    bound: types.Bound,
+    best: NodeAggregateAuthority,
+    aggregate: NodeAggregateAuthority,
+) NodeAggregateAuthority {
+    if (comptime !types.search_evidence_observation_compiled) return .{};
+    var chosen = switch (bound) {
+        .lower => best,
+        .upper => aggregate,
+        .exact => NodeAggregateAuthority{
+            .scope = aggregate.scope,
+            .searched_horizon = best.searched_horizon,
+            .verification = best.verification,
+            .omitted_siblings = aggregate.omitted_siblings,
+            .original_producer = best.original_producer,
+        },
+    };
+    chosen.reduced_siblings = aggregate.reduced_siblings;
+    return chosen;
 }
 
 fn parentSearchedHorizon(child_horizon: u16) u16 {
@@ -3575,7 +3643,10 @@ fn absorbCandidateAuthority(
         const next = authorityFromCandidate(node_scope, candidate);
         aggregate.searched_horizon = @min(aggregate.searched_horizon, next.searched_horizon);
         aggregate.omitted_siblings = aggregate.omitted_siblings or next.omitted_siblings;
-        if (next.verification == .reduced_only) aggregate.verification = .reduced_only;
+        if (next.verification == .reduced_only) {
+            aggregate.verification = .reduced_only;
+            aggregate.reduced_siblings = true;
+        }
         if (aggregate.scope == .ordinary and next.scope != .ordinary)
             aggregate.scope = next.scope;
         if (aggregate.original_producer == null or next.scope != .ordinary)
@@ -3597,6 +3668,7 @@ fn applyAggregateAuthority(
         resolution.verification = authority.verification;
         resolution.scope_override = authority.scope;
         resolution.omitted_siblings = local_omission or authority.omitted_siblings;
+        resolution.reduced_siblings = authority.reduced_siblings;
     }
 }
 
@@ -5502,6 +5574,92 @@ test "observed horizon distinguishes searched work from shortcuts" {
     try std.testing.expectEqual(@as(u16, 0), establishedHorizon(.tablebase, depth));
 }
 
+test "an exact result certifies its winner, not a reduced sibling" {
+    // F1/D1: an exact value is established by the move that produced it. A
+    // sibling that was only probed at a reduced depth is reported separately
+    // and must not rewrite the winner's producer, verification or horizon.
+    if (comptime !types.search_evidence_observation_compiled) return error.SkipZigTest;
+    const winner = NodeValue{
+        .raw = 40,
+        .bound = .upper,
+        .provenance = .full_search,
+        .observation = .{
+            .producer = .full_search,
+            .searched_horizon = 4,
+            .scope = .ordinary,
+            .verification = .not_required,
+        },
+    };
+    const probe = NodeValue{
+        .raw = -60,
+        .bound = .lower,
+        .provenance = .reduced_search,
+        .observation = .{
+            .producer = .tt_exact,
+            .searched_horizon = 1,
+            .scope = .ordinary,
+            .verification = .reduced_only,
+        },
+    };
+    var aggregate: NodeAggregateAuthority = .{};
+    absorbCandidateAuthority(&aggregate, .ordinary, probe);
+    absorbCandidateAuthority(&aggregate, .ordinary, winner);
+    const best = authorityFromCandidate(.ordinary, winner);
+
+    const exact = resultAuthority(.exact, best, aggregate);
+    try std.testing.expectEqual(types.Verification.not_required, exact.verification);
+    try std.testing.expectEqual(types.Provenance.full_search, exact.original_producer.?);
+    try std.testing.expectEqual(@as(u16, 5), exact.searched_horizon);
+    try std.testing.expect(exact.reduced_siblings);
+
+    const cutoff = resultAuthority(.lower, best, aggregate);
+    try std.testing.expectEqual(types.Verification.not_required, cutoff.verification);
+    try std.testing.expectEqual(@as(u16, 5), cutoff.searched_horizon);
+    try std.testing.expect(cutoff.reduced_siblings);
+
+    // A fail-low rests on every searched sibling, so it keeps the conservative
+    // aggregate: the weakest sibling bounds both horizon and verification.
+    const fail_low = resultAuthority(.upper, best, aggregate);
+    try std.testing.expectEqual(types.Verification.reduced_only, fail_low.verification);
+    try std.testing.expectEqual(@as(u16, 2), fail_low.searched_horizon);
+}
+
+test "a reduced probe stays reduced through an internal verification" {
+    // F2: the null-move and ProbCut verifications prove the shortcut they
+    // guard, not the reduced invocation that reached them.
+    try std.testing.expectEqual(
+        types.Verification.reduced_only,
+        routeVerification(.reduced_probe, .completed),
+    );
+    try std.testing.expectEqual(
+        types.Verification.reduced_only,
+        routeVerification(.reduced_probe, .not_required),
+    );
+    try std.testing.expectEqual(
+        types.Verification.completed,
+        routeVerification(.null_verification, .not_required),
+    );
+    try std.testing.expectEqual(
+        types.Verification.completed,
+        routeVerification(.scout, .completed),
+    );
+    try std.testing.expectEqual(
+        types.Verification.not_required,
+        routeVerification(.scout, .not_required),
+    );
+}
+
+test "qsearch omission follows the bound that established the result" {
+    // F4: a cutoff and a returned best value inherit only the winning child's
+    // omission; a fail-low inherits every searched child's. Local SEE/delta
+    // omissions always count.
+    try std.testing.expect(!qsearchOmission(.lower, false, false, true));
+    try std.testing.expect(qsearchOmission(.lower, false, true, false));
+    try std.testing.expect(!qsearchOmission(.exact, false, false, true));
+    try std.testing.expect(qsearchOmission(.upper, false, false, true));
+    try std.testing.expect(qsearchOmission(.lower, true, false, false));
+}
+
 test "qsearch completion retains original source scope and omission" {
     if (comptime !types.search_evidence_observation_compiled) return error.SkipZigTest;
     const resolved_q = qsearchValue(
@@ -5518,6 +5676,18 @@ test "qsearch completion retains original source scope and omission" {
         types.EvidenceScope.probcut,
         storedProducerScope(.ordinary, .probcut),
     );
+    // F3: reverse futility and singular multi-cut share `speculative_cutoff`,
+    // so a stored record cannot be called exclusion evidence. Its producer is
+    // preserved instead and establishes no horizon of its own.
+    try std.testing.expectEqual(
+        types.EvidenceScope.ordinary,
+        storedProducerScope(.ordinary, .speculative_cutoff),
+    );
+    try std.testing.expectEqual(
+        types.EvidenceScope.exclusion,
+        storedProducerScope(.ordinary, .exclusion_search),
+    );
+    try std.testing.expect(!ordinarySearchedProducer(.speculative_cutoff));
 }
 
 comptime {

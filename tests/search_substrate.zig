@@ -2134,6 +2134,8 @@ test "search evidence observation preserves the accepted search result" {
     try std.testing.expect(summary.depth_history_facts != 0);
     try std.testing.expect(summary.outcomes != 0);
     try std.testing.expect(summary.reduced_only_outcomes != 0);
+    try std.testing.expect(summary.reduced_sibling_outcomes != 0);
+    try std.testing.expect(summary.shadow_admitted != 0);
     try std.testing.expect(summary.updates != 0);
     const snapshot = observed_harness.thread.search_evidence.snapshot();
     try std.testing.expect(snapshot.static_facts != null);
@@ -2149,6 +2151,54 @@ test "search evidence observation preserves the accepted search result" {
     try std.testing.expectEqual(@as(?bool, null), snapshot.tt_facts.?.pv_origin);
     try std.testing.expect(snapshot.move_facts.?.chess_move.isChessMove());
     try std.testing.expect(snapshot.move_facts.?.searched_before <= snapshot.move_facts.?.selected_ordinal);
+}
+
+test "the paired relation is trained predominantly at shallow remaining depth" {
+    // ADR-0070 D1. An exact result keeps its winner's horizon rather than the
+    // shortest searched path anywhere in its subtree, so admission is no longer
+    // capped by an unrelated sibling. That correction does not make the
+    // relation depth-stratified: the dominant gate is the accepted producer
+    // rule, which admits only `full_search`/`pvs_probe` winners. Depth-one
+    // nodes therefore never admit, because their child is a qsearch leaf.
+    // This asserts that shape, not any exact count, so 6.5.10 cannot quietly
+    // assume a depth-balanced sample.
+    if (comptime !search.types.search_evidence_observation_compiled)
+        return error.SkipZigTest;
+
+    const fen_text = "r2qr1k1/p4ppp/1pn1bn2/2b1p3/4P3/1BN1BN2/PPP2PPP/R2QR1K1 b - - 6 10";
+    var root: chess.position.PositionState = .{};
+    var position = try chess.fen.parse(fen_text, &root);
+    var harness: Harness = .{};
+    var heuristics: search.ordering.State = .{};
+    var observer: search.diagnostics.Disabled = .{};
+    var control: search.types.NeverStop = .{};
+
+    _ = search.baseline.runWithFeatures(
+        .{ .search_evidence_observation = true },
+        &position,
+        harness.binding(),
+        .{ .depth = 9 },
+        &control,
+        &harness.thread,
+        null,
+        &heuristics,
+        &observer,
+    );
+
+    const summary = harness.thread.search_evidence.summary();
+    try std.testing.expect(summary.shadow_admitted != 0);
+    // A depth-one winner is established by a quiescence leaf, which is not an
+    // ordinary searched producer.
+    try std.testing.expectEqual(@as(u64, 0), summary.shadow_admitted_by_depth[1]);
+    // Admission does reach beyond the shallowest ordinary depth ...
+    var deep_admitted: u64 = 0;
+    for (summary.shadow_admitted_by_depth[3..]) |count| deep_admitted += count;
+    try std.testing.expect(deep_admitted != 0);
+    // ... but remains a small minority of the relation.
+    try std.testing.expect(summary.shadow_admitted_by_depth[2] * 2 > summary.shadow_admitted);
+    // Probe-only siblings stay visible as their own fact instead of silently
+    // shortening the horizon that admitted these outcomes.
+    try std.testing.expect(summary.reduced_sibling_outcomes != 0);
 }
 
 test "shadow evidence pairs value and support for one exact relation" {

@@ -1003,8 +1003,7 @@ Implement these bounded sub-tickets in order, as one behavior-neutral step.
 Names, fields and admission rules are in ADR-0070; no coefficient fitting or
 new production consumer is part of this work.
 
-**Second repair implementation and verification complete; the repeated Astra
-High review remains open.** The first Astra review rejected the initial
+**Third repair complete; the repeated Astra High review is next.** The first Astra review rejected the initial
 substrate: shadow feedback inherited legacy admission, restrictive scopes did
 not survive descendant routes, several shortcuts overstated searched horizon,
 move plans did not exactly describe legacy depth use, and `HistoryFacts` was
@@ -1016,10 +1015,18 @@ carried `history_local`; reduced-only and null-verification results reported
 nominal rather than actual searched horizon; qsearch outcomes reported
 `omitted_siblings = false` despite SEE/delta omissions and lost the stored
 producer on a TT cutoff; and only the per-move snapshot existed where ADR-0070
-also requires a ranking-time history fact. Both were diagnostic-substrate
-defects, not evidence that production playing strength regressed. Both repairs
-stay inside 6.5.9; do not advance to 6.5.10 until the repeated review accepts
-the authority and lifetime boundaries.
+also requires a ranking-time history fact. The third Astra review accepted the
+authority and lifetime boundaries and found no evidence leak on any repaired
+path, but blocked closure on four certificate-labeling defects and one implicit
+design decision: an aggregate that certified exact results with a sibling's
+reduced verification and producer; a `reduced_probe` route relabelled
+`completed` by the internal null-move or ProbCut verification it returned
+through; stored `speculative_cutoff` records labelled exclusion evidence; a
+qsearch cutoff inheriting every searched child's omission instead of its
+winner's; and no written rule for which certificate describes a completed node.
+All were diagnostic-substrate defects, not evidence that production playing
+strength regressed. All three repairs stay inside 6.5.9; do not advance to
+6.5.10 until the repeated review re-confirms them.
 
 1. **6.5.9.1 — Exact fact adapters (`types`, `baseline`).** Add `StaticFacts`,
    `TtFacts`, `WindowFacts` and `MoveFacts` views at existing producers. Preserve
@@ -1102,35 +1109,54 @@ Implementation evidence before review:
   Ranking facts are captured when the picker is constructed and when the
   delayed quiet stage is ranked, before any descendant can mutate worker-local
   history; depth facts remain per selected move at its depth decision.
-Post-repair verification used a clean isolated Zig 0.16.0 installed by the
-repository's SHA-256-pinned `tools/ci/install-zig.ps1`. The earlier report of a
-truncated standard-library file was a host I/O/concurrency artifact of parallel
-compilation, not a damaged toolchain: the same files read intact on direct
-inspection and every gate below ran serially with `-j1`. No toolchain file was
-modified. Default and observation-enabled Debug compile checks pass. Enabled
-`test-fast` passes `229/229` executable tests; default passes `225/229` with the
-four enabled-only tests skipped. Both commands remain nonzero solely because the
-unchanged three bench-reference policy violations listed under 6.5.8 still fail
-their policy dependency. The full Debug `zig build test` passes in both arms,
-including all 24 UCI process cases. Default and enabled ReleaseFast `bench 6 1`
-each produced 40 identical depth/score/node/EBF records and the accepted
-aggregate fingerprint `775451`, geomean EBF `4.821`, median `12447` and top
-share `16.9%` (`130895`). Single-run time/NPS differ as expected for enabled
-observation and make no throughput claim. `zig build fmt` and `git diff --check`
-pass. No games, pilot or experiment registration applies.
+- The third repair makes the returned bound choose the certificate. A fail-high
+  and an exact result take producer, horizon and verification from the winning
+  move; a fail-low keeps the conservative aggregate; restrictive scope and
+  omitted siblings stay aggregated in every case. A probe-only sibling is
+  reported through the new `reduced_siblings` fact instead of shortening the
+  winner's horizon. The entry route now dominates the verification label, so a
+  `reduced_probe` stays `reduced_only` through an internal null-move or ProbCut
+  verification. A stored `speculative_cutoff` keeps its producer under ordinary
+  scope rather than claiming exclusion evidence, because reverse futility and
+  singular multi-cut share that provenance and a record cannot separate them.
+  Qsearch cutoffs inherit the winning child's omission, matching the main
+  search. ADR-0070 records the rule and its measured admission profile.
+Verification used a clean isolated Zig 0.16.0 installed by the repository's
+SHA-256-pinned `tools/ci/install-zig.ps1`. The earlier report of a truncated
+standard-library file was a host I/O artifact: the named files read intact on
+direct inspection, the failure moves between unrelated files, and it recurs at
+`-j1`. No toolchain file was modified. Retrying the same command clears it.
+
+The second repair ran the full Debug `zig build test` in both arms, including
+all 24 UCI process cases. By maintainer direction of 2026-09-12, full suites are
+no longer a routine per-step gate during rapid development; they run before a
+release. The third repair therefore ran the gates that verify it: default and
+observation-enabled compile checks of every test root, the enabled focused
+executable tests covering the new certificate/route/omission properties, and the
+deterministic behavior gate. Default and enabled ReleaseFast `bench 6 1` each
+produced 40 identical depth/score/node/EBF records and the accepted aggregate
+fingerprint `775451`, geomean EBF `4.821`, median `12447` and top share `16.9%`
+(`130895`). Single-run time/NPS differ as expected for enabled observation and
+make no throughput claim. The three unchanged bench-reference policy violations
+listed under 6.5.8 still fail their policy dependency. `zig build fmt` and
+`git diff --check` pass. No games, pilot or experiment registration applies.
 
 The Astra review owns 6.5.9.4 closure. It must verify that table collisions are
 diagnostic drops rather than merged samples; support is lifetime count rather
 than probability/recency; shadow reset matches its per-search owner; qsearch,
 null, exclusion and restricted-root scope cannot acquire ordinary feedback/TT
 authority; and the default-off code is genuinely erased. The repeated review
-additionally owns the five repaired paths: no reduced, restricted or
+additionally owns the earlier repaired paths: no reduced, restricted or
 non-searched result reaches shadow admission by any entry route; every
 restriction, including `history_local` draws, survives recursive return and
 negation; every reported horizon is the horizon actually searched; qsearch
 reports its own omission and stored producer; and ranking-time history is
-observed before descendants can mutate it. Review findings are fixed inside
-6.5.9 before marking it complete. Step 6.5.10 remains blocked.
+observed before descendants can mutate it. It also re-confirms the third
+repair: the bound chooses the certificate, a reduced probe keeps that label
+through an internal verification, a stored speculative cutoff is not exclusion
+evidence, qsearch cutoffs follow their winner, and ADR-0070's recorded
+admission profile matches the substrate's own counters. Review findings are
+fixed inside 6.5.9 before marking it complete. Step 6.5.10 remains blocked.
 
 #### 6.5.10 — Integrated ordering, aspiration and selective depth
 

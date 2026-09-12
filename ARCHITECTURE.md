@@ -456,12 +456,15 @@ paired outcome/support samples under existing ordering relation keys. No
 production ordering, depth, history update, TT/PV or root-publication path
 consumes them. Each completed main and qsearch return carries one
 observation-only certificate: established producer, actually searched horizon,
-restrictive scope, verification state and inherited omission. A restriction
-or shortened horizon survives negation and recursive return, and shadow
-admission can refuse reduced, restricted or non-searched evidence. The first
-review's scope/horizon/admission defects and the second review's admission,
-scope, horizon, qsearch-metadata and ranking-time-history defects each have a
-bounded repair whose functional and deterministic parity gates pass. A repeated
+restrictive scope, verification state, inherited omission and whether any
+sibling was searched only as a reduced probe. The returned bound decides which
+certificate applies: a fail-high or exact result is certified by its winning
+move, a fail-low by the conservative aggregate across searched siblings, while
+restrictive scope and omission stay aggregated in every case. A restriction
+survives negation and recursive return, and shadow admission can refuse
+reduced, restricted or non-searched evidence. Three Astra reviews each produced
+a bounded repair whose functional and deterministic parity gates pass; the
+third accepted the authority boundary itself. A repeated
 Astra review remains required before 6.5.9 closes; later
 consumers need separately approved implementation and playing gates.
 
