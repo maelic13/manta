@@ -35,6 +35,7 @@ test "deterministic random positions agree with exhaustive legal move validation
         while (played < walk_plies) {
             try expectExactMoveSet(&value);
             try expectSeeProperties(&value);
+            try expectQuietCheckSet(&value);
             checked_positions += 1;
 
             var legal = chess.position.MoveList.init();
@@ -86,6 +87,67 @@ fn expectExactMoveSet(value: *const chess.position.Position) !void {
             return error.MoveSetMismatch;
         }
     }
+}
+
+/// ADR-0071 F's generator, checked both ways against an independent oracle.
+///
+/// Soundness: every generated move is a legal non-tactical quiet that really
+/// gives check, verified by making it and reading the resulting check state
+/// rather than by re-deriving the attack sets the generator used.
+///
+/// Completeness: every legal non-tactical quiet that gives check with the
+/// moved piece as the sole checker must be generated. The sole-checker
+/// condition is what separates a direct check from a discovered one, which
+/// the generator deliberately omits; a discovery leaves a checker that is not
+/// on the destination square.
+fn expectQuietCheckSet(value: *const chess.position.Position) !void {
+    var generated = chess.position.MoveList.init();
+    chess.movegen.generate(.quiet_checks, value, &generated);
+
+    var quiets = chess.position.MoveList.init();
+    chess.movegen.generate(.non_tactical_quiets, value, &quiets);
+
+    for (generated.slice()) |chess_move| {
+        try std.testing.expect(chess.movegen.isLegal(value, chess_move));
+        try std.testing.expect(!chess.movegen.isCapture(value, chess_move));
+        try std.testing.expect(chess_move.kind() != .promotion);
+        try std.testing.expect(chess_move.kind() != .castling);
+        try std.testing.expect(containsMove(quiets.slice(), chess_move));
+
+        var child_state: chess.position.PositionState = undefined;
+        var child = value.*;
+        chess.transition.makeMove(&child, chess_move, &child_state);
+        try std.testing.expect(child.current.checkers != 0);
+        // Direct check: the mover itself is the checker, and it is alone.
+        try std.testing.expectEqual(
+            @as(u32, 1),
+            @popCount(child.current.checkers),
+        );
+        try std.testing.expectEqual(
+            chess_move.to().bit(),
+            child.current.checkers,
+        );
+    }
+
+    for (quiets.slice()) |chess_move| {
+        var child_state: chess.position.PositionState = undefined;
+        var child = value.*;
+        chess.transition.makeMove(&child, chess_move, &child_state);
+        const sole_direct_check = child.current.checkers == chess_move.to().bit();
+        if (!sole_direct_check) continue;
+        // A king move can never be a direct check, and castling is excluded by
+        // construction; both are outside the subset by design.
+        const mover = value.physical.pieceOn(chess_move.from()).pieceType();
+        if (mover == .king or chess_move.kind() == .castling) continue;
+        try std.testing.expect(containsMove(generated.slice(), chess_move));
+    }
+}
+
+fn containsMove(haystack: []const chess.move.Move, needle: chess.move.Move) bool {
+    for (haystack) |candidate| {
+        if (candidate.raw() == needle.raw()) return true;
+    }
+    return false;
 }
 
 fn expectSeeProperties(value: *const chess.position.Position) !void {

@@ -189,6 +189,7 @@ fn measure(
             .core_move_pruning = search_build_options.core_move_pruning,
             .core_node_pruning = search_build_options.core_node_pruning,
             .core_aspiration = search_build_options.core_aspiration,
+            .core_qs_checks = search_build_options.core_qs_checks,
             .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
             .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
         },

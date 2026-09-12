@@ -939,6 +939,7 @@ fn negamaxNode(
             beta,
             expectation,
             node_scope,
+            0,
         ), active_depth);
 
     const shallow: ShallowEvidence = if (comptime features.shallow_selectivity or features.probcut or
@@ -991,6 +992,7 @@ fn negamaxNode(
                     beta,
                     expectation,
                     node_scope,
+                    0,
                 ), active_depth);
             }
         }
@@ -1044,6 +1046,7 @@ fn negamaxNode(
                     beta,
                     expectation,
                     node_scope,
+                    0,
                 ), active_depth);
             }
         }
@@ -2829,6 +2832,9 @@ fn quiescence(
     beta: i32,
     expectation: types.NodeExpectation,
     inherited_scope: types.EvidenceScope,
+    /// Plies below the main search, not below the root. ADR-0071 F generates
+    /// quiet checks only at zero, which bounds the extension to one ply.
+    q_ply: usize,
 ) Abort!NodeValue {
     const q_scope: types.EvidenceScope = if (inherited_scope == .ordinary)
         .quiescence
@@ -2845,6 +2851,7 @@ fn quiescence(
         beta,
         expectation,
         q_scope,
+        q_ply,
     ) catch |err| {
         if (comptime features.search_evidence_observation)
             observeIncompleteOutcome(
@@ -2907,6 +2914,7 @@ fn quiescenceNode(
     beta: i32,
     expectation: types.NodeExpectation,
     q_scope: types.EvidenceScope,
+    q_ply: usize,
 ) Abort!NodeValue {
     const pv_node = expectation.isPrincipal();
     std.debug.assert(pv_node or beta == alpha_initial + 1);
@@ -3018,6 +3026,39 @@ fn quiescenceNode(
         if (best > alpha) alpha = best;
     }
 
+    // ADR-0071 F. Only at the first quiescence ply, only outside check and
+    // only once stand-pat has declined to cut: a node that already fails high
+    // needs no extra moves, and generating below this ply would let the
+    // extension recurse instead of adding exactly one forcing layer.
+    var quiet_checks: [
+        if (features.selective_core) chess.types.move_capacity else 0
+    ]chess.move.Move = undefined;
+    var quiet_check_count: usize = 0;
+    if (comptime features.coreQsChecks()) {
+        if (!in_check and q_ply == 0) {
+            const appended_start = moves.count;
+            chess.movegen.generateAppend(.quiet_checks, value, &moves);
+            quiet_check_count = moves.count - appended_start;
+            if (quiet_check_count != 0) {
+                @memcpy(
+                    quiet_checks[0..quiet_check_count],
+                    moves.moves[appended_start..moves.count],
+                );
+                picker.rankAppended(
+                    features.capture_history,
+                    value,
+                    binding,
+                    table_evidence.chess_move,
+                    context.heuristics,
+                    context.params,
+                    ply,
+                    appended_start,
+                );
+                context.observer.generated(quiet_check_count);
+            }
+        }
+    }
+
     var searched_index: usize = 0;
     while (picker.next()) |selection| {
         const chess_move = selection.chess_move;
@@ -3031,8 +3072,20 @@ fn quiescenceNode(
                     heuristics.captureScore(value, chess_move) != 0,
                 );
         }
-        if (!in_check and !is_capture and !is_promotion)
-            continue;
+        const quiet_check = if (comptime features.coreQsChecks())
+            !in_check and !is_capture and !is_promotion and
+                containsMove(quiet_checks[0..quiet_check_count], chess_move)
+        else
+            false;
+        if (!in_check and !is_capture and !is_promotion) {
+            // A check is searched only if it does not simply hang the mover.
+            // `seeAtLeast` prices a quiet move's destination since ADR-0071 F's
+            // review decision; before that it answered every quiet move `true`.
+            if (!quiet_check or !binding.seeAtLeast(value, chess_move, 0)) {
+                if (quiet_check) context.observer.prune(.see);
+                continue;
+            }
+        }
         const move_source = selection.source;
         const see_non_losing = if (comptime features.qsearch_see)
             if (!in_check and is_capture and !is_promotion)
@@ -3140,6 +3193,7 @@ fn quiescenceNode(
             -alpha,
             if (pv_node) .principal else expectation.child(false),
             q_scope,
+            q_ply + 1,
         ) catch |err| {
             unmake(value, binding, context.thread, ply, chess_move);
             return err;
@@ -3628,6 +3682,7 @@ fn tryProbCut(
             -threshold + 1,
             .all,
             node_scope,
+            0,
         ) catch |err| {
             unmake(value, binding, context.thread, ply, chess_move);
             return err;

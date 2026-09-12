@@ -798,6 +798,8 @@ pub const Features = struct {
     core_node_pruning: bool = true,
     /// Root aspiration, ADR-0071 E.
     core_aspiration: bool = true,
+    /// Direct quiet checks in the first quiescence ply, ADR-0071 F.
+    core_qs_checks: bool = true,
 
     /// The component switches are meaningless without the umbrella, so every
     /// consumer asks through these accessors rather than reading the field.
@@ -820,6 +822,10 @@ pub const Features = struct {
 
     pub fn coreAspiration(self: Features) bool {
         return self.selective_core and self.core_aspiration;
+    }
+
+    pub fn coreQsChecks(self: Features) bool {
+        return self.selective_core and self.core_qs_checks;
     }
 };
 
@@ -889,6 +895,7 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     try std.testing.expect(!features.coreMovePruning());
     try std.testing.expect(!features.coreNodePruning());
     try std.testing.expect(!features.coreAspiration());
+    try std.testing.expect(!features.coreQsChecks());
 
     const core: Features = .{ .selective_core = true };
     try std.testing.expect(core.coreHistory());
@@ -896,6 +903,7 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     try std.testing.expect(core.coreMovePruning());
     try std.testing.expect(core.coreNodePruning());
     try std.testing.expect(core.coreAspiration());
+    try std.testing.expect(core.coreQsChecks());
 
     const ablated: Features = .{ .selective_core = true, .core_lmr = false };
     try std.testing.expect(ablated.coreHistory());

@@ -605,6 +605,39 @@ pub const Picker = struct {
         return self.takeAt(selected_index);
     }
 
+    /// Ranks moves appended to the list after `init`, so a caller that learns
+    /// only later which extra moves it wants can still select over one list in
+    /// one order. ADR-0071 F's quiescence checks are decided after stand-pat.
+    pub fn rankAppended(
+        self: *Picker,
+        comptime use_capture_history: bool,
+        value: *const chess.position.Position,
+        binding: anytype,
+        tt_move: ?chess.move.Move,
+        state: ?*const State,
+        search_params: params.Values,
+        ply: usize,
+        appended_start: usize,
+    ) void {
+        for (appended_start..self.moves.count) |index| {
+            self.ranks[index] = if (self.select_best)
+                rank(
+                    use_capture_history,
+                    value,
+                    binding,
+                    self.moves.moves[index],
+                    tt_move,
+                    state,
+                    search_params,
+                    ply,
+                    null,
+                    .{},
+                )
+            else
+                .{ .source = .quiet_history, .history = 0 };
+        }
+    }
+
     fn bestRemainingIndex(self: *const Picker) ?usize {
         if (self.cursor >= self.moves.count) return null;
         var selected_index = self.cursor;

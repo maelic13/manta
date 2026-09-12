@@ -1212,6 +1212,123 @@ test "core omission refuses principal nodes, checks and decisive windows" {
     try std.testing.expectEqual(@as(u64, 0), omissions);
 }
 
+test "first-ply quiescence checks are searched and the filter drops hanging ones" {
+    // ADR-0071 F, as an observable property of the wiring rather than of the
+    // generator, which `tests/chess_differential.zig` validates in both
+    // directions against a make-and-look oracle. If the component were
+    // declared but not consumed, the quiescence move count could not move.
+    var with: u64 = 0;
+    var without: u64 = 0;
+    for (core_positions) |fen_text| {
+        inline for (.{ false, true }, 0..) |qs_checks, index| {
+            var root: chess.position.PositionState = .{};
+            var position = try chess.fen.parse(fen_text, &root);
+            const original_key = position.current.key;
+            var harness: Harness = .{};
+            var storage: [8192]search.tt.Cluster = undefined;
+            var table = search.tt.Table.init(&storage);
+            var ordering: search.ordering.State = .{};
+            var counters: search.diagnostics.Counters = .{};
+            var control: search.types.NeverStop = .{};
+            const result = search.baseline.runWithFeatures(
+                .{ .selective_core = true, .core_qs_checks = qs_checks },
+                &position,
+                harness.binding(),
+                .{ .depth = 6 },
+                &control,
+                &harness.thread,
+                &table,
+                &ordering,
+                &counters,
+            );
+            if (index == 0) {
+                without += counters.searched_quiescence_moves;
+            } else {
+                with += counters.searched_quiescence_moves;
+            }
+            try expectLegalPv(fen_text, result.completed.?.pv.slice());
+            try std.testing.expect(chess.state.isConsistent(&position));
+            try std.testing.expectEqual(original_key, position.current.key);
+        }
+    }
+    // Quiet checks are extra moves in the first quiescence ply, so the arm
+    // that generates them must search strictly more of them.
+    try std.testing.expect(with > without);
+}
+
+test "quiet checks never coexist with the witness quiets they are drawn from" {
+    // The generated check set is a subset of the non-tactical quiets, so the
+    // MAN-S34 terminal witness already covers ADR-0071 F's clause that a
+    // non-empty check set is itself a legal-move witness: if a check exists,
+    // a quiet exists. This asserts the subset relation directly, which is what
+    // makes the witness rule safe to leave unchanged.
+    const fixtures = [_][]const u8{
+        chess.fen.start_position,
+        "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1",
+        "4k2N/2Q1p3/2KN3B/8/8/8/8/4R3 b - - 0 1",
+        "7k/8/8/8/8/8/8/K7 w - - 0 1",
+        "4k3/8/8/8/8/8/3q4/3RK3 w - - 0 1",
+        "6k1/5ppp/8/8/8/8/8/3R3K w - - 0 1",
+        "2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1",
+    };
+    for (fixtures) |fen_text| {
+        var root: chess.position.PositionState = .{};
+        var position = try chess.fen.parse(fen_text, &root);
+        var checks = chess.position.MoveList.init();
+        chess.movegen.generate(.quiet_checks, &position, &checks);
+        var quiets = chess.position.MoveList.init();
+        chess.movegen.generate(.non_tactical_quiets, &position, &quiets);
+        if (checks.count != 0) try std.testing.expect(quiets.count != 0);
+        for (checks.slice()) |chess_move| {
+            var found = false;
+            for (quiets.slice()) |quiet| {
+                if (quiet.raw() == chess_move.raw()) found = true;
+            }
+            try std.testing.expect(found);
+        }
+    }
+}
+
+test "terminal witness verdicts are unchanged with first-ply checks on" {
+    // The MAN-S34 witness fixtures, re-run with the component enabled: a
+    // stalemate must stay a stalemate and a checkmate a checkmate. The rules
+    // of chess decide these before any quiescence policy runs, and adding
+    // moves to a quiescence node must not renumber or invent one.
+    const cases = [_]struct { fen: []const u8, expected: manta.score.Score }{
+        .{ .fen = "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", .expected = .zero },
+        // Checkmate, not stalemate: the d6 knight already attacks e8. The
+        // MAN-S34 fixture list calls it a pinned pseudo-capture case, which is
+        // about the witness, not the verdict.
+        .{ .fen = "4k2N/2Q1p3/2KN3B/8/8/8/8/4R3 b - - 0 1", .expected = manta.score.Score.matedIn(0).? },
+        .{ .fen = "7k/6Q1/5K2/8/8/8/8/8 b - - 0 1", .expected = manta.score.Score.matedIn(0).? },
+    };
+    for (cases) |case| {
+        inline for (.{ false, true }) |qs_checks| {
+            var root: chess.position.PositionState = .{};
+            var position = try chess.fen.parse(case.fen, &root);
+            var harness: Harness = .{};
+            var counters: search.diagnostics.Counters = .{};
+            var control: search.types.NeverStop = .{};
+            const result = search.baseline.runWithFeatures(
+                .{ .selective_core = true, .core_qs_checks = qs_checks },
+                &position,
+                harness.binding(),
+                .{ .depth = 5 },
+                &control,
+                &harness.thread,
+                null,
+                null,
+                &counters,
+            );
+            try std.testing.expectEqual(case.expected, result.evidence.value);
+            try std.testing.expectEqual(
+                search.types.Termination.terminal,
+                result.termination,
+            );
+        }
+    }
+}
+
 test "mate windows are behavior-identical wherever no mate score enters the window" {
     // The clip removes only scores outside [matedIn(ply), mateIn(ply + 1)], so
     // on searches that never produce a mate score it must change nothing at

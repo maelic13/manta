@@ -91,6 +91,11 @@ pub fn build(b: *std.Build) void {
         "core-aspiration",
         "Ablation only: keep the core's root aspiration window (needs -Dselective-core)",
     ) orelse true;
+    const core_qs_checks = b.option(
+        bool,
+        "core-qs-checks",
+        "Ablation only: keep the core's first-ply quiescence checks (needs -Dselective-core)",
+    ) orelse true;
     const singular_exclusion_horizon = b.option(
         bool,
         "singular-exclusion-horizon",
@@ -161,6 +166,7 @@ pub fn build(b: *std.Build) void {
     search_build_options.addOption(bool, "core_move_pruning", core_move_pruning);
     search_build_options.addOption(bool, "core_node_pruning", core_node_pruning);
     search_build_options.addOption(bool, "core_aspiration", core_aspiration);
+    search_build_options.addOption(bool, "core_qs_checks", core_qs_checks);
     search_build_options.addOption(bool, "search_evidence_observation", search_evidence_observation);
     const search_build_options_module = search_build_options.createModule();
     const omit_frame_pointer: ?bool = if (optimize == .ReleaseFast and
@@ -326,6 +332,7 @@ pub fn build(b: *std.Build) void {
     transcript_search_build_options.addOption(bool, "core_move_pruning", core_move_pruning);
     transcript_search_build_options.addOption(bool, "core_node_pruning", core_node_pruning);
     transcript_search_build_options.addOption(bool, "core_aspiration", core_aspiration);
+    transcript_search_build_options.addOption(bool, "core_qs_checks", core_qs_checks);
     transcript_search_build_options.addOption(bool, "search_evidence_observation", search_evidence_observation);
     const transcript_manta = b.addModule("manta-transcript", .{
         .root_source_file = b.path("src/manta.zig"),

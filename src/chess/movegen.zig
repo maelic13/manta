@@ -21,6 +21,14 @@ pub const Mode = enum {
     /// this partitions `all` without changing either subset's filtered
     /// generation order.
     non_tactical_quiets,
+    /// Legal non-capture, non-promotion moves that give **direct** check: the
+    /// moving piece itself attacks the enemy king from its destination once
+    /// its origin is vacated. King moves, castling and discovered checks are
+    /// deliberately absent, so this is a subset of `non_tactical_quiets` and
+    /// not a partition of anything. ADR-0071 F consumes it at the first
+    /// quiescence ply, where a mate threat by a quiet move is otherwise
+    /// invisible.
+    quiet_checks,
 };
 
 /// Generates a complete legal subset into a caller-owned fixed-capacity list.
@@ -142,12 +150,14 @@ fn generateFor(
     const target = switch (mode) {
         .all => ~friendly,
         .captures, .tacticals => enemy,
-        .quiets, .non_tactical_quiets => ~occupied,
+        .quiets, .non_tactical_quiets, .quiet_checks => ~occupied,
     };
 
+    // A king can never give direct check, and castling is excluded by
+    // construction, so the quiet-check subset skips both producers entirely.
     if (mode == .captures or mode == .tacticals) {
         @call(.always_inline, generateKing, .{ us, value, king, target, list });
-    } else {
+    } else if (mode != .quiet_checks) {
         generateKing(us, value, king, target, list);
     }
 
@@ -160,6 +170,11 @@ fn generateFor(
         break :blk checkers | attacks.between[king.index()][checker.index()];
     };
     const pinned = pinnedPieces(value, us, king, occupied);
+
+    if (mode == .quiet_checks) {
+        generateQuietChecks(us, value, king, pinned, check_mask, list);
+        return;
+    }
 
     if (mode == .captures or mode == .tacticals) {
         @call(.always_inline, generatePawns, .{
@@ -182,6 +197,126 @@ fn generateFor(
 
     if ((mode == .all or mode == .quiets or mode == .non_tactical_quiets) and
         checkers == 0) generateCastling(us, value, list);
+}
+
+/// ADR-0071 F's direct quiet checks.
+///
+/// The check test is computed from the enemy king outward rather than from the
+/// mover: square `x` gives check with piece type `T` exactly when a `T` placed
+/// on the king's square would attack `x` through the post-move occupancy. For
+/// sliders that occupancy must have the mover's own origin removed, because a
+/// piece can be the only thing blocking the ray it is about to arrive on.
+///
+/// Legality reuses the generator's own pin and check-mask machinery, so a
+/// pinned piece is restricted to its pin ray and a pinned knight cannot move
+/// at all, exactly as in every other mode.
+fn generateQuietChecks(
+    comptime us: types.Color,
+    value: *const position.Position,
+    king: types.Square,
+    pinned: types.Bitboard,
+    check_mask: types.Bitboard,
+    list: *position.MoveList,
+) void {
+    const them = us.opposite();
+    const physical = &value.physical;
+    const occupied = physical.occupied();
+    const enemy_king = queries.kingSquare(value, them);
+    const empty = ~occupied;
+
+    inline for (.{ .knight, .bishop, .rook, .queen }) |piece_type| {
+        var pieces = physical.pieces(us, piece_type);
+        if (piece_type == .knight) pieces &= ~pinned;
+        while (pieces != 0) {
+            const from = popSquare(&pieces);
+            const without_mover = occupied & ~from.bit();
+            const checking_squares = switch (piece_type) {
+                .knight => attacks.knight[enemy_king.index()],
+                .bishop => attacks.bishop(enemy_king, without_mover),
+                .rook => attacks.rook(enemy_king, without_mover),
+                .queen => attacks.queen(enemy_king, without_mover),
+                else => unreachable,
+            };
+            var destinations = switch (piece_type) {
+                .knight => attacks.knight[from.index()],
+                .bishop => attacks.bishop(from, occupied),
+                .rook => attacks.rook(from, occupied),
+                .queen => attacks.queen(from, occupied),
+                else => unreachable,
+            } & empty & check_mask & checking_squares;
+            if (piece_type != .knight and pinned & from.bit() != 0) {
+                destinations &= attacks.line[king.index()][from.index()];
+            }
+            while (destinations != 0) {
+                list.append(move.Move.normal(from, popSquare(&destinations)));
+            }
+        }
+    }
+
+    generateQuietPawnChecks(us, value, king, pinned, check_mask, enemy_king, list);
+}
+
+/// The squares a pawn of `us` must stand on to attack the enemy king are the
+/// squares a pawn of `them` on the king's square would attack, so the existing
+/// pawn table answers it directly. Promotion pushes are excluded: they are
+/// tactical moves and belong to the `tacticals` partition.
+fn generateQuietPawnChecks(
+    comptime us: types.Color,
+    value: *const position.Position,
+    king: types.Square,
+    pinned: types.Bitboard,
+    check_mask: types.Bitboard,
+    enemy_king: types.Square,
+    list: *position.MoveList,
+) void {
+    const push: i8 = if (us == .white) 8 else -8;
+    const occupied = value.physical.occupied();
+    const pawns = value.physical.pieces(us, .pawn);
+    const promotion_rank: types.Bitboard = if (us == .white)
+        0x00ff_0000_0000_0000
+    else
+        0x0000_0000_0000_ff00;
+    const start_rank: types.Bitboard = if (us == .white)
+        0x0000_0000_0000_ff00
+    else
+        0x00ff_0000_0000_0000;
+    const checking_squares = attacks.pawn[us.opposite().index()][enemy_king.index()];
+    const free = pawns & ~pinned;
+    const free_non_promotions = free & ~promotion_rank;
+
+    var single_pushes = shiftPawns(us, free_non_promotions) & ~occupied &
+        check_mask & checking_squares;
+    appendPawnSet(list, &single_pushes, -push, false);
+
+    const start_steps = shiftPawns(us, free & start_rank) & ~occupied;
+    var double_pushes = shiftPawns(us, start_steps) & ~occupied &
+        check_mask & checking_squares;
+    appendPawnSet(list, &double_pushes, -(push * 2), false);
+
+    // A pinned pawn may still push along its own pin ray, and a push that
+    // gives check from that ray is legal. The pin ray runs through our king,
+    // so the general restriction below is the same one every mode applies.
+    var pinned_pawns = pawns & pinned & ~promotion_rank;
+    while (pinned_pawns != 0) {
+        const from = popSquare(&pinned_pawns);
+        const pin_ray = attacks.line[king.index()][from.index()];
+        const single = shiftSquare(us, from, push) orelse continue;
+        if (single.bit() & occupied != 0) continue;
+        if (single.bit() & pin_ray & check_mask & checking_squares != 0)
+            list.append(move.Move.normal(from, single));
+        if (from.bit() & start_rank == 0) continue;
+        const double = shiftSquare(us, single, push) orelse continue;
+        if (double.bit() & occupied != 0) continue;
+        if (double.bit() & pin_ray & check_mask & checking_squares != 0)
+            list.append(move.Move.normal(from, double));
+    }
+}
+
+fn shiftSquare(comptime us: types.Color, from: types.Square, push: i8) ?types.Square {
+    _ = us;
+    const next = @as(i32, @intCast(from.index())) + push;
+    if (next < 0 or next > 63) return null;
+    return types.Square.fromIndex(@intCast(next));
 }
 
 fn generateKing(
