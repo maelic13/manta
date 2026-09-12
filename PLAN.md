@@ -1454,6 +1454,108 @@ deleted silently; a fingerprint change in the off arm is a defect; questions
 about authority or chess semantics stop for Fable rather than being resolved
 by guess.
 
+**6.5.10.2 progress and stop (2026-09-12, Opus).** Tickets A to D are complete
+and committed; ticket E is implemented in the working tree but **not committed,
+because its required canary fails**. Work stopped at E under the ticket's own
+stop rule rather than continuing to F and G.
+
+| Ticket | Commit | Off-arm `bench 6 1` | Core-arm `bench 6 1` |
+|---|---|---:|---:|
+| A switches | `c15a5f9` | `642,336` | `642,336` |
+| B `core_history` | `f5960f0` | `642,336` | not measured |
+| C `core_lmr` | `db6cc6e` | `642,336` | `464,169` |
+| D `core_move_pruning` | `1d77e6d` | `642,336` | `313,881` |
+| E `core_node_pruning` | uncommitted | `642,336` | not accepted |
+
+The off arm reproduced `642,336` at every ticket and still does, with WAC.001
+answering `g3g6` at depths 3, 5 and 7. Nothing below is a defect of the accepted
+head.
+
+**The blocker.** `SCORE-034` and ADR-0071's invariant list both require WAC.001
+`g3g6` at depth 5. The core arm answers `f6h5`. The same position is the
+ADR's named canary and the Step-6.5.10.2 ticket text states it must hold, so
+this is a stop, not a canary change to be recorded and passed.
+
+Localisation, all at depth 5 on the workspace host, one build flag per
+component so no duplicate `-D` shadows another:
+
+| Arm | WAC.001 at depth 5 |
+|---|---|
+| Umbrella off | `g3g6` |
+| Umbrella on, all four components off | `g3g6` |
+| `core_history` only | `g3g6` |
+| `core_lmr` only | `g3g6` |
+| `core_move_pruning` only | **`f6e8`** |
+| `core_node_pruning` only | **`f6h5`** |
+
+Two components break the canary independently of each other; history and the
+reduction surface do not. The umbrella-on/all-components-off row is the useful
+control: it reproduces the accepted answer exactly, so the switch design itself
+leaks no behavior and the regression is in the two mechanisms, not the
+plumbing.
+
+Inside `core_node_pruning` the cause is **not** a single rule. Disabling
+reverse futility, razoring, all-node IIR or the null move one at a time each
+still answers `f6h5`; only disabling the component as a whole restores `g3g6`.
+The remaining localisation step is to enable the four rules one at a time
+rather than disable them one at a time, which is where this ticket stopped.
+
+`g3g6` is a queen sacrifice, so the two plausible mechanisms are the ones that
+price material and static evaluation:
+
+- ADR-0071 C prunes a non-promotion capture at `pd <= 8` when SEE falls below
+  `max(-1000, -see_pruning_unit * pd)`. At `pd = 6` that threshold is `-642`
+  and the sacrifice is worth about a queen for a pawn, so the mating move is
+  omitted before it is searched. At `pd = 8` the threshold is `-856` and it
+  survives. The rule therefore deletes exactly the forcing sacrifices this
+  canary exists to protect, and it does so more often as the reduction surface
+  lowers the prospective depth.
+- ADR-0071 D extends reverse futility from depth one to depth eight. The
+  repository has already refuted that scope on this exact position: the comment
+  on `tests/search_qualification.zig`'s canary records "the same forcing-move
+  failure mode already refuted for wider reverse-futility scope (ADR-0027)".
+  ADR-0071 does not cite ADR-0027 or say why the refutation no longer applies.
+
+**Open questions for the Fable review.** These are design decisions the ADR
+does not settle, and none of them is an implementation detail Opus should
+resolve by choosing a constant.
+
+1. Does the losing-capture omission need a forcing-move exemption -- a check,
+   a recapture, or a move that leaves the opponent's king with few replies --
+   or is the SEE floor itself wrong at low prospective depth?
+2. Does ADR-0071 D's depth-eight reverse futility survive ADR-0027's
+   refutation, and if so on what evidence? The ADR asserts the scope without
+   addressing the prior result.
+3. ADR-0071 C says a triggered late-move count makes the picker "skip every
+   remaining quiet without making it", while the invariant list says nothing
+   is pruned "when giving check". A quiet checking move can only be recognised
+   after `make`, and Manta has no pre-make check test. The implementation
+   currently skips by picker source, so a quiet checking move can be dropped
+   unmade. Which statement governs?
+4. ADR-0071 D says internal iterative reduction applies "at every node type".
+   The implementation keeps the existing root, in-check and exclusion-node
+   exclusions and changes only the expectation and depth rule, because the
+   completed-iteration contract is stated in the root's nominal depth. Confirm
+   that reading.
+
+**Decisions taken beyond the ADR text so far.** Recorded here so the review can
+accept or reverse them rather than discover them.
+
+- The five component switches default on and are effective only through
+  accessors on `Features`, so `-Dselective-core=true` alone selects the whole
+  package and an umbrella-off build is unaffected by any component's state.
+- `historyBonusFor` reaches `2048` at depth 15, not depth 14; `150 * 14 - 60`
+  is `2040`. The formula is the contract and the ADR's prose rounds it.
+- Main history under the core trains from a dedicated searched-quiet list
+  rather than the contextual one, because the contextual list is only filled
+  when a reply context exists and is decremented when LMR feedback claims a
+  move.
+- The null-move mate clamp is one-sided. Clamping a mate score against the
+  side to move would convert "passing here loses immediately" into a fail-high;
+  only scores above beta are capped.
+- `PruneCause` gained a `history` variant so the omission rules can be reported
+  separately with their own denominators in ticket G.
+
 **6.5.10.3 — Review loop (Fable).** Review the implementation against ADR-0071
 and `SCORE-034`: verification before PV, cutoff, TT or feedback authority;
 provenance and scope through negation; null-verification scope; exclusion-node
