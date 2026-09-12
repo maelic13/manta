@@ -1683,6 +1683,111 @@ case: `Qa2-g2+` in `6k1/8/8/3p4/8/7p/Q7/4K3 w - - 0 1` must fail
 ticket's files for this change only. Then implement the rest of E2 as
 specified and continue.
 
+**E2 implemented; the canary still fails (2026-09-12, Opus).** Both parts of
+E2 are committed and E2's own tests pass, but component F does not restore
+WAC.001 at depth 5, so work stopped at step 3 rather than continuing to F and
+G. No constant was adjusted.
+
+| Commit | Content |
+|---|---|
+| `96cd303` | `see.atLeast` prices quiet moves through the exchange path |
+| `6a5671b` | `Mode.quiet_checks`, the quiescence ply counter and the wiring |
+
+Part one landed as decided. `see.atLeast` now routes every non-castling move
+through `exchangeAtLeast`; castling keeps `threshold <= 0`. Evidence the
+accepted tree cannot move: the off arm reproduces `642,336` with geomean EBF
+`4.703`, upper median `12,201` and top share `16.1%`, WAC.001 still answers
+`g3g6` with `mate 2` and PV `g3g6 g7f6 g6h7` at depth 5, and the board
+benchmark's `SEE-CONTRACT-V1` signature is byte-identical before and after the
+change (both hash to `9d93659914...`), because both SEE cells generate
+`.captures` only. `expectSeeProperties` now covers quiet moves.
+
+One correction to the stated floor. `-value(mover)` does not hold on the
+promotion ranks: a quiet rook move to rank eight can be answered by a pawn
+recapture that promotes, so the exchange costs the rook plus the pawn-to-queen
+upgrade. The corpus found it immediately (`a8b8`, floor `-500`). This is a
+property of the exact gain-array path `atLeast` already used for ranks one and
+eight, not of quiet pricing -- a capture landing there could always reach it,
+quiet moves just arrive far more often. The test now asserts
+`captured - value(mover) - (queen - pawn)` on those ranks and the plain floor
+elsewhere.
+
+Part two landed as specified. `Mode.quiet_checks` generates direct checks only,
+computed from the enemy king square with the mover's origin removed from the
+occupancy, no king moves, castling or discovered checks, legality through the
+existing pin and check-mask machinery. The generator is validated in both
+directions over the whole property corpus by a make-and-look oracle rather
+than by re-deriving its own attack sets: every generated move is a legal
+non-tactical quiet whose destination is the sole checker after `make`, and
+every legal non-tactical quiet that is a sole direct check is generated. The
+quiescence ply counter is zero at the depth-zero dispatch, both razoring
+entries and the ProbCut entry, and plus one on recursion. Checks are appended
+after the tactical partition and only when stand-pat declined to cut, filtered
+by `seeAtLeast(move, 0)`, with no delta pruning. Checks are a subset of the
+non-tactical quiets, so the MAN-S34 witness already covers F's witness clause;
+that subset relation is asserted directly rather than adding redundant logic.
+The component is measurably live: the arm that generates checks searches
+strictly more quiescence moves across the corpus, and the core bench moves from
+`231,920` without F to `252,091` with it.
+
+**The table, WAC.001 at depth 5, one build flag per component.**
+
+| Arm | Best move | Core `bench 6 1` |
+|---|---|---:|
+| Umbrella off | `g3g6` | `642,336` |
+| Umbrella on, all six components off | `g3g6` | -- |
+| `core_history` only | `g3g6` | -- |
+| `core_lmr` only | `g3g6` | -- |
+| `core_move_pruning` only | **`f6e8`** | -- |
+| `core_node_pruning` only | **`f6h5`** | -- |
+| `core_qs_checks` only | `g3g6` | `696,153` |
+| `core_move_pruning` + `core_qs_checks` | **`f6e8`** | -- |
+| `core_node_pruning` + `core_qs_checks` | **`f6h5`** | -- |
+| `core_move_pruning` + `core_node_pruning` | **`f6h5`** | -- |
+| A to E, F off | **`f6h5`** | `231,920` |
+| **All six on** | **`f6e8`** | `252,091` |
+
+`core_aspiration` is declared and switchable but has no consumer until ticket
+F, so it is inert in every row above.
+
+**The review's diagnosis is not confirmed by measurement.** F was accepted as
+the safety net that would keep the mate threat visible one ply later, and it
+does not rescue either breaking component: `core_move_pruning + core_qs_checks`
+still answers `f6e8` and `core_node_pruning + core_qs_checks` still answers
+`f6h5`. F alone is behaviour-correct on this canary, so the failure is not the
+absence of first-ply checks.
+
+What the rows do say: each of `core_move_pruning` and `core_node_pruning`
+breaks the canary on its own, and F is orthogonal to both. The earlier
+resolution attributed the loss to the count-based quiet skip dropping `Qh7#`
+unmade plus a blind null probe; if that were the whole relation, adding
+first-ply checks to the defender's quiescence would restore the answer, and it
+does not. Either the skip drops the move earlier than the review's account
+assumes, or the mate is lost at a node the check generation never reaches --
+for instance inside a reduced probe that lands in quiescence at a deeper
+quiescence ply, where F deliberately generates nothing.
+
+**Open questions for the review.**
+
+1. Does the count-based skip need the checking-move exemption after all? The
+   amended invariant explicitly permits dropping quiet checks unmade, with F
+   as the compensation; F does not compensate here.
+2. `core_node_pruning` breaks the canary alone, and F does not rescue it.
+   Earlier one-rule-at-a-time disabling never isolated a single rule inside it.
+   The remaining localisation is one-rule-at-a-time *enabling*, which needs
+   either four temporary sub-switches or a review decision about which rule to
+   suspect first.
+3. Is depth 5 the right anchor at all? The classical reference finds `g3g6`
+   first at depth 5 with a far narrower tree, and the core arm is narrower
+   still per ply. A canary anchored to another engine's nominal depth may be
+   measuring depth equivalence rather than the relation the package needs.
+
+**Not done, deliberately.** The two mate-in-two substrate cases and the
+`.selective_core = true` WAC.001 case in `tests/search_qualification.zig` are
+still withheld: adding either now commits a red suite for a failure the review
+has not resolved. Both are one edit away once it is. Tickets F and G, the
+diagnostic table and the local match are untouched.
+
 **6.5.10.3 — Review loop (Fable).** Review the implementation against ADR-0071
 and `SCORE-034`: verification before PV, cutoff, TT or feedback authority;
 provenance and scope through negation; null-verification scope; exclusion-node
