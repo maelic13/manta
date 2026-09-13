@@ -8,10 +8,13 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 
 - Manta 1.0.0 is the release baseline: a complete UCI engine with classical
   evaluation, deterministic one-thread search, Syzygy, mature clock control and
-  main-authoritative lazy SMP.
+  main-authoritative lazy SMP. Manta 1.1.0, the consolidation release of the
+  Phase 6.5 work through MAN-S36, is prepared on `dev`; its tag, pull request
+  and GitHub Release are maintainer actions.
 - Phases 0–6 and the Manta 1.0 release baseline are complete. Targeted
-  pre-NNUE performance Phase 6.5 is current; Phase 7 remains blocked until the
-  whole Phase 6.5 candidate and evidence sequence is complete.
+  pre-NNUE performance Phase 6.5 is paused at the 1.1.0 release; Phase 7 remains
+  blocked until the whole Phase 6.5 candidate and evidence sequence is
+  complete.
 - Production is the MAN-E19 HCE, MAN-S29 search fit, MAN-T05 clock fit,
   MAN-S30 live-history move ordering, MAN-S34 tactical-only non-check qsearch
   generation, MAN-S35 complete mate windows and the MAN-S36 coordinated
@@ -67,9 +70,11 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   SPRT on the designated host **accepted H1** after 670 games at
   `+108.68 +/- 17.86` Elo (`+170.97 +/- 26.31` nElo), LLR `2.95`, with no
   anomaly, and the core is production. Per the maintainer's direction Phase 6.5
-  now pauses at a consolidation release of Manta 1.1.0: the pre-release full
-  gates run next, then `docs/RELEASING.md`. 6.5.11 to 6.5.14 stay open for when
-  development resumes, with expected gains recorded in PLAN.
+  pauses at a consolidation release of Manta 1.1.0. The pre-release full gates
+  passed once each on `c3ba519` (PLAN 6.5.15.1 record), and the release commit
+  sets version `1.1.0` with its dated changelog section. 6.5.11 to 6.5.14 and
+  6.5.15.2 to 6.5.15.4 stay open for when development resumes, with expected
+  gains recorded in PLAN.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
@@ -259,7 +264,10 @@ values for Manta's contracts.
   - [ ] **6.5.15.2 — Depth curve and board cells on the designated host.**
   - [ ] **6.5.15.3 — Search and board targets recorded, met or open.**
   - [ ] **6.5.15.4 — Cumulative `MAN-C03` against Manta 1.0.0.**
-  - [ ] **6.5.15.5 — Continue or release 1.1.0 and freeze.**
+  - [x] **6.5.15.5 — Continue or release 1.1.0 and freeze:** Maintainer
+    decision of 2026-09-13: release Manta 1.1.0 on the accepted MAN-S36 head
+    and pause Phase 6.5. 6.5.11 to 6.5.14 remain open, and so do 6.5.15.2 to
+    6.5.15.4.
 
 ### Phase 7 — NNUE runway and data contract
 

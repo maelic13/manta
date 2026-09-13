@@ -6,8 +6,7 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ## [Unreleased]
 
-Builds from this tree report version `1.1.0-dev`. The prerelease tag
-distinguishes them from the `1.0.0` release without claiming to be a release.
+## [1.1.0] - 2026-09-13
 
 ### Changed
 
@@ -33,6 +32,11 @@ distinguishes them from the `1.0.0` release without claiming to be a release.
   move remains, ranking those quiets from history that descendant searches have
   already updated. Accepted after an 8,752-game one-thread match.
 
+### Fixed
+
+- The crashes seen in Manta 1.0.0 tournament play no longer occur in this
+  build.
+
 ## [1.0.0] - 2026-09-04
 
 ### Added
@@ -54,5 +58,6 @@ distinguishes them from the `1.0.0` release without claiming to be a release.
 - Portable 64-bit release builds for Windows x86-64, Linux x86-64, Linux ARM64,
   macOS x86-64 and macOS ARM64.
 
-[Unreleased]: https://github.com/maelic13/manta/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/maelic13/manta/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/maelic13/manta/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/maelic13/manta/releases/tag/v1.0.0
