@@ -394,7 +394,7 @@ test "concurrent stores into one full cluster never trust an emptied way" {
     const iterations = 200_000;
     const generation_period = 4_096;
     const Worker = struct {
-        fn run(table: *Table, seed: u64) void {
+        fn run(table: *Table, seed: u64, advances_generation: bool) void {
             var prng = std.Random.DefaultPrng.init(seed);
             const random = prng.random();
             for (0..iterations) |iteration| {
@@ -409,7 +409,11 @@ test "concurrent stores into one full cluster never trust an emptied way" {
                     .full_search,
                     0,
                 );
-                if (iteration % generation_period == generation_period - 1) table.nextGeneration();
+                // Production advances the generation from one thread before the
+                // helpers start; one writer here keeps the same rule so the
+                // stress is on the entries, not on an unsynchronized byte.
+                if (advances_generation and iteration % generation_period == generation_period - 1)
+                    table.nextGeneration();
             }
         }
     };
@@ -417,7 +421,7 @@ test "concurrent stores into one full cluster never trust an emptied way" {
     var table = Table.init(&storage);
     var threads: [workers]std.Thread = undefined;
     for (&threads, 0..) |*thread, index| {
-        thread.* = try std.Thread.spawn(.{}, Worker.run, .{ &table, 0x9e37_79b9_7f4a_7c15 +% index });
+        thread.* = try std.Thread.spawn(.{}, Worker.run, .{ &table, 0x9e37_79b9_7f4a_7c15 +% index, index == 0 });
     }
     for (threads) |thread| thread.join();
 
