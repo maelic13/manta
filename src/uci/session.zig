@@ -12,6 +12,10 @@ const command_capacity = 64;
 const output_capacity = 64;
 const max_output_bytes = 4096;
 const shutdown_flush_ms = 250;
+/// How long shutdown waits for the controller to observe `quit` before
+/// cancelling it. A controller blocked on a full output queue behind an
+/// interface that stopped reading would otherwise never return.
+const shutdown_controller_ms = 250;
 const Runtime = engine.runtime;
 const ControllerState = Runtime.Controller;
 const GameState = Runtime.GameState;
@@ -43,6 +47,7 @@ const Shared = struct {
     output: *std.Io.Queue(OutputEvent),
     controller_wake: std.Io.Semaphore = .{},
     shutdown: *std.Io.Event,
+    controller_done: *std.Io.Event,
     presenter_done: *std.Io.Event,
     active_epoch: std.atomic.Value(u64) = .init(0),
     cancel_epoch: std.atomic.Value(u64) = .init(0),
@@ -65,6 +70,7 @@ pub fn run(
     var command_queue = std.Io.Queue(protocol.Command).init(&command_storage);
     var output_queue = std.Io.Queue(OutputEvent).init(&output_storage);
     var shutdown: std.Io.Event = .unset;
+    var controller_done: std.Io.Event = .unset;
     var presenter_done: std.Io.Event = .unset;
     var shared: Shared = .{
         .io = io,
@@ -74,6 +80,7 @@ pub fn run(
         .commands = &command_queue,
         .output = &output_queue,
         .shutdown = &shutdown,
+        .controller_done = &controller_done,
         .presenter_done = &presenter_done,
     };
     try state.startWorker(io);
@@ -103,7 +110,14 @@ pub fn run(
     _ = input_future.cancel(io) catch |err| switch (err) {
         error.Canceled => {},
     };
-    _ = controller_future.await(io) catch |err| switch (err) {
+    // Mirror the presenter below: the controller gets a bounded interval to
+    // finish, then is cancelled. Its own defer still cancels and joins any
+    // active search uncancelably before it returns.
+    const controller_result = if (waitDone(io, &controller_done, shutdown_controller_ms))
+        controller_future.await(io)
+    else
+        controller_future.cancel(io);
+    _ = controller_result catch |err| switch (err) {
         error.Canceled => {},
         else => shared.fatal.store(true, .release),
     };
@@ -250,6 +264,7 @@ fn queueCommand(shared: *Shared, command: protocol.Command) std.Io.Cancelable!bo
 }
 
 fn controller(shared: *Shared, state: *ControllerState) !void {
+    defer shared.controller_done.set(shared.io);
     defer {
         if (state.active != null) {
             urgentCancel(shared);
@@ -352,7 +367,7 @@ fn controller(shared: *Shared, state: *ControllerState) !void {
                 state.clearSearchState();
             },
             .position => try handlePosition(shared, state, command.raw.?),
-            .go => try handleGo(shared, state, command.raw.?, command.received_ns),
+            .go => handleGo(shared, state, command.raw.?, command.received_ns),
             .bench => try handleBench(shared, state, command.raw.?),
             .setoption => try handleSetOption(shared, state, command.raw.?),
             .test_fail_hash_allocation => state.fail_next_hash_allocation = true,
@@ -453,7 +468,7 @@ fn preparePosition(allocator: std.mem.Allocator, raw: []const u8) !PreparedPosit
     return .{ .game = .{ .position = position, .states = states, .moves = moves } };
 }
 
-fn handleGo(shared: *Shared, state: *ControllerState, raw: []const u8, received_ns: u64) !void {
+fn handleGo(shared: *Shared, state: *ControllerState, raw: []const u8, received_ns: u64) void {
     const parsed = parseGo(&state.game.position, raw, received_ns, state.ponder_enabled);
     switch (parsed) {
         .invalid => |diagnostic| _ = offerLine(shared, diagnostic),
@@ -462,7 +477,11 @@ fn handleGo(shared: *Shared, state: *ControllerState, raw: []const u8, received_
                 cancelActive(shared, state);
                 finishActive(shared, state, true);
             }
-            try startActive(shared, state, job);
+            // Mid-game, a failed start must not end the session: report it and
+            // stay idle, exactly as `bench` does.
+            startActive(shared, state, job) catch {
+                _ = offerText(shared, "info string failed go: resource allocation failed");
+            };
         },
     }
 }
@@ -1044,17 +1063,23 @@ fn drainBenchProgress(shared: *Shared, active: *Runtime.Active) void {
     }
 }
 
+/// Drains everything the worker has queued. The worker posts a wake only when
+/// the progress slot turns non-empty, so leaving anything behind could strand
+/// it until an unrelated wake.
 fn drainSearchProgress(shared: *Shared, active: *Runtime.Active) void {
     if (active.job == .bench) {
         drainBenchProgress(shared, active);
         return;
     }
-    const progress = active.progress.take(shared.io) orelse return;
     const spec = switch (active.job) {
         .normal => |normal| normal,
-        .perft, .bench => return,
+        .perft, .bench => {
+            discardSearchProgress(shared, active);
+            return;
+        },
     };
-    switch (progress) {
+    while (active.progress.take(shared.io)) |progress| switch (progress) {
+        // A root move is a superseding sample and may be dropped under load.
         .root_move => |root_move| {
             _ = tryOfferInfoLine(shared, rootMoveInfo(
                 root_move.depth,
@@ -1064,15 +1089,21 @@ fn drainSearchProgress(shared: *Shared, active: *Runtime.Active) void {
                 elapsedMilliseconds(spec.received_ns, root_move.observed_ns),
             ));
         },
+        // A completed iteration is the depth's score and principal variation;
+        // it waits for presenter capacity like any required line.
         .iteration => |iteration| {
-            _ = tryOfferInfoLine(shared, completedIterationInfo(
+            if (!offerLine(shared, completedIterationInfo(
                 iteration.completed,
                 iteration.tablebase_hits,
                 elapsedMilliseconds(spec.received_ns, iteration.observed_ns),
-            ));
+            ))) return;
             active.last_published_iteration_nodes = iteration.completed.nodes;
         },
-    }
+    };
+}
+
+fn discardSearchProgress(shared: *Shared, active: *Runtime.Active) void {
+    while (active.progress.take(shared.io)) |_| {}
 }
 
 fn publishRetainedPonderInfo(shared: *Shared, active: *Runtime.Active) void {
@@ -1086,7 +1117,7 @@ fn publishRetainedPonderInfo(shared: *Shared, active: *Runtime.Active) void {
 fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
     const active = &state.active.?;
     if (!active.done.isSet()) active.done.waitUncancelable(shared.io);
-    if (publish) drainSearchProgress(shared, active) else _ = active.progress.take(shared.io);
+    if (publish) drainSearchProgress(shared, active) else discardSearchProgress(shared, active);
     const last_published_iteration_nodes = active.last_published_iteration_nodes;
     // `finish` releases the active job, so anything the presenter still needs
     // from it is captured first.
@@ -1454,15 +1485,30 @@ fn offerText(shared: *Shared, text: []const u8) bool {
 }
 
 fn offerLine(shared: *Shared, line: Line) bool {
-    shared.output.putOne(shared.io, .{ .line = line }) catch return false;
+    shared.output.putOne(shared.io, .{ .line = line }) catch |err| return outputRefused(shared, err);
     return true;
 }
 
-/// Live search progress is advisory and may be superseded. Never let it fill
+/// A refused offer ends the caller's output. Cancellation is signalled only at
+/// the first cancelation point, and most callers treat a refused line as done
+/// rather than propagating an error, so re-arm it: the controller's next
+/// blocking point must observe the shutdown too instead of waiting again on a
+/// queue nobody drains.
+fn outputRefused(shared: *Shared, err: (std.Io.QueueClosedError || std.Io.Cancelable)) bool {
+    switch (err) {
+        error.Closed => {},
+        error.Canceled => shared.io.recancel(),
+    }
+    return false;
+}
+
+/// Live root-move progress is advisory and may be superseded. Never let it fill
 /// the bounded presenter queue at the expense of a required response such as
-/// `bestmove`; the worker/controller progress slot will publish a newer sample.
+/// a completed iteration or `bestmove`; the progress slot will publish a newer
+/// sample.
 fn tryOfferInfoLine(shared: *Shared, line: Line) bool {
-    const accepted = shared.output.put(shared.io, &.{.{ .line = line }}, 0) catch return false;
+    const accepted = shared.output.put(shared.io, &.{.{ .line = line }}, 0) catch |err|
+        return outputRefused(shared, err);
     return accepted == 1;
 }
 
@@ -1507,6 +1553,13 @@ fn drainCommands(shared: *Shared) void {
         if (count == 0) return;
         if (buffer[0].raw) |raw| shared.allocator.free(raw);
     }
+}
+
+/// True when the event is set within the bound. A cancelled wait counts as
+/// expired, so the caller proceeds to its bounded cancellation path.
+fn waitDone(io: std.Io, event: *std.Io.Event, milliseconds: i64) bool {
+    event.waitTimeout(io, timeoutMs(milliseconds)) catch return false;
+    return true;
 }
 
 fn timeoutMs(milliseconds: i64) std.Io.Timeout {
@@ -1670,4 +1723,45 @@ comptime {
     std.debug.assert(command_capacity > 0);
     std.debug.assert(output_capacity > 32);
     std.debug.assert(max_output_bytes >= protocol.max_diagnostic_bytes);
+}
+
+test "go that cannot allocate its search reports it and leaves the engine idle" {
+    const io = std.testing.io;
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var state = try ControllerState.init(failing.allocator());
+    defer state.deinit();
+    try state.startWorker(io);
+
+    var command_storage: [command_capacity]protocol.Command = undefined;
+    var output_storage: [output_capacity]OutputEvent = undefined;
+    var command_queue = std.Io.Queue(protocol.Command).init(&command_storage);
+    var output_queue = std.Io.Queue(OutputEvent).init(&output_storage);
+    var shutdown: std.Io.Event = .unset;
+    var controller_done: std.Io.Event = .unset;
+    var presenter_done: std.Io.Event = .unset;
+    var shared: Shared = .{
+        .io = io,
+        .allocator = failing.allocator(),
+        .version = "test",
+        .transcript_hooks = false,
+        .commands = &command_queue,
+        .output = &output_queue,
+        .shutdown = &shutdown,
+        .controller_done = &controller_done,
+        .presenter_done = &presenter_done,
+    };
+
+    failing.fail_index = failing.alloc_index;
+    handleGo(&shared, &state, "go depth 1", 0);
+    try std.testing.expect(state.active == null);
+    try std.testing.expectEqual(@as(u64, 0), shared.active_epoch.load(.acquire));
+    const event = try output_queue.getOne(io);
+    try std.testing.expectEqualStrings("info string failed go: resource allocation failed", event.line.slice());
+
+    // The same session accepts the next search once allocation succeeds.
+    failing.fail_index = std.math.maxInt(usize);
+    handleGo(&shared, &state, "go depth 1", 0);
+    try std.testing.expect(state.active != null);
+    finishActive(&shared, &state, false);
+    try std.testing.expect(state.active == null);
 }

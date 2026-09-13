@@ -191,6 +191,7 @@ fn validatePlaceholders(line: []const u8) ParseError!void {
             "{{BENCH_POSITION_LINES}}",
             "{{ROOT_MOVE_INFO}}",
             "{{ITERATION_INFO}}",
+            "{{ITERATION_FIELDS}}",
             "{{SEARCH_INFO}}",
             "{{BESTMOVE_LINE}}",
             "{{PONDER}}",

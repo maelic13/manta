@@ -205,7 +205,11 @@ fn runCase(
                     return err;
                 };
                 if (matchesExpected(expected, actual.slice())) break;
-                if (allow_info and validSearchInfo(actual.slice())) continue;
+                // While a specific completed iteration is expected, another
+                // completed iteration is a wrong, missing or repeated depth,
+                // never ignorable progress.
+                if (allow_info and validSearchInfo(actual.slice()) and
+                    !(expectsIteration(expected) and validIterationInfo(actual.slice()))) continue;
                 // A bench streams one row per completed position, so any line
                 // a transcript waits for during a bench may legitimately be
                 // preceded by rows. A cancelled bench is the case that races:
@@ -486,8 +490,14 @@ fn matchesExpected(expected: []const u8, actual: []const u8) bool {
     return std.mem.eql(u8, expected[expected_cursor..], actual[actual_cursor..]);
 }
 
+fn expectsIteration(expected: []const u8) bool {
+    return std.mem.eql(u8, expected, "{{ITERATION_INFO}}") or
+        std.mem.indexOf(u8, expected, "{{ITERATION_FIELDS}}") != null;
+}
+
 fn matchesPlaceholder(placeholder: []const u8, value: []const u8) bool {
     if (std.mem.eql(u8, placeholder, "{{VERSION}}")) return std.mem.eql(u8, value, build_options.version);
+    if (std.mem.eql(u8, placeholder, "{{ITERATION_FIELDS}}")) return validIterationFields(value);
     if (std.mem.eql(u8, placeholder, "{{PONDER}}")) return matchesOptionalPonder(value);
     if (std.mem.eql(u8, placeholder, "{{U64}}")) return parseUnsigned(value, false);
     if (std.mem.eql(u8, placeholder, "{{I64}}")) return parseSigned(value);
@@ -568,6 +578,17 @@ fn validIterationInfo(line: []const u8) bool {
         std.mem.indexOf(u8, line, " time ") != null and
         (std.mem.indexOf(u8, line, " pv ") != null or
             std.mem.endsWith(u8, line, " pv"));
+}
+
+/// The fields after `info depth <D> ` in a completed-iteration line. A
+/// transcript spells the depth literally, so the placeholder must not absorb
+/// another depth value.
+fn validIterationFields(value: []const u8) bool {
+    return std.mem.startsWith(u8, value, "seldepth ") and
+        std.mem.indexOf(u8, value, " score ") != null and
+        std.mem.indexOf(u8, value, " nodes ") != null and
+        std.mem.indexOf(u8, value, " time ") != null and
+        (std.mem.indexOf(u8, value, " pv ") != null or std.mem.endsWith(u8, value, " pv"));
 }
 
 fn validBestMove(line: []const u8) bool {

@@ -19,3 +19,94 @@
 ! allow-info end
 < quit
 ! exit 0 within 1000ms
+
+---
+
+# Quit exits within a bound even when required output has filled the queue behind a stalled reader.
+# Streamed bench rows are required lines, so forty short reports exceed the pipe and the queue on
+# every supported platform while the command mailbox never fills.
+@phase 6.3
+> Manta {{VERSION}} by Miloslav Macurek
+! block-stdout
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< bench 1
+! sleep 25ms
+< quit
+! exit 0 within 1000ms

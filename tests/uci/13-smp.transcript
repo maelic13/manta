@@ -29,3 +29,45 @@
 < quit
 ! exit 0 within 1000ms
 ! allow-info end
+
+---
+
+# Every completed depth reaches the interface once, in depth order, with any thread count.
+@phase 6.3
+> Manta {{VERSION}} by Miloslav Macurek
+< setoption name Threads value 4
+< ucinewgame
+< position startpos
+< go depth 10
+! allow-info begin
+> info depth 1 {{ITERATION_FIELDS}}
+> info depth 2 {{ITERATION_FIELDS}}
+> info depth 3 {{ITERATION_FIELDS}}
+> info depth 4 {{ITERATION_FIELDS}}
+> info depth 5 {{ITERATION_FIELDS}}
+> info depth 6 {{ITERATION_FIELDS}}
+> info depth 7 {{ITERATION_FIELDS}}
+> info depth 8 {{ITERATION_FIELDS}}
+> info depth 9 {{ITERATION_FIELDS}}
+> info depth 10 {{ITERATION_FIELDS}}
+> {{BESTMOVE_LINE}}
+! allow-info end
+< setoption name Threads value 1
+< ucinewgame
+< position startpos
+< go depth 10
+! allow-info begin
+> info depth 1 {{ITERATION_FIELDS}}
+> info depth 2 {{ITERATION_FIELDS}}
+> info depth 3 {{ITERATION_FIELDS}}
+> info depth 4 {{ITERATION_FIELDS}}
+> info depth 5 {{ITERATION_FIELDS}}
+> info depth 6 {{ITERATION_FIELDS}}
+> info depth 7 {{ITERATION_FIELDS}}
+> info depth 8 {{ITERATION_FIELDS}}
+> info depth 9 {{ITERATION_FIELDS}}
+> info depth 10 {{ITERATION_FIELDS}}
+> {{BESTMOVE_LINE}}
+! allow-info end
+< quit
+! exit 0 within 1000ms
