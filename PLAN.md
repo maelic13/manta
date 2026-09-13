@@ -2568,6 +2568,30 @@ board and search targets and items 2 to 4 above are deferred with 6.5.11 to
 6.5.14, not abandoned; the expected-gains table in the Phase 6.5 introduction
 is the basis for deciding whether and when to resume.
 
+**6.5.15.1 record (2026-09-13): pre-release full gates, all pass.** Run once
+each, serially, on head `c3ba519` (the MAN-S36 promotion `a276fe8` plus its
+review record) with Zig `0.16.0` on the workstation, native ReleaseFast unless
+stated:
+
+| Gate | Outcome |
+| --- | --- |
+| `zig build test` (default, core on) | Pass: 53/53 steps, 440/458 tests, 18 skipped |
+| `zig build test -Dselective-core=false` | Pass: 53/53 steps, 441/458 tests, 17 skipped; the MAN-S35 observation suite runs and passes |
+| `zig build test -Doptimize=ReleaseSafe` | Pass: 53/53 steps, 440/458 tests, 18 skipped |
+| `zig build fmt` | Pass |
+| `zig build policy` | Pass |
+| `zig build lint` | Pass: 0 errors, 0 warnings across 53 files |
+| `zig build test-uci` | Pass: 17/17 tests, transcript 24 cases |
+
+The one skip difference between arms is `tools/search_observe.zig`, which
+skips under the core as the 6.5.10.4 record explains. No expectation was
+changed. The default `zig build test` was executed a second time only to
+confirm from the step summary that test runs are not served from cache; it
+passed identically. The time, SMP lifecycle and platform gates of item 1, and
+items 2 to 4, are deferred with the maintainer direction above; the release
+workflow's native smoke tests and cross-platform bench agreement remain the
+platform check for 1.1.0.
+
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
 6.5.15 closeout. Their surviving content is owned by the steps above; their
