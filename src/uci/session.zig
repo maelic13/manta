@@ -291,14 +291,14 @@ fn controller(shared: *Shared, state: *ControllerState) !void {
         };
 
         if (state.active) |*active| {
-            drainSearchProgress(shared, active);
+            drainSearchProgress(shared, state, active);
             if (active.done.isSet()) {
                 // Completion is published after the last iteration progress.
                 // A first drain can race between those two publications, so
                 // take the now-stable slot once more before final reporting.
-                drainSearchProgress(shared, active);
+                drainSearchProgress(shared, state, active);
                 if (isWaitingPonder(active, shared)) {
-                    publishRetainedPonderInfo(shared, active);
+                    publishRetainedPonderInfo(shared, state, active);
                 } else {
                     finishActive(shared, state, true);
                     continue;
@@ -1073,7 +1073,7 @@ fn drainBenchProgress(shared: *Shared, active: *Runtime.Active) void {
 /// Drains everything the worker has queued. The worker posts a wake only when
 /// the progress slot turns non-empty, so leaving anything behind could strand
 /// it until an unrelated wake.
-fn drainSearchProgress(shared: *Shared, active: *Runtime.Active) void {
+fn drainSearchProgress(shared: *Shared, state: *ControllerState, active: *Runtime.Active) void {
     if (active.job == .bench) {
         drainBenchProgress(shared, active);
         return;
@@ -1099,8 +1099,10 @@ fn drainSearchProgress(shared: *Shared, active: *Runtime.Active) void {
         // A completed iteration is the depth's score and principal variation;
         // it waits for presenter capacity like any required line.
         .iteration => |iteration| {
+            var completed = iteration.completed;
+            extendPrincipalVariation(&completed.pv, &state.game.position, &state.hash.table);
             if (!offerLine(shared, completedIterationInfo(
-                iteration.completed,
+                completed,
                 iteration.tablebase_hits,
                 elapsedMilliseconds(spec.received_ns, iteration.observed_ns),
             ))) return;
@@ -1113,10 +1115,11 @@ fn discardSearchProgress(shared: *Shared, active: *Runtime.Active) void {
     while (active.progress.take(shared.io)) |_| {}
 }
 
-fn publishRetainedPonderInfo(shared: *Shared, active: *Runtime.Active) void {
+fn publishRetainedPonderInfo(shared: *Shared, state: *ControllerState, active: *Runtime.Active) void {
     if (active.ponder_completion_waiting) return;
     const spec = active.job.normal;
-    const result = active.completion.normal;
+    var result = active.completion.normal;
+    extendResultPrincipalVariation(&result, &state.game.position, &state.hash.table);
     publishFinalSearchInfoIfNeeded(shared, active, spec, result);
     active.ponder_completion_waiting = true;
 }
@@ -1124,7 +1127,7 @@ fn publishRetainedPonderInfo(shared: *Shared, active: *Runtime.Active) void {
 fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
     const active = &state.active.?;
     if (!active.done.isSet()) active.done.waitUncancelable(shared.io);
-    if (publish) drainSearchProgress(shared, active) else discardSearchProgress(shared, active);
+    if (publish) drainSearchProgress(shared, state, active) else discardSearchProgress(shared, active);
     const last_published_iteration_nodes = active.last_published_iteration_nodes;
     // `finish` releases the active job, so anything the presenter still needs
     // from it is captured first.
@@ -1139,8 +1142,13 @@ fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
     }
     if (publish) {
         switch (finished.completion) {
-            .normal => |result| {
+            .normal => |searched| {
                 const spec = finished.job.normal;
+                // The game root and the table outlive the job, so the final
+                // line and the ponder move see the same extended variation
+                // the iteration lines did.
+                var result = searched;
+                extendResultPrincipalVariation(&result, &state.game.position, &state.hash.table);
                 if (last_published_iteration_nodes == null or
                     last_published_iteration_nodes.? != result.nodes)
                 {
@@ -1319,6 +1327,53 @@ fn rootMoveInfo(
         "info depth {d} currmove {s} currmovenumber {d} nodes {d} time {d}",
         .{ depth, text.slice(), number, nodes, elapsed_ms },
     );
+}
+
+/// Extends a searched principal variation from the transposition table, for
+/// display only. Selective search may end a principal line at a table hit, so
+/// an iteration that resolved from memory carries one move where the
+/// interface expects the line the score stands on. Each appended move is the
+/// stored move of an authenticated non-upper-bound entry for the position
+/// reached, legal there, and the walk stops at the first missing entry,
+/// unusable move, repeated position or capacity limit. The searched prefix is
+/// never changed, no search decision reads the result, and the table is read
+/// through the same lock-free authenticated probe the workers use, so a live
+/// search may run concurrently.
+fn extendPrincipalVariation(
+    pv: *search.types.PrincipalVariation,
+    root: *const chess.position.Position,
+    table: *const search.tt.Table,
+) void {
+    // SAFETY: `states[ply]` is written by `makeMove` before the walk reads it
+    // through `position.current`, and only the first `ply` entries are used.
+    var states: [chess.types.max_ply]chess.position.PositionState = undefined;
+    var position = root.*;
+    var ply: usize = 0;
+    for (pv.slice()) |chess_move| {
+        if (ply == states.len or !chess.movegen.isLegal(&position, chess_move)) return;
+        chess.transition.makeMove(&position, chess_move, &states[ply]);
+        ply += 1;
+    }
+    while (pv.length < pv.moves.len and ply < states.len) {
+        // A repeated position would loop back through the same entries.
+        if (position.current.repetition != 0) return;
+        const record = table.probe(position.current.key, ply, position.current.rule50) orelse return;
+        if (record.bound == .upper) return;
+        const chess_move = record.chess_move;
+        if (!chess.movegen.isLegal(&position, chess_move)) return;
+        chess.transition.makeMove(&position, chess_move, &states[ply]);
+        ply += 1;
+        pv.moves[pv.length] = chess_move;
+        pv.length += 1;
+    }
+}
+
+fn extendResultPrincipalVariation(
+    result: *Runtime.SearchResult,
+    root: *const chess.position.Position,
+    table: *const search.tt.Table,
+) void {
+    if (result.completed) |*completed| extendPrincipalVariation(&completed.pv, root, table);
 }
 
 fn completedIterationInfo(
@@ -1872,4 +1927,93 @@ test "streaming files follow the inherited handle's I/O mode" {
     defer windows.CloseHandle(write_end);
     const synchronous_write = try streamingFile(.{ .handle = write_end, .flags = .{ .nonblocking = true } });
     try std.testing.expect(!synchronous_write.flags.nonblocking);
+}
+
+fn storeTableMove(
+    table: *search.tt.Table,
+    position: *const chess.position.Position,
+    chess_move: chess.move.Move,
+    bound: search.types.Bound,
+) void {
+    _ = table.store(
+        position.current.key,
+        chess_move,
+        score.Score.zero,
+        null,
+        4,
+        bound,
+        .full_search,
+        0,
+    );
+}
+
+test "a principal variation ending in a table hit is extended by legal stored moves only" {
+    var storage: [64]search.tt.Cluster = undefined;
+    var table = search.tt.Table.init(&storage);
+    var root_state: chess.position.PositionState = .{};
+    const root = try chess.fen.parseStart(&root_state);
+
+    // Walk the intended line once to store an entry for each position on it:
+    // startpos -> e2e4 (searched) -> e7e5 -> g1f3 -> then an illegal move.
+    var states: [4]chess.position.PositionState = undefined;
+    var cursor = root;
+    const e2e4 = chess.move.Move.normal(.e2, .e4);
+    const e7e5 = chess.move.Move.normal(.e7, .e5);
+    const g1f3 = chess.move.Move.normal(.g1, .f3);
+    chess.transition.makeMove(&cursor, e2e4, &states[0]);
+    storeTableMove(&table, &cursor, e7e5, .exact);
+    chess.transition.makeMove(&cursor, e7e5, &states[1]);
+    storeTableMove(&table, &cursor, g1f3, .lower);
+    chess.transition.makeMove(&cursor, g1f3, &states[2]);
+    // A stored move the position cannot play ends the walk without being shown.
+    storeTableMove(&table, &cursor, chess.move.Move.normal(.e1, .e8), .exact);
+
+    var pv = search.types.PrincipalVariation.init();
+    pv.moves[0] = e2e4;
+    pv.length = 1;
+    extendPrincipalVariation(&pv, &root, &table);
+    try std.testing.expectEqual(@as(u16, 3), pv.length);
+    try std.testing.expectEqual(e2e4, pv.moves[0]);
+    try std.testing.expectEqual(e7e5, pv.moves[1]);
+    try std.testing.expectEqual(g1f3, pv.moves[2]);
+
+    // An upper bound carries no trustworthy move and ends the walk.
+    var upper_pv = search.types.PrincipalVariation.init();
+    storeTableMove(&table, &root, g1f3, .upper);
+    extendPrincipalVariation(&upper_pv, &root, &table);
+    try std.testing.expectEqual(@as(u16, 0), upper_pv.length);
+
+    // A searched prefix the root cannot play is left alone rather than walked.
+    var illegal_pv = search.types.PrincipalVariation.init();
+    illegal_pv.moves[0] = chess.move.Move.normal(.e1, .e8);
+    illegal_pv.length = 1;
+    extendPrincipalVariation(&illegal_pv, &root, &table);
+    try std.testing.expectEqual(@as(u16, 1), illegal_pv.length);
+}
+
+test "principal variation extension stops at a repeated position" {
+    var storage: [64]search.tt.Cluster = undefined;
+    var table = search.tt.Table.init(&storage);
+    var root_state: chess.position.PositionState = .{};
+    const root = try chess.fen.parseStart(&root_state);
+
+    // Knights out and back: every position on the cycle stores the next move,
+    // so without a repetition stop the walk would run to capacity.
+    const cycle = [_]chess.move.Move{
+        chess.move.Move.normal(.g1, .f3),
+        chess.move.Move.normal(.g8, .f6),
+        chess.move.Move.normal(.f3, .g1),
+        chess.move.Move.normal(.f6, .g8),
+    };
+    var states: [4]chess.position.PositionState = undefined;
+    var cursor = root;
+    for (cycle, 0..) |chess_move, index| {
+        storeTableMove(&table, &cursor, chess_move, .exact);
+        chess.transition.makeMove(&cursor, chess_move, &states[index]);
+    }
+
+    var pv = search.types.PrincipalVariation.init();
+    extendPrincipalVariation(&pv, &root, &table);
+    try std.testing.expectEqual(@as(u16, cycle.len), pv.length);
+    for (cycle, pv.slice()) |expected, actual| try std.testing.expectEqual(expected, actual);
 }
