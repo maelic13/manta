@@ -2336,6 +2336,22 @@ reach on those twelve cases is review work, not a promotion edit.
 Per the maintainer's direction of 2026-09-13, Phase 6.5 pauses at the Manta
 1.1.0 consolidation release; the pre-release full gates are recorded in 6.5.15.
 
+**Promotion review (Fable, 2026-09-13) on `a276fe8`: accepted, no finding.**
+Read the whole diff against `ca7f401`. The two defaults flip together and the
+component accessors still route through the umbrella, so the off arm is
+MAN-S35 by construction; every archived reconstruction pins the umbrella off
+either through `runArchived` or explicitly, and no assertion was changed to
+make a test pass. The only canary moved to the off arm is WAC.001 at depth 3,
+which ADR-0071 already names an off-arm property, with depth 5 still required
+of production. Reproduced from clean ReleaseFast builds of `a276fe8`:
+production `bench 6 1` `359,259`, `-Dselective-core=false` `642,336`; the
+repository test root passed `123` with `12` skips and no failure; the fast
+subset and policy check passed; the search-observe suite passed in the off
+arm. The skip of that suite under the umbrella is the one recorded coverage
+gap and is release-acceptable because the core's accounting is asserted by
+the substrate tests. Next are the pre-release full gates in both arms and the
+`docs/RELEASING.md` procedure for 1.1.0.
+
 #### 6.5.11 — Fit of the accepted core (conditional, expected)
 
 **Model:** Fable designs the coordinate set; Opus wires the tune-only registry.
