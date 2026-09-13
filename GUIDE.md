@@ -6,12 +6,11 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 
 ## Current checkpoint
 
-- Manta 1.0.0 is the release baseline: a complete UCI engine with classical
-  evaluation, deterministic one-thread search, Syzygy, mature clock control and
-  main-authoritative lazy SMP. Manta 1.1.0, the consolidation release of the
-  Phase 6.5 work through MAN-S36, is prepared on `dev`; its tag, pull request
-  and GitHub Release are maintainer actions.
-- Phases 0–6 and the Manta 1.0 release baseline are complete. Targeted
+- Manta 1.1.0 is the release baseline, released 2026-09-13: a complete UCI
+  engine with classical evaluation, deterministic one-thread search, Syzygy,
+  mature clock control, main-authoritative lazy SMP and the MAN-S36 coordinated
+  selective-search core, about `110` Elo over 1.0.0 at `3+0.03`.
+- Phases 0–6 and the Manta 1.0 and 1.1 releases are complete. Targeted
   pre-NNUE performance Phase 6.5 is paused at the 1.1.0 release; Phase 7 remains
   blocked until the whole Phase 6.5 candidate and evidence sequence is
   complete.
@@ -260,7 +259,8 @@ values for Manta's contracts.
   against classical Stockfish, board cells, `MAN-C03` against 1.0.0, then
   continue or release 1.1.0 and freeze. Maintainer direction of 2026-09-13:
   release 1.1.0 after the `MAN-S36` gate; the rest resumes later.
-  - [ ] **6.5.15.1 — Freeze and final gates.**
+  - [x] **6.5.15.1 — Freeze and final gates:** All pre-release gates passed on
+    `c3ba519`; 1.1.0 released from that head.
   - [ ] **6.5.15.2 — Depth curve and board cells on the designated host.**
   - [ ] **6.5.15.3 — Search and board targets recorded, met or open.**
   - [ ] **6.5.15.4 — Cumulative `MAN-C03` against Manta 1.0.0.**

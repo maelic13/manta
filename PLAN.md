@@ -7,8 +7,9 @@ measurement verdicts.
 
 ## Current state
 
-Manta 1.0.0 is the release baseline. Phases 0–6 are closed, targeted pre-NNUE
-performance Phase 6.5 is current and Phase 7 has not started. Phase 7 remains
+Manta 1.1.0, released 2026-09-13, is the release baseline. Phases 0–6 are
+closed, targeted pre-NNUE performance Phase 6.5 is paused at that release with
+6.5.11 to 6.5.14 open, and Phase 7 has not started. Phase 7 remains
 blocked until all of Phase 6.5, including every retained candidate and evidence
 closeout below, is complete. The production
 engine combines MAN-E19 classical evaluation, MAN-S29 search parameters,
@@ -2730,8 +2731,8 @@ SPRT and complete platform/release evidence only if the result will ship.
 
 ## Manta 1 release gate
 
-1. Version sources, UCI identity, changelog and tag must agree on `1.0.0` /
-   `v1.0.0`.
+1. Version sources, UCI identity, changelog and tag must agree on the release
+   version (`1.0.0` / `v1.0.0`, then `1.1.0` / `v1.1.0`).
 2. The worktree is reviewed for accidental/generated content and licensing.
 3. Format, policy, lint and required Debug/ReleaseSafe/ReleaseFast gates pass.
 4. Pull-request CI passes all five native targets and portable smoke tests.

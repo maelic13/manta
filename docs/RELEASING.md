@@ -19,8 +19,8 @@ Git tags. The engine reports the same version without the `v` prefix.
 4. On the clean release commit, create and push an annotated tag:
 
    ```text
-   git tag -a v1.0.0 -m "Manta 1.0.0"
-   git push origin v1.0.0
+   git tag -a v1.1.0 -m "Manta 1.1.0"
+   git push origin v1.1.0
    ```
 
 5. Create the GitHub Release for that existing tag using the matching
