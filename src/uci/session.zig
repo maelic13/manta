@@ -137,7 +137,7 @@ pub fn run(
 
 fn input(shared: *Shared) std.Io.Cancelable!void {
     var read_buffer: [protocol.max_input_bytes + 2]u8 = undefined;
-    var stdin_file = stdinForStreaming() catch return fatalInput(shared);
+    var stdin_file = streamingFile(std.Io.File.stdin()) catch return fatalInput(shared);
     var file_reader = stdin_file.readerStreaming(shared.io, &read_buffer);
     const reader = &file_reader.interface;
 
@@ -184,14 +184,21 @@ fn input(shared: *Shared) std.Io.Cancelable!void {
     }
 }
 
-const StdinModeError = error{StdinModeQueryFailed};
+const StreamModeError = error{StreamModeQueryFailed};
 
-/// Standard input is always consumed as a stream. On Windows, Zig 0.16 cannot
-/// infer whether an inherited handle was opened for synchronous or asynchronous
-/// I/O: `File.stdin()` unconditionally reports synchronous. Match the real file
-/// object mode so the threaded reader selects the compatible `NtReadFile` path.
-fn stdinForStreaming() StdinModeError!std.Io.File {
-    var file = std.Io.File.stdin();
+/// Standard input and output are consumed and produced as streams. On Windows,
+/// Zig 0.16 cannot infer whether an inherited handle was opened for synchronous
+/// or asynchronous I/O: `File.stdin()` and `File.stdout()` unconditionally
+/// report synchronous. Match the real file object mode so the threaded reader
+/// and writer select the compatible `NtReadFile` / `NtWriteFile` path. On the
+/// synchronous path the standard library treats a `PENDING` completion as
+/// unreachable, and a full asynchronous pipe returns exactly that, so a
+/// mismatch is a silent death in ReleaseFast the first time the interface
+/// falls behind the engine's output. Fastchess creates its engine pipes
+/// asynchronous; the transcript harness and most interfaces create synchronous
+/// ones, which is why only some hosts ever saw it.
+fn streamingFile(inherited: std.Io.File) StreamModeError!std.Io.File {
+    var file = inherited;
     if (comptime builtin.os.tag != .windows) return file;
 
     const windows = std.os.windows;
@@ -211,10 +218,10 @@ fn stdinForStreaming() StdinModeError!std.Io.File {
         .SUCCESS => {},
         .PENDING => {
             if (windows.ntdll.NtWaitForSingleObject(file.handle, .FALSE, null) != .SUCCESS)
-                return error.StdinModeQueryFailed;
-            if (io_status.u.Status != .SUCCESS) return error.StdinModeQueryFailed;
+                return error.StreamModeQueryFailed;
+            if (io_status.u.Status != .SUCCESS) return error.StreamModeQueryFailed;
         },
-        else => return error.StdinModeQueryFailed,
+        else => return error.StreamModeQueryFailed,
     }
     file.flags.nonblocking = mode_info.Mode.IO == .ASYNCHRONOUS;
     return file;
@@ -1515,7 +1522,10 @@ fn tryOfferInfoLine(shared: *Shared, line: Line) bool {
 fn presenter(shared: *Shared) std.Io.Cancelable!void {
     defer shared.presenter_done.set(shared.io);
     var write_buffer: [max_output_bytes]u8 = undefined;
-    var file_writer = std.Io.File.stdout().writer(shared.io, &write_buffer);
+    // The presenter is the only stdout writer, so an unknown handle mode is
+    // an initialization failure of the whole session, exactly like stdin.
+    var stdout_file = streamingFile(std.Io.File.stdout()) catch return presenterFatal(shared);
+    var file_writer = stdout_file.writer(shared.io, &write_buffer);
     const writer = &file_writer.interface;
     while (true) {
         const event = shared.output.getOne(shared.io) catch |err| switch (err) {
@@ -1541,6 +1551,10 @@ fn presenterFailed(shared: *Shared, file_writer: *std.Io.File.Writer) std.Io.Can
         error.Canceled => return error.Canceled,
         else => {},
     };
+    return presenterFatal(shared);
+}
+
+fn presenterFatal(shared: *Shared) std.Io.Cancelable!void {
     shared.fatal.store(true, .release);
     urgentCancel(shared);
     shared.shutdown.set(shared.io);
@@ -1764,4 +1778,98 @@ test "go that cannot allocate its search reports it and leaves the engine idle" 
     try std.testing.expect(state.active != null);
     finishActive(&shared, &state, false);
     try std.testing.expect(state.active == null);
+}
+
+test "streaming files follow the inherited handle's I/O mode" {
+    // Issue #2 follow-up: fastchess hands the engine asynchronous pipes, and a
+    // writer that believes such a pipe is synchronous dies inside the standard
+    // library the first time a write cannot complete immediately. The detector
+    // must report the asynchronous pipe as nonblocking and a plain anonymous
+    // pipe as blocking, whatever the constructor assumed.
+    if (comptime builtin.os.tag != .windows) return error.SkipZigTest;
+    const windows = std.os.windows;
+    const kernel32 = struct {
+        extern "kernel32" fn CreateNamedPipeW(
+            name: [*:0]const u16,
+            open_mode: u32,
+            pipe_mode: u32,
+            max_instances: u32,
+            out_buffer_size: u32,
+            in_buffer_size: u32,
+            default_timeout: u32,
+            security_attributes: ?*anyopaque,
+        ) callconv(.winapi) windows.HANDLE;
+        extern "kernel32" fn CreateFileW(
+            name: [*:0]const u16,
+            desired_access: u32,
+            share_mode: u32,
+            security_attributes: ?*anyopaque,
+            creation_disposition: u32,
+            flags_and_attributes: u32,
+            template: ?windows.HANDLE,
+        ) callconv(.winapi) windows.HANDLE;
+        extern "kernel32" fn CreatePipe(
+            read_pipe: *windows.HANDLE,
+            write_pipe: *windows.HANDLE,
+            pipe_attributes: ?*anyopaque,
+            size: u32,
+        ) callconv(.winapi) windows.BOOL;
+    };
+    const pipe_access_duplex: u32 = 0x0000_0003;
+    const file_flag_overlapped: u32 = 0x4000_0000;
+    const pipe_type_byte: u32 = 0;
+    const generic_read: u32 = 0x8000_0000;
+    const generic_write: u32 = 0x4000_0000;
+    const open_existing: u32 = 3;
+
+    var name_utf8: [96]u8 = undefined;
+    const name_text = try std.fmt.bufPrint(
+        &name_utf8,
+        "\\\\.\\pipe\\manta-stream-mode-{d}",
+        .{windows.GetCurrentProcessId()},
+    );
+    var name_utf16: [96:0]u16 = undefined;
+    const name_len = try std.unicode.utf8ToUtf16Le(&name_utf16, name_text);
+    name_utf16[name_len] = 0;
+
+    const server = kernel32.CreateNamedPipeW(
+        &name_utf16,
+        pipe_access_duplex | file_flag_overlapped,
+        pipe_type_byte,
+        1,
+        4096,
+        4096,
+        0,
+        null,
+    );
+    try std.testing.expect(server != windows.INVALID_HANDLE_VALUE);
+    defer windows.CloseHandle(server);
+    const client = kernel32.CreateFileW(
+        &name_utf16,
+        generic_read | generic_write,
+        0,
+        null,
+        open_existing,
+        file_flag_overlapped,
+        null,
+    );
+    try std.testing.expect(client != windows.INVALID_HANDLE_VALUE);
+    defer windows.CloseHandle(client);
+
+    // Both ends of the asynchronous pipe report asynchronous, even though the
+    // constructor assumed synchronous.
+    const asynchronous_client = try streamingFile(.{ .handle = client, .flags = .{ .nonblocking = false } });
+    try std.testing.expect(asynchronous_client.flags.nonblocking);
+    const asynchronous_server = try streamingFile(.{ .handle = server, .flags = .{ .nonblocking = false } });
+    try std.testing.expect(asynchronous_server.flags.nonblocking);
+
+    // An anonymous pipe is synchronous, and a wrong assumption the other way
+    // is corrected too.
+    var read_end: windows.HANDLE = undefined;
+    var write_end: windows.HANDLE = undefined;
+    try std.testing.expect(kernel32.CreatePipe(&read_end, &write_end, null, 4096) != .FALSE);
+    defer windows.CloseHandle(read_end);
+    defer windows.CloseHandle(write_end);
+    const synchronous_write = try streamingFile(.{ .handle = write_end, .flags = .{ .nonblocking = true } });
+    try std.testing.expect(!synchronous_write.flags.nonblocking);
 }
