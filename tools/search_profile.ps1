@@ -62,10 +62,10 @@ $rows = @()
 $previous = 0
 foreach ($depth in $MinDepth..$MaxDepth) {
     $line = Invoke-MantaBench -BinaryPath $Binary -Depth $depth -TimeoutMs $TimeoutMs
-    if ($line -notmatch 'nodes\s+(\d+)') { throw "No node count in bench line: $line" }
+    if ($line -notmatch 'Nodes searched\s*:\s*(\d+)') { throw "No node count in bench summary: $line" }
     $nodes = [int64]$Matches[1]
-    $timeMs = if ($line -match 'time_ms\s+(\d+)') { [int64]$Matches[1] } else { 0 }
-    $ebf = if ($line -match 'ebf\s+([0-9.]+)') { [double]$Matches[1] } else { [double]::NaN }
+    $timeMs = if ($line -match 'Total time \(ms\)\s*:\s*(\d+)') { [int64]$Matches[1] } else { 0 }
+    $ebf = if ($line -match 'Geomean EBF\s*:\s*([0-9.]+)') { [double]$Matches[1] } else { [double]::NaN }
     $ratio = if ($previous -gt 0) { [math]::Round($nodes / $previous, 3) } else { [double]::NaN }
     $mnps = if ($timeMs -gt 0) { [math]::Round($nodes / $timeMs / 1000.0, 3) } else { [double]::NaN }
 

@@ -1,40 +1,39 @@
 # Shared preflight for clock-based fastchess harnesses.
 #
 # Ported from Rarog's tools/harness_common.ps1 so that Manta's SPRT/SPSA
-# instrument is the SAME instrument: identical adjudication, identical
-# physical-core discovery, identical affinity contract. Verdicts produced here
-# are therefore directly comparable with Rarog's ledger.
+# instrument is the SAME instrument: identical physical-core discovery,
+# identical affinity contract.
+#
+# Manta runs NO adjudication anywhere. Only the rules of chess end a game:
+# checkmate, stalemate, the fifty-move rule, threefold repetition and
+# insufficient material. There is no resignation threshold, no draw-after-N-
+# moves rule and no move cap. An adjudicator is a second, unvalidated engine
+# sitting in judgment on the one being measured: it truncates exactly the
+# conversion, fortress and mating phases where engines differ most, and it
+# prices those phases by the same evaluation whose quality is under test.
+# Verdicts produced before this change were measured with `strength-v2`
+# adjudication and are NOT directly comparable with verdicts produced after it.
 
 $script:MinimumAffinityFastchessVersion = [version]"1.7.0"
 $script:HarnessIsWindows = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
 
-# One named source of truth for result adjudication in strength measurements.
-# Basilisk and Rarog use 600/3 TWO-SIDED as strength-v2. Two-sided requires
-# agreement before resignation, so it is the conservative form. Their retained
-# 69,350-game replay found that the earlier one-sided form changed 0.20% of
-# triggers and no final chess result. Manta adopts the same profile so the
-# three engines use one calibrated instrument.
-function Get-StrengthTestProfile {
+# One named source of truth for how a measured game ends. The profile carries
+# no thresholds because there are none: every caller passes an empty argument
+# list to the runner and lets the rules of chess decide. The name is recorded
+# in every manifest so a result can never be mistaken for an adjudicated one.
+function Get-GameEndProfile {
     [pscustomobject]@{
-        Name               = "strength-v2"
-        ResignMoveCount    = 3
-        ResignScore        = 600
-        ResignTwoSided     = $true
-        DrawMoveNumber     = 40
-        DrawMoveCount      = 8
-        DrawScore          = 10
+        Name        = "natural-v1"
+        Adjudicated = $false
+        Description = "chess rules only: mate, stalemate, fifty-move, threefold, insufficient material"
     }
 }
 
-function Get-StrengthTestResignArgs {
-    $profile = Get-StrengthTestProfile
-    $args = @(
-        '-resign'
-        "movecount=$($profile.ResignMoveCount)"
-        "score=$($profile.ResignScore)"
-    )
-    if ($profile.ResignTwoSided) { $args += 'twosided=true' }
-    $args
+# Returns the runner arguments that configure game termination. Deliberately
+# empty. It exists so a caller cannot quietly reintroduce `-resign`, `-draw`
+# or `-maxmoves` without editing this contract.
+function Get-GameEndArgs {
+    @()
 }
 
 # Compare only the build dimensions that can introduce unrelated codegen
@@ -385,7 +384,7 @@ function Assert-NoAffinityFailure {
 
 # Manta's bench holds the job until it completes, and both `quit` and EOF
 # cancel it (docs/UCI.md 4.2). Piping "bench`nquit" therefore returns nothing.
-# Feed `bench` and keep stdin OPEN until the total line arrives. Shared so the
+# Feed `bench` and keep stdin OPEN until the Rarog-compatible summary arrives. Shared so the
 # sidecar verifier and the search profiler drive the engine identically.
 function Invoke-MantaBench {
     param(
@@ -406,17 +405,25 @@ function Invoke-MantaBench {
     try {
         $proc.StandardInput.WriteLine("bench $Depth")
         $deadline = [datetime]::UtcNow.AddMilliseconds($TimeoutMs)
+        $summaryLines = [ordered]@{}
         while ([datetime]::UtcNow -lt $deadline) {
             $line = $proc.StandardOutput.ReadLine()
             if ($null -eq $line) { break }
-            if ($line -match '^\s*info string bench (total|summary)\b') {
+            if ($line -match '^Nodes searched\s*:') { $summaryLines.nodes = $line }
+            elseif ($line -match '^Geomean EBF\s*:') { $summaryLines.ebf = $line }
+            elseif ($line -match '^Total time \(ms\)\s*:') { $summaryLines.time = $line }
+            elseif ($line -match '^Nodes/second\s*:') {
+                $summaryLines.nps = $line
                 $proc.StandardInput.WriteLine("quit")
                 $proc.StandardInput.Close()
                 $proc.WaitForExit(10000) | Out-Null
-                return $line
+                if (-not $summaryLines.nodes -or -not $summaryLines.ebf -or -not $summaryLines.time) {
+                    throw "Incomplete bench summary from $BinaryPath."
+                }
+                return ($summaryLines.Values -join '; ')
             }
         }
-        throw "Timed out waiting for a 'bench $Depth' total line from $BinaryPath."
+        throw "Timed out waiting for the 'bench $Depth' summary from $BinaryPath."
     } finally {
         if (-not $proc.HasExited) { $proc.Kill($true) }
         $proc.Dispose()

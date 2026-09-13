@@ -89,7 +89,7 @@ This defaults to `ReleaseFast`, host-native code generation and
 `-Dprofile=auto`. It keeps the ordinary development executable in
 `zig-out/bin` and also writes a truthful, versioned filename under
 `zig-out/dist`, for example
-`manta-v1.0.0-windows-x86-64-native.exe`.
+`manta-v1.1.0-windows-x86-64-native.exe`.
 
 Build the portable baseline for the current platform with:
 

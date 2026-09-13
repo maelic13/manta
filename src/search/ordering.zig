@@ -27,7 +27,7 @@ pub const State = struct {
     /// with the evaluator for this side and this pawn structure.
     correction_history: [2][correction_slots]i16 = @splat(@splat(0)),
 
-    const history_limit: i32 = 16 * 1024;
+    pub const history_limit: i32 = 16 * 1024;
     /// A power of two so the key reduces by mask rather than division.
     const correction_slots: usize = 16 * 1024;
     /// Fixed-point denominator for a stored correction, so an entry carries
@@ -113,8 +113,9 @@ pub const State = struct {
         chess_move: chess.move.Move,
         depth: u16,
         ply: usize,
+        comptime core: bool,
     ) void {
-        self.updateQuiet(side, chess_move, historyBonus(depth));
+        self.updateQuiet(side, chess_move, historyBonus(core, depth));
         if (self.killers[ply][0].raw() != chess_move.raw()) {
             self.killers[ply][1] = self.killers[ply][0];
             self.killers[ply][0] = chess_move;
@@ -142,8 +143,9 @@ pub const State = struct {
         side: chess.types.Color,
         chess_move: chess.move.Move,
         depth: u16,
+        comptime core: bool,
     ) void {
-        self.updateQuiet(side, chess_move, -historyBonus(depth));
+        self.updateQuiet(side, chess_move, -historyBonus(core, depth));
     }
 
     pub fn quietScore(
@@ -160,8 +162,9 @@ pub const State = struct {
         reply: ReplyContext,
         chess_move: chess.move.Move,
         depth: u16,
+        comptime core: bool,
     ) void {
-        self.updateReply(value, reply, chess_move, historyBonus(depth));
+        self.updateReply(value, reply, chess_move, historyBonus(core, depth));
     }
 
     pub fn recordReplyFailure(
@@ -170,8 +173,9 @@ pub const State = struct {
         reply: ReplyContext,
         chess_move: chess.move.Move,
         depth: u16,
+        comptime core: bool,
     ) void {
-        self.updateReply(value, reply, chess_move, -historyBonus(depth));
+        self.updateReply(value, reply, chess_move, -historyBonus(core, depth));
     }
 
     pub fn replyScore(
@@ -244,7 +248,7 @@ pub const State = struct {
         chess_move: chess.move.Move,
         depth: u16,
     ) void {
-        self.updateCapture(value, chess_move, historyBonus(depth));
+        self.updateCapture(value, chess_move, historyBonus(false, depth));
     }
 
     pub fn recordCaptureFailure(
@@ -253,7 +257,7 @@ pub const State = struct {
         chess_move: chess.move.Move,
         depth: u16,
     ) void {
-        self.updateCapture(value, chess_move, -historyBonus(depth));
+        self.updateCapture(value, chess_move, -historyBonus(false, depth));
     }
 
     pub fn captureScore(
@@ -294,8 +298,9 @@ pub const State = struct {
         continuation: ContinuationContext,
         chess_move: chess.move.Move,
         depth: u16,
+        comptime core: bool,
     ) void {
-        self.updateContinuation(value, continuation, chess_move, historyBonus(depth));
+        self.updateContinuation(value, continuation, chess_move, historyBonus(core, depth));
     }
 
     pub fn recordContinuationFailure(
@@ -304,8 +309,9 @@ pub const State = struct {
         continuation: ContinuationContext,
         chess_move: chess.move.Move,
         depth: u16,
+        comptime core: bool,
     ) void {
-        self.updateContinuation(value, continuation, chess_move, -historyBonus(depth));
+        self.updateContinuation(value, continuation, chess_move, -historyBonus(core, depth));
     }
 
     fn updateContinuation(
@@ -332,7 +338,7 @@ pub const State = struct {
         updateBounded(entry, bonus);
     }
 
-    fn updateBounded(value: *i16, bonus: i32) void {
+    pub fn updateBounded(value: *i16, bonus: i32) void {
         const current: i32 = value.*;
         const magnitude: i32 = @intCast(@abs(bonus));
         const next = current + bonus - @divTrunc(current * magnitude, history_limit);
@@ -340,11 +346,35 @@ pub const State = struct {
         value.* = @intCast(next);
     }
 
-    fn historyBonus(depth: u16) i32 {
-        const bounded: i32 = @intCast(@min(depth, 128));
-        return @min(bounded * bounded, history_limit);
+    fn historyBonus(comptime core: bool, depth: u16) i32 {
+        return historyBonusFor(core, depth);
     }
 };
+
+/// One depth-to-magnitude scale for every quiet history producer.
+///
+/// The accepted `depth^2` curve tops out near `196` for the depths a real
+/// search reaches, so an entry never travels far inside the `16384` range and
+/// relative history says little beyond coarse ordering. ADR-0071 A replaces it
+/// with a linear curve that saturates at `2048`: a depth-one outcome still
+/// moves an entry by about `90`, and by depth fourteen the producer is writing
+/// an eighth of the range. That is what makes history informative enough to
+/// carry a reduction and a pruning decision rather than only a rank.
+pub fn historyBonusFor(comptime core: bool, depth: u16) i32 {
+    if (comptime core) {
+        const bounded: i32 = @intCast(@min(depth, 128));
+        return @min(2048, 150 * bounded - 60);
+    }
+    const bounded: i32 = @intCast(@min(depth, 128));
+    return @min(bounded * bounded, State.history_limit);
+}
+
+/// The shadow outcome uses the accepted history scale only as a bounded sample
+/// encoding. It has no ordering or depth consumer in Step 6.5.9.
+pub fn shadowOutcomeBonus(depth: u16) i32 {
+    const bounded: i32 = @intCast(@min(depth, 128));
+    return @max(@as(i32, 1), @min(bounded * bounded, 16 * 1024));
+}
 
 pub const HistoryConfidence = enum { negative, neutral, positive };
 
@@ -442,6 +472,47 @@ fn normalizeSquare(side: chess.types.Color, square: chess.types.Square) chess.ty
     return if (side == .white) square else square.flipRank();
 }
 
+/// Stable diagnostic keys for Step-6.5.9 shadow outcomes. They encode the
+/// existing relations exactly; continuation distance is intentionally absent
+/// because all three distances read one shared production table.
+pub fn quietEvidenceKey(side: chess.types.Color, chess_move: chess.move.Move) u64 {
+    std.debug.assert(chess_move.isChessMove());
+    return (@as(u64, 1) << 62) |
+        (@as(u64, side.index()) << 16) |
+        (@as(u64, chess_move.from().index()) << 6) |
+        @as(u64, chess_move.to().index());
+}
+
+pub fn replyEvidenceKey(
+    value: *const chess.position.Position,
+    reply: ReplyContext,
+    chess_move: chess.move.Move,
+) u64 {
+    const current_piece = value.physical.pieceOn(chess_move.from());
+    std.debug.assert(current_piece != .none and current_piece.color() == value.side_to_move);
+    return (@as(u64, 2) << 62) |
+        (@as(u64, @intFromEnum(reply.previous_piece)) << 24) |
+        (@as(u64, reply.previous_to.index()) << 18) |
+        (@as(u64, @intFromEnum(current_piece.pieceType())) << 12) |
+        (@as(u64, normalizeSquare(value.side_to_move, chess_move.to()).index()) << 6);
+}
+
+pub fn continuationEvidenceKey(
+    value: *const chess.position.Position,
+    continuation: ContinuationContext,
+    chess_move: chess.move.Move,
+) u64 {
+    const current_piece = value.physical.pieceOn(chess_move.from());
+    std.debug.assert(current_piece != .none and current_piece.color() == value.side_to_move);
+    return (@as(u64, 3) << 62) |
+        (@as(u64, @intFromBool(continuation.from_check)) << 31) |
+        (@as(u64, @intFromBool(continuation.tactical)) << 30) |
+        (@as(u64, @intFromEnum(continuation.previous_piece)) << 24) |
+        (@as(u64, continuation.previous_to.index()) << 18) |
+        (@as(u64, @intFromEnum(current_piece.pieceType())) << 12) |
+        (@as(u64, normalizeSquare(value.side_to_move, chess_move.to()).index()) << 6);
+}
+
 fn pieceIndex(piece_type: chess.types.PieceType) usize {
     std.debug.assert(piece_type.isPiece());
     return piece_type.index() - 1;
@@ -480,6 +551,11 @@ pub const Selection = struct {
     chess_move: chess.move.Move,
     source: Source,
     index: usize,
+    /// The composite quiet-history value this move was ranked with, captured
+    /// at selection. Zero for every source that does not rank by history; a
+    /// consumer that needs the value for a TT or killer quiet asks
+    /// `quietHistoryValue` on demand.
+    history: i32,
 };
 
 /// Allocation-free incremental selection over one generated move list. Each
@@ -525,8 +601,45 @@ pub const Picker = struct {
     }
 
     pub fn next(self: *Picker) ?Selection {
-        if (self.cursor >= self.moves.count) return null;
+        const selected_index = self.bestRemainingIndex() orelse return null;
+        return self.takeAt(selected_index);
+    }
 
+    /// Ranks moves appended to the list after `init`, so a caller that learns
+    /// only later which extra moves it wants can still select over one list in
+    /// one order. ADR-0071 F's quiescence checks are decided after stand-pat.
+    pub fn rankAppended(
+        self: *Picker,
+        comptime use_capture_history: bool,
+        value: *const chess.position.Position,
+        binding: anytype,
+        tt_move: ?chess.move.Move,
+        state: ?*const State,
+        search_params: params.Values,
+        ply: usize,
+        appended_start: usize,
+    ) void {
+        for (appended_start..self.moves.count) |index| {
+            self.ranks[index] = if (self.select_best)
+                rank(
+                    use_capture_history,
+                    value,
+                    binding,
+                    self.moves.moves[index],
+                    tt_move,
+                    state,
+                    search_params,
+                    ply,
+                    null,
+                    .{},
+                )
+            else
+                .{ .source = .quiet_history, .history = 0 };
+        }
+    }
+
+    fn bestRemainingIndex(self: *const Picker) ?usize {
+        if (self.cursor >= self.moves.count) return null;
         var selected_index = self.cursor;
         if (self.select_best) {
             var candidate = self.cursor + 1;
@@ -537,7 +650,11 @@ pub const Picker = struct {
                     selected_index = candidate;
             }
         }
+        return selected_index;
+    }
 
+    fn takeAt(self: *Picker, selected_index: usize) Selection {
+        std.debug.assert(selected_index >= self.cursor and selected_index < self.moves.count);
         const selected_move = self.moves.moves[selected_index];
         const selected_rank = self.ranks[selected_index];
         var shift = selected_index;
@@ -552,11 +669,173 @@ pub const Picker = struct {
             .chess_move = selected_move,
             .source = selected_rank.source,
             .index = self.cursor,
+            .history = selected_rank.history,
         };
         self.cursor += 1;
         return result;
     }
 };
+
+/// Candidate-only staged selection for ordinary non-check interior nodes.
+/// Tactical ranks are frozen at node entry. Non-tactical quiets are generated
+/// and ranked only when no TT or good tactical move remains, so their ranking
+/// deliberately observes history learned by completed descendant searches.
+/// The caller retains terminal, score, pruning and thread authority.
+pub const LiveHistoryPicker = struct {
+    inner: Picker,
+    phase: Phase,
+    classify_sources: bool,
+    /// ADR-0071 C. Once a node's late-move count triggers, the remaining
+    /// quiets are dropped without being made. Bad tacticals keep being
+    /// emitted: the count says the node has seen enough quiet alternatives,
+    /// not that it has seen enough of everything.
+    ///
+    /// Amended by the third review: a quiet that gives direct check is kept and
+    /// emitted, so the post-make exemption can judge it. The trace found the
+    /// unamended skip dropping a mate in one unmade, where the per-move
+    /// exemption never ran because the move was never made. The board pointer
+    /// is read only between `next` calls, when the position is at this node.
+    skip_quiets: bool = false,
+    skipped_quiets: usize = 0,
+    skip_board: ?*const chess.position.Position = null,
+
+    const Phase = enum { tactical, complete };
+
+    pub inline fn init(
+        comptime use_capture_history: bool,
+        moves: *chess.position.MoveList,
+        value: *const chess.position.Position,
+        binding: anytype,
+        tt_move: ?chess.move.Move,
+        state: ?*const State,
+        search_params: params.Values,
+        ply: usize,
+        reply: ?ReplyContext,
+        continuations: ContinuationSet,
+        select_best: bool,
+        classify_sources: bool,
+        staged: bool,
+    ) LiveHistoryPicker {
+        return .{
+            .inner = Picker.init(
+                use_capture_history,
+                moves,
+                value,
+                binding,
+                tt_move,
+                state,
+                search_params,
+                ply,
+                reply,
+                continuations,
+                select_best,
+                classify_sources,
+            ),
+            .phase = if (staged) .tactical else .complete,
+            .classify_sources = classify_sources,
+        };
+    }
+
+    pub fn next(self: *LiveHistoryPicker) ?Selection {
+        while (true) {
+            const selected_index = self.inner.bestRemainingIndex() orelse return null;
+            if (self.phase == .tactical and
+                self.inner.ranks[selected_index].source == .bad_tactical) return null;
+            if (self.skip_quiets) switch (self.inner.ranks[selected_index].source) {
+                // A quiet TT move is emitted first and therefore always before
+                // any count can trigger, so it is never dropped here.
+                .primary_killer, .secondary_killer, .quiet_history => {
+                    const candidate = self.inner.moves.moves[selected_index];
+                    const keep = if (self.skip_board) |board|
+                        chess.movegen.givesDirectCheck(board, candidate)
+                    else
+                        false;
+                    if (!keep) {
+                        _ = self.inner.takeAt(selected_index);
+                        self.skipped_quiets += 1;
+                        continue;
+                    }
+                },
+                else => {},
+            };
+            return self.inner.takeAt(selected_index);
+        }
+    }
+
+    pub fn skipRemainingQuiets(
+        self: *LiveHistoryPicker,
+        board: *const chess.position.Position,
+    ) void {
+        self.skip_quiets = true;
+        self.skip_board = board;
+    }
+
+    pub fn skippedQuiets(self: *const LiveHistoryPicker) usize {
+        return self.skipped_quiets;
+    }
+
+    /// Opens the delayed quiet stage exactly once and returns the number of
+    /// newly generated unique moves for observation accounting. A quiet TT
+    /// move was already emitted from the initial list and is removed from the
+    /// appended subset before ranking.
+    pub fn enterQuiets(
+        self: *LiveHistoryPicker,
+        comptime use_capture_history: bool,
+        value: *const chess.position.Position,
+        binding: anytype,
+        tt_move: ?chess.move.Move,
+        state: ?*const State,
+        search_params: params.Values,
+        ply: usize,
+        reply: ?ReplyContext,
+        continuations: ContinuationSet,
+    ) ?usize {
+        if (self.phase != .tactical) return null;
+        self.phase = .complete;
+
+        const appended_start = self.inner.moves.count;
+        chess.movegen.generateAppend(.non_tactical_quiets, value, self.inner.moves);
+        if (tt_move) |candidate| {
+            if (!chess.movegen.isTactical(value, candidate))
+                removeAppendedDuplicate(self.inner.moves, appended_start, candidate);
+        }
+        const generated = self.inner.moves.count - appended_start;
+        for (appended_start..self.inner.moves.count) |index| {
+            self.inner.ranks[index] = if (self.inner.select_best or self.classify_sources)
+                rank(
+                    use_capture_history,
+                    value,
+                    binding,
+                    self.inner.moves.moves[index],
+                    tt_move,
+                    state,
+                    search_params,
+                    ply,
+                    reply,
+                    continuations,
+                )
+            else
+                .{ .source = .quiet_history, .history = 0 };
+        }
+        return generated;
+    }
+};
+
+fn removeAppendedDuplicate(
+    moves: *chess.position.MoveList,
+    appended_start: usize,
+    duplicate: chess.move.Move,
+) void {
+    var index = appended_start;
+    while (index < moves.count) : (index += 1) {
+        if (moves.moves[index].raw() != duplicate.raw()) continue;
+        var shift = index;
+        while (shift + 1 < moves.count) : (shift += 1)
+            moves.moves[shift] = moves.moves[shift + 1];
+        moves.count -= 1;
+        return;
+    }
+}
 
 fn stage(source_value: Source) u3 {
     return switch (source_value) {
@@ -651,7 +930,7 @@ fn rank(
     if (tt_move) |candidate| {
         if (candidate.raw() == chess_move.raw()) return .{ .source = .tt, .history = 0 };
     }
-    const tactical = chess.movegen.isCapture(value, chess_move) or chess_move.kind() == .promotion;
+    const tactical = chess.movegen.isTactical(value, chess_move);
     if (tactical) {
         return .{
             .source = if (binding.seeAtLeast(value, chess_move, 0)) .good_tactical else .bad_tactical,
@@ -667,19 +946,35 @@ fn rank(
     }
     return .{
         .source = .quiet_history,
-        .history = if (state) |active| history: {
-            const main: i32 = active.quiet_history[value.side_to_move.index()][chess_move.from().index()][chess_move.to().index()];
-            const contextual: i32 = if (reply) |active_reply|
-                weightedHistory(active.replyScore(value, active_reply, chess_move), search_params.reply_history_weight)
-            else
-                0;
-            const continuation = weightedHistory(
-                active.continuationTotal(value, continuations, chess_move),
-                search_params.continuation_history_weight,
-            );
-            break :history main + contextual + continuation;
-        } else 0,
+        .history = if (state) |active|
+            quietHistoryValue(active, value, chess_move, search_params, reply, continuations)
+        else
+            0,
     };
+}
+
+/// The composite the picker ranks quiets by: main history plus the weighted
+/// reply and continuation contributions. ADR-0071 B reads the same number as
+/// the reduction surface's per-move evidence, so ranking and reduction cannot
+/// disagree about what the tables say for a move.
+pub fn quietHistoryValue(
+    state: *const State,
+    value: *const chess.position.Position,
+    chess_move: chess.move.Move,
+    search_params: params.Values,
+    reply: ?ReplyContext,
+    continuations: ContinuationSet,
+) i32 {
+    const main: i32 = state.quiet_history[value.side_to_move.index()][chess_move.from().index()][chess_move.to().index()];
+    const contextual: i32 = if (reply) |active_reply|
+        weightedHistory(state.replyScore(value, active_reply, chess_move), search_params.reply_history_weight)
+    else
+        0;
+    const continuation = weightedHistory(
+        state.continuationTotal(value, continuations, chess_move),
+        search_params.continuation_history_weight,
+    );
+    return main + contextual + continuation;
 }
 
 fn weightedHistory(value: i32, weight: i32) i32 {
@@ -700,16 +995,65 @@ pub fn source(
     return rank(true, value, binding, chess_move, tt_move, state, .{}, ply, null, .{}).source;
 }
 
+test "the core history bonus is bounded, monotone and informative" {
+    // ADR-0071 A. The oracle is the stated curve and the table's own range,
+    // not the implementation: a producer that cannot move an entry across a
+    // useful fraction of [-16384, 16384] cannot carry a pruning decision.
+    try std.testing.expectEqual(@as(i32, 90), historyBonusFor(true, 1));
+    try std.testing.expectEqual(@as(i32, 240), historyBonusFor(true, 2));
+    // 150*14 - 60 = 2040; the cap first binds at depth 15. The ADR's prose
+    // rounds this to "saturates at 2048"; the formula is the contract.
+    try std.testing.expectEqual(@as(i32, 2040), historyBonusFor(true, 14));
+    try std.testing.expectEqual(@as(i32, 2048), historyBonusFor(true, 15));
+
+    var depth: u16 = 1;
+    var previous = historyBonusFor(true, 0);
+    while (depth <= 128) : (depth += 1) {
+        const bonus = historyBonusFor(true, depth);
+        try std.testing.expect(bonus >= previous);
+        try std.testing.expect(bonus > 0 and bonus <= 2048);
+        previous = bonus;
+    }
+    // Saturation is reached inside the depths a real search visits, and the
+    // accepted curve does not reach a comparable share of the range there.
+    try std.testing.expect(historyBonusFor(true, 20) == 2048);
+    try std.testing.expect(historyBonusFor(true, 8) > historyBonusFor(false, 8));
+}
+
+test "the core gravity update stays inside the history range under saturation" {
+    // Property: repeated same-direction updates converge inside the bound and
+    // never leave it, and the opposite direction moves the entry back. The
+    // bound is the table's own declared range, which the update must respect
+    // for every reachable bonus magnitude.
+    inline for (.{ true, false }) |core| {
+        var entry: i16 = 0;
+        for (0..4096) |_| {
+            State.updateBounded(&entry, historyBonusFor(core, 14));
+            try std.testing.expect(entry >= -State.history_limit and entry <= State.history_limit);
+        }
+        const saturated = entry;
+        try std.testing.expect(saturated > 0);
+        for (0..4096) |_| {
+            State.updateBounded(&entry, -historyBonusFor(core, 14));
+            try std.testing.expect(entry >= -State.history_limit and entry <= State.history_limit);
+        }
+        // The fixed point of the gravity update is the bound itself, so the
+        // entry may land exactly on it; it may never pass it.
+        try std.testing.expect(entry < 0);
+        try std.testing.expect(entry >= -State.history_limit);
+    }
+}
+
 test "balanced quiet outcomes remain bounded and rotate killers deterministically" {
     // Search ordering evidence must remain bounded and responsive across
     // arbitrarily long games; only successful quiets become killers.
     var state: State = .{};
     const first = chess.move.Move.normal(.g1, .f3);
     const second = chess.move.Move.normal(.b1, .c3);
-    state.recordQuietCutoff(.white, first, std.math.maxInt(u16), 2);
-    state.recordQuietCutoff(.white, first, std.math.maxInt(u16), 2);
-    state.recordQuietFailure(.white, first, std.math.maxInt(u16));
-    state.recordQuietCutoff(.white, second, 3, 2);
+    state.recordQuietCutoff(.white, first, std.math.maxInt(u16), 2, false);
+    state.recordQuietCutoff(.white, first, std.math.maxInt(u16), 2, false);
+    state.recordQuietFailure(.white, first, std.math.maxInt(u16), false);
+    state.recordQuietCutoff(.white, second, 3, 2, false);
     try std.testing.expectEqual(@as(i16, -16 * 1024), state.quietScore(.white, first));
     try std.testing.expectEqual(second, state.killers[2][0]);
     try std.testing.expectEqual(first, state.killers[2][1]);
@@ -719,9 +1063,9 @@ test "opposite quiet outcomes age prior evidence toward the latest result" {
     // A touched entry uses bounded gravity rather than irreversible saturation.
     var state: State = .{};
     const chess_move = chess.move.Move.normal(.g1, .f3);
-    state.recordQuietCutoff(.white, chess_move, 8, 0);
+    state.recordQuietCutoff(.white, chess_move, 8, 0, false);
     const rewarded = state.quietScore(.white, chess_move);
-    state.recordQuietFailure(.white, chess_move, 8);
+    state.recordQuietFailure(.white, chess_move, 8, false);
     const balanced = state.quietScore(.white, chess_move);
     try std.testing.expect(rewarded > 0);
     try std.testing.expect(balanced < rewarded);
@@ -743,7 +1087,7 @@ test "reply keys use resulting pieces and color-symmetric destinations" {
     var state: State = .{};
     const white_move = chess.move.Move.normal(.h2, .h3);
     const black_move = chess.move.Move.normal(.h7, .h6);
-    state.recordReplySuccess(&white, white_reply, white_move, 4);
+    state.recordReplySuccess(&white, white_reply, white_move, 4, false);
     try std.testing.expectEqual(
         state.replyScore(&white, white_reply, white_move),
         state.replyScore(&black, black_reply, black_move),
@@ -784,7 +1128,7 @@ test "reply outcomes are bounded context-specific quiet ordering evidence" {
     const preferred = chess.move.Move.normal(.h2, .h3);
     const other = chess.move.Move.normal(.e2, .e3);
     var state: State = .{};
-    state.recordReplySuccess(&value, reply, preferred, std.math.maxInt(u16));
+    state.recordReplySuccess(&value, reply, preferred, std.math.maxInt(u16), false);
     try std.testing.expectEqual(@as(i16, 16 * 1024), state.replyScore(&value, reply, preferred));
     try std.testing.expectEqual(@as(i16, 0), state.replyScore(&value, reply, other));
 
@@ -804,7 +1148,7 @@ test "reply outcomes are bounded context-specific quiet ordering evidence" {
     orderWithReply(&moves, &value, Binding{}, null, &state, 0, reply);
     try std.testing.expectEqual(preferred, moves.slice()[0]);
 
-    state.recordReplyFailure(&value, reply, preferred, std.math.maxInt(u16));
+    state.recordReplyFailure(&value, reply, preferred, std.math.maxInt(u16), false);
     try std.testing.expectEqual(@as(i16, -16 * 1024), state.replyScore(&value, reply, preferred));
     state.clear();
     try std.testing.expectEqual(@as(i16, 0), state.replyScore(&value, reply, preferred));
@@ -825,7 +1169,7 @@ test "history tuning weights only contextual quiet-ordering evidence" {
     const preferred = chess.move.Move.normal(.h2, .h3);
     const other = chess.move.Move.normal(.e2, .e3);
     var state: State = .{};
-    state.recordReplySuccess(&value, reply, preferred, 8);
+    state.recordReplySuccess(&value, reply, preferred, 8, false);
     const Binding = struct {
         pub fn seeAtLeast(_: @This(), _: *const chess.position.Position, _: chess.move.Move, _: i32) bool {
             unreachable;
@@ -887,7 +1231,7 @@ test "continuation evidence separates check tactical and color-symmetric facts" 
     try std.testing.expectEqual(ordinary, mirrored);
 
     var state: State = .{};
-    state.recordContinuationSuccess(&white, ordinary, white_move, std.math.maxInt(u16));
+    state.recordContinuationSuccess(&white, ordinary, white_move, std.math.maxInt(u16), false);
     try std.testing.expectEqual(
         state.continuationScore(&white, ordinary, white_move),
         state.continuationScore(&black, mirrored, black_move),
@@ -895,7 +1239,7 @@ test "continuation evidence separates check tactical and color-symmetric facts" 
     try std.testing.expectEqual(@as(i16, 16 * 1024), state.continuationScore(&white, ordinary, white_move));
     try std.testing.expectEqual(@as(i16, 0), state.continuationScore(&white, from_check, white_move));
     try std.testing.expectEqual(@as(i16, 0), state.continuationScore(&white, tactical, white_move));
-    state.recordContinuationFailure(&white, ordinary, white_move, std.math.maxInt(u16));
+    state.recordContinuationFailure(&white, ordinary, white_move, std.math.maxInt(u16), false);
     try std.testing.expectEqual(@as(i16, -16 * 1024), state.continuationScore(&white, ordinary, white_move));
 }
 
@@ -916,13 +1260,13 @@ test "quiet confidence uses relation consensus rather than raw magnitude" {
         state.quietConfidence(&value, reply, continuations, chess_move),
     );
 
-    state.recordReplySuccess(&value, reply, chess_move, std.math.maxInt(u16));
-    state.recordContinuationFailure(&value, first, chess_move, 2);
+    state.recordReplySuccess(&value, reply, chess_move, std.math.maxInt(u16), false);
+    state.recordContinuationFailure(&value, first, chess_move, 2, false);
     try std.testing.expectEqual(
         HistoryConfidence.neutral,
         state.quietConfidence(&value, reply, continuations, chess_move),
     );
-    state.recordContinuationFailure(&value, second, chess_move, 2);
+    state.recordContinuationFailure(&value, second, chess_move, 2, false);
     try std.testing.expectEqual(
         HistoryConfidence.negative,
         state.quietConfidence(&value, reply, continuations, chess_move),

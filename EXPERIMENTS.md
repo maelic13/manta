@@ -15,10 +15,25 @@ run directories.
   a clean prospective gate.
 - Static tests, loss, fixed-node quality, speed and fingerprints are diagnostic
   filters. They do not prove playing strength.
+- During Phase 6.5, every retained production-executable candidate—including
+  behavior-identical speed and PGO work—requires its own clean 1T H1. Tests,
+  documentation and disabled diagnostics are not production candidates.
+- Phase-6.5 games run on the separate designated Ryzen 9 5950X. Registration
+  and returned evidence bind source/archive identity, candidate/baseline binary
+  hashes, Zig/build options, feature switches, runner/book hashes, setup-only
+  output, manifest, log, PGN and checkpoint. Development-machine games cannot
+  promote a candidate.
 - SPSA pilots establish coordinate activity only. Promote only a complete rounded
   fit after its own clean game gate.
 - Do not repeat a rejected mechanism without the recorded trigger or genuinely
   new evidence.
+
+Measured games end only by the rules of chess. ADR-0071 removed resignation,
+draw-after-N-moves and move-cap adjudication from every harness on 2026-09-12.
+Every verdict recorded above and below that date was measured under the
+superseded `strength-v1` or `strength-v2` profile; those conditions stay as
+recorded and are **not comparable** with any later result. The instrument owes
+one identical-binary calibration before the next registered candidate.
 
 ## Manta 1 production state
 
@@ -28,7 +43,11 @@ run directories.
 | One-thread search | MAN-S29 complete rounded search fit | Accepted H1 over MAN-S19 after 4,596 games at `+22.49 +/- 10.04` nElo; ADR-0063 |
 | Clock policy | MAN-T05 complete rounded time fit | H1 after 4,188 games at `+24.48 +/- 10.52` nElo, accepted by explicit maintainer judgment despite the wrapper's prospective zero-timeout rejection; candidate had one completed time forfeit and baseline five |
 | SMP | MAN-R03 main-authoritative lazy SMP | 4T versus 1T accepted H1 after 194 games at `+187.72 +/- 48.89` nElo; ADR-0064 |
-| Deterministic identity | One-thread depth-6 bench | `799,610` nodes |
+| Move ordering | MAN-S30 live-history staged picker | Accepted H1 over MAN-S29 after 8,752 games at `+13.19 +/- 7.28` nElo; ADR-0035 |
+| Qsearch generation | MAN-S34 tactical-only non-check generation | Accepted H1 over MAN-S30 after 1,614 games at `+59.77 +/- 16.95` nElo without anomaly; ADR-0069 |
+| Mate windows | MAN-S35 complete non-root window clip | Neutral registered gate stopped at 1,998 games (`+4.00 +/- 9.32` Elo); production by documented maintainer exception, not H1 |
+| Selective search | MAN-S36 coordinated selective-search core | Accepted H1 over MAN-S35 after 670 games at `+108.68 +/- 17.86` Elo (`+170.97 +/- 26.31` nElo) without anomaly; ADR-0071 |
+| Deterministic identity | One-thread depth-6 bench | `359,259` nodes |
 
 These measurements establish promotion decisions under their registered
 conditions. Small decisive samples, especially cumulative and 4T-versus-1T
@@ -57,6 +76,10 @@ Raw cumulative evidence is retained under
 | `MAN-S29` | Complete ten-coordinate search SPSA bake |
 | `MAN-R03` | Main-authoritative lazy SMP pool |
 | `MAN-T05` | Complete six-coordinate integrated time-management fit |
+| `MAN-S30` | Live-history staged move picker |
+| `MAN-S34` | Tactical-only non-check qsearch generation with a complete legal terminal witness |
+| `MAN-S35` | Complete non-root mate windows, retained by maintainer exception on a neutral gate |
+| `MAN-S36` | Coordinated selective-search core: informative history, log-log reductions, prospective-depth omission, node-level proofs, root aspiration and first-ply quiescence checks |
 
 Acceptance of a bundle does not establish that every included term helped.
 Frozen baselines exist only for reconstruction and do not remain runtime
@@ -81,21 +104,195 @@ because clock safety is part of that fit. Crashes, disconnects, illegal moves,
 affinity faults, incomplete results and nonzero exits remain fatal. Other SPSA
 groups retain strict timeout handling.
 
+## Phase 6.5 search evidence
+
+`MAN-S34` accepted H1 at the official 1,614-game decision snapshot. Candidate A
+enabled only `-Dqsearch-tactical-generation=true` against the same-source
+MAN-S30 reconstruction. The mechanism generates only captures/promotions at
+ordinary non-check qsearch nodes and generates the disjoint quiet subset solely
+when needed to distinguish quiet mobility from stalemate. The trusted harness
+boundary was unchanged, so setup-only validation replaced a pilot.
+
+`MAN-S36` **accepted H1 and is production.** The registered 1T SPRT on the
+designated host stopped at 670 games with W/L/D `283/80/307`,
+`+108.68 +/- 17.86` Elo (`+170.97 +/- 26.31` nElo), LLR `2.95` on normalized
+`[1,5]`, LOS `100%`, draw ratio `34.93%`, pairs ratio `5.41`, pentanomial
+`[0,34,117,131,53]` and no anomaly of any kind. Artifacts are
+`tools/results/sprt_MAN-S36_vs_MAN-S35_20260913_093208.{log,pgn,manifest.txt}`
+with the two copied engine manifests; the arms are core
+`90563AB69AAE2048E465894E61223C97D5FA4CBA25892979136C23BA6EEFA818` (bench
+`359,259`) and baseline
+`63A30FD5386EAFDE9FA010A93C62F5B2D267071B90E6226999F92F4429435510` (bench
+`642,336`). The promotion licenses the package as a whole, not any of its six
+components, which were never gated separately.
+
+Step 6.5.10 replaced the whole selective-search policy with one coordinated core
+designed in ADR-0071 and contracted by `SCORE-034`: one informative quiet
+history, a compile-time log-log reduction surface, prospective-depth move
+omission, node-level forward proofs, a root aspiration window and direct quiet
+checks in the first quiescence ply, behind one umbrella with six ablation
+switches. The umbrella now defaults on and switching it off reconstructs
+MAN-S35 exactly.
+The step was motivated by measured tree shape rather than by a feature list:
+at head `596159e` Manta needed a geometric branching factor of `2.225` per ply
+against `1.88` for the pinned classical reference, and `82.2 M` nodes at depth
+12 against `2.6 M`.
+
+Pre-game diagnostics on the workspace host, forty positions, 64 MiB, one
+thread, fresh process per depth, both arms built from the clean commit
+`22419a8`: geometric branching falls from `2.225` to `1.775`, depth-12 nodes
+from `82,249,155` to `9,693,589`, and relative NPS at depth 12 is `0.964`.
+Both cohorts improve and the ordinary 38-position subset carries the gain
+(`0.114x` nodes at depth 12) rather than the two mate positions (`0.208x`).
+The off arm reproduces `642,336` exactly; the core arm's bench-6 fingerprint is
+`359,259`.
+
+Two local 500-game diagnostic matches were run on the workspace host at 1T
+`3+0.03`, before and after the review's authority repair: `+110.60 +/- 22.52`
+Elo and then `+117.55 +/- 22.68` Elo, both with zero anomalies and every game
+ended by a rule of chess. **Those matches authorize nothing.** They are fixed
+size, have no stopping rule, ran on the development machine rather than the
+designated host, and are diagnostics that told the implementer the package was
+worth registering. The registered gate is what promoted it; the local
+estimates happened to land close to its `+108.68`, which is agreement, not a
+substitute.
+
+`MAN-S35` is production **by an explicit maintainer exception on a neutral gate,
+not by an H1 verdict**. The registered `[1,5]` SPRT was stopped by the maintainer
+at 1,998 games with W/L/D `484/461/1053`, `+4.00 +/- 9.32` Elo
+(`+6.54 +/- 15.23` nElo), LLR `0.23`, seed `1079633543`, and no anomaly of any
+kind. The interval straddles zero: this is a neutral result, marginally positive
+at the point estimate, and it proves neither a gain nor equivalence.
+
+The maintainer retained the mechanism on judgment, for stated reasons: the result
+is neutral to slightly positive, and the change completes a previously functional
+feature rather than adding a speculative one. The gate design was also wrong for
+the hypothesis -- gainer bounds were registered for a mechanism whose own pre-game
+evidence predicted no ordinary-position gain, and a non-regression design should
+have been chosen prospectively. **This exception is recorded, not precedent.** It
+was the maintainer's decision and does not authorize promoting any future neutral
+or H0 candidate; the standing rule that only H1 promotes is unchanged.
+
+Step 6.5.10.1 replaced `MAN-S32`'s
+crossing-only mate test with a complete non-root window clip (`SCORE-033`); the
+`MAN-S32` switch is removed rather than kept beside it, and ADR-0067's retention
+decision is superseded. Pre-game diagnostics on the designated 5950X, measured
+twice through independent harnesses with identical node counts: the
+depth-4..10 corpus total falls `41.9%` at depth 10, but the ordinary 38-position
+subset moves by at most `1.81%` at any depth and by `+0.21%` at depth 10, while
+the two mate positions fall `88.5%`. Only 13 of 38 ordinary positions change at
+all, two of them substantially and in opposite directions. Ordinary elapsed time
+is noise-dominated -- repeated depth-10 runs gave baseline `11,709 / 12,787 /
+12,156` ms against candidate `12,541 / 12,360 / 12,389` ms -- so no throughput
+change is claimed. The off arm reproduces `775,451`; the on arm's bench-6
+fingerprint is `642,336`, replacing `MAN-S32`'s `642,394`. None of this is
+strength evidence, and a mate-cohort node saving is not ordinary-position
+strength. Production moved from `775,451` to `642,336`; switching the mechanism
+off reconstructs the superseded tree exactly.
+
+MAN-S30 accepted H1 and remains production. MAN-S31 was **rejected by
+maintainer judgment**, not formal H0, after 7,958 games at
+`-3.08 +/- 7.63` nElo (`-2.14 +/- 5.30` Elo), LLR `-1.60`, without
+anomaly. The interval proves neither a loss nor equivalence. Its 56.53%
+depth-ten node reduction (35.34% excluding the two mate-heavy positions)
+changed tactical coverage; it did not establish dispensable work. The former
+causal explanation that removing the other checking-move protections would
+repair the result is withdrawn. That remains an untested hypothesis.
+
+The maintainer stopped MAN-S33. The supplied 6,640-game snapshot is
+W/L/D `1704/1688/3248`, pentanomial `[179,796,1346,828,171]`,
+`+1.24 +/- 8.36` nElo (`+0.84 +/- 5.64` Elo), LLR `-0.39`.
+This is an inconclusive stop, not H0, H1 or an equivalence result; production
+does not change. The inspected local PGN snapshot had 6,862 completed games,
+so the supplied snapshot is not asserted to be the final reconciled total.
+Preserve the original registration and artifacts; reconcile final totals and
+anomalies before a final run record. Do not resume, splice or automatically retry.
+
+The S33 horizon change reduced depth-ten nodes 9.13%, but similar aggregate
+extension conversion did not establish the same useful extension decisions.
+Node counts, inclusive work charges and NPS are diagnostics, not causal Elo
+proofs. ADR-0068 reorders the remaining work around separate board-throughput
+and integrated-search targets. Historic experiment IDs/registrations retain
+their original step labels; new numbered work lives in PLAN.
+
+| ID | Candidate and hypothesis | Registered gate | Result |
+|---|---|---|---|
+| `MAN-S36` | Phase-6.5.10 coordinated selective-search core against production MAN-S35. Manta's tree is roughly `2.2` times wider per ply where the pinned classical reference is `1.9`, and the accepted selectivity was gated one isolated mechanism at a time on heads that lacked the rest; replacing it with one coordinated system -- informative history carrying a log-log reduction surface, omission read at the depth a move will actually be searched, node-level forward proofs that trust their own margins, a failed-side root window and direct quiet checks at the first quiescence ply -- will narrow the tree enough to gain material strength at equal time without losing a forcing line. | Candidate A enables only `-Dselective-core=true` against the same-source baseline, both native ReleaseFast from commit `22419a8`; 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2` superseded by `natural-v1` game end (ADR-0071 requires no adjudication), normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed recorded at launch; completed time forfeits and every engine/protocol/affinity fault are fatal; setup-only preflight, no pilot | Accepted H1 after 670 games, W/L/D `283/80/307`, `+108.68 +/- 17.86` Elo (`+170.97 +/- 26.31` nElo), LLR `2.95`, LOS `100%`, draw ratio `34.93%`, pairs ratio `5.41`, pentanomial `[0,34,117,131,53]`, no anomaly; promoted to production |
+| `MAN-S35` | Phase-6.5.10.1 complete non-root mate windows against production MAN-S34. Searching every non-root node with its window clipped to the mate distances the rules still allow, rather than only returning when the requested window already lies outside them, will avoid work on unreachable scores without changing any chess verdict. | Candidate A enables only `-Dmate-windows=true`; 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed recorded at launch; completed time forfeits and every engine/protocol/affinity fault are fatal; setup-only preflight passed, no pilot | Maintainer stopped at 1,998 games, W/L/D `484/461/1053`, `+4.00 +/- 9.32` Elo (`+6.54 +/- 15.23` nElo), LLR `0.23`, seed `1079633543`, no anomaly; neutral, neither H0 nor H1. Retained in production by explicit documented maintainer exception, not by the gate |
+| `MAN-S34` | Phase-6.5.7 exact tactical-only non-check qsearch generation against production MAN-S30. Removing quiet generation/ranking that qsearch cannot consume will increase throughput without changing the searched tree or chess evidence. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `751289825`; completed time forfeits and every engine/protocol/affinity fault are fatal | Accepted H1 after 1,614 games at `+59.77 +/- 16.95` nElo (`+40.00 +/- 11.45` Elo, LLR `2.95`); no anomaly; promoted to production |
+| `MAN-S33` | Phase-6.5.5 half-depth singular exclusion horizon against production MAN-S30. A bounded shallower same-position proof will preserve useful singular decisions while spending less work on alternatives. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `1844484847` | Maintainer stopped inconclusive; supplied 6,640-game snapshot `+1.24 +/- 8.36` nElo, LLR `-0.39`; unpromoted, final artifacts pending reconciliation |
+| `MAN-S31` | Phase-6.5.3 non-root blanket check-extension ablation against production MAN-S30. Spending one extra ply at every checked interior node costs more time than its tactical protection earns. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `6533108` | Rejected by maintainer judgment after 7,958 games at `-3.08 +/- 7.63` nElo, LLR `-1.60`; candidate archived; production check extension stays on; new-policy review belongs to Step 6.5.10 |
+| `MAN-S30` | Phase-6.5.1b live-history staged picker against production MAN-S29. Delaying non-tactical quiet generation and consuming descendant-completed worker-local history will reduce abandoned generation and improve time-controlled play without changing chess or evidence authority. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `1445075129` | Accepted H1 after 8,752 games at `+13.19 +/- 7.28` nElo (`+8.93 +/- 4.93` Elo, LLR `2.95`); promoted to production |
+
+`MAN-S34` ran on the designated Ryzen 9 5950X from source revision
+`a500d6b3c37696b304c65a94d69bb1cf3b05d169`. Candidate SHA-256
+`7707EF8832650603C145A05C2CAB1DDC2C669BA4F3BDDE9A007938881F598B78` and
+baseline SHA-256
+`D73FA1D181BDDB8DB7E9AC16FCB053E9866D96707DB6C12D2FBFA36DAA1A03BC`
+both reported fingerprint `775,451`. The official boundary snapshot was
+W/L/D `505/320/789`, pentanomial `[23,150,321,245,68]`, points `899.5`
+(`55.73%`), pairs ratio `1.81`, draw ratio `39.78%`, LOS `100%`, and completed
+in `00:15:56`. There were no completed time forfeits, crashes, disconnects,
+illegal moves, protocol faults or affinity faults. Concurrency allowed two
+already-running games to finish after H1; therefore the final log and PGN at
+`tools/results/sprt_MAN-S34_vs_MAN-S30_20260909_082719.*` contain 1,616 games,
+while the prospective SPRT verdict remains the 1,614-game snapshot.
+
+`MAN-S30` ran on the separate designated Ryzen 9 5950X from candidate
+fingerprint `775,451` against baseline `799,610`, both clean native ReleaseFast
+non-PGO Zig 0.16.0 builds of `72732d6` differing only in
+`-Dlive-history-staging`. The run crossed the H1 boundary in `01:25:42`:
+`2,308` wins, `2,083` losses and `4,361` draws for `4,488.5` points (`51.29%`),
+`Ptnml(0-2) = [210, 1020, 1731, 1165, 250]`, pairs ratio `1.15`, LOS `99.98%`.
+Artifacts are in `zig-out/fastchess/MAN-S30-sprt-20260907_212733`. The measured
+interval is a rating estimate under these registered conditions only, and the
+accepted mechanism is the whole staged picker rather than any single stage.
+
+The bridge nevertheless rejected the run under its registered zero-timeout rule:
+four completed games ended in time forfeit, three lost by baseline MAN-S29 and
+one by the candidate, with zero crashes, disconnects, illegal moves or affinity
+faults. The maintainer accepted the result by explicit judgment. Independent
+reconstruction of the four games from the PGN move times supports that
+judgment and finds no clock defect:
+
+- Every forfeit occurred late in a long game in which **both** engines had
+  already spent their base clock down to tens of milliseconds, which is the
+  expected terminal state of sudden death plus a 30 ms increment. Across the
+  whole run about `22%` of game sides dip below 20 ms of remaining time at some
+  point, at nearly identical rates in the two arms.
+- No move in any forfeit game took longer than `0.35 s`, and the largest single
+  move in the entire run was `0.505 s`. There is no overspending spike; the
+  engine keeps two Move Overheads (`20 ms`) unspent and the controller allows a
+  further `20 ms` margin, so a forfeit needs an external stall beyond roughly
+  `40 ms`.
+- Four failures across roughly `400,000` played moves is about one in
+  `100,000`, is spread over both arms and is consistent with host scheduling
+  pressure at concurrency 14 rather than an allocation error.
+- The four games contribute a net two-game advantage to the candidate, against
+  its `225`-game win-loss lead. They cannot explain the verdict.
+
+This remains a post-result evidence waiver on the same footing as `MAN-T05`,
+not a prospective precedent. No time-management parameter, `Move Overhead`
+value or reserve was changed in response; any such change would be a playing
+candidate needing its own gate. The operational lesson is that the game host
+must stay otherwise idle for the registered rule to hold.
+
 ## Rejected or parked hypotheses
 
 | ID or area | Verdict | Reopen only when |
 |---|---|---|
 | `MAN-S14` singular-extension family | Rejected and disabled | A new, independently justified extension authority exists |
 | `MAN-S16` capture history | Rejected and disabled | New evidence identifies the original missing relation |
-| `MAN-S18` LMR synchronization | Rejected | Search architecture changes invalidate the old result |
-| `MAN-S20` main selectivity | H0; disabled | A new producer/consumer relation changes the hypothesis |
-| `MAN-S21` extension/depth authority | Exhausted cap without H1; disabled | Materially new evidence and a newly registered candidate exist |
+| `MAN-S18` LMR synchronization | Rejected | Superseded: history-aware reduction is re-derived inside the Step-6.5.10 coordinated core (ADR-0071); the archived vote switch stays off |
+| `MAN-S20` main selectivity | H0; disabled | Superseded: history pruning and dynamic null reduction are re-derived inside the Step-6.5.10 coordinated core (ADR-0071); capture futility stays excluded and the archived cluster stays off |
+| `MAN-S21` extension/depth authority | Exhausted cap without H1; disabled | Superseded for IIR only: all-node IIR is re-derived inside the Step-6.5.10 coordinated core (ADR-0071); singular multi-cut and double extension stay off pending 6.5.12 |
 | `MAN-S23` / `MAN-S24` correction selectivity | Deterministically refuted / never opened | A valid structural producer first passes its own gate |
 | `MAN-S25` pawn-structure correction history | H0; archived default-off | New evidence changes the producer or authority contract |
 | `MAN-E20` context-weighted space | Static fit reversed sign and missed validation floor | A different chess mechanism and label-quality case are established |
 | `MAN-E21` shelter-moderated king danger | H0 at `-9.31 +/- 7.98` nElo | A materially different coupling is derived |
 | `MAN-R01` root-uncertainty time consumer | H0; disabled | Root evidence or time architecture changes materially |
-| `MAN-R02` stability-gated aspiration | 16,000-game cap without H1; disabled | Evaluator/search head changes make the old gate stale |
+| `MAN-R02` stability-gated aspiration | 16,000-game cap without H1; disabled | Superseded: failed-side-widening root aspiration is a component of the Step-6.5.10 coordinated core (ADR-0071); the archived stability-gated switch stays off |
+| `MAN-S31` isolated check-extension removal | Rejected by judgment on an adverse trajectory | Only after Step 6.5.8 derives a distinct shared-depth policy for Step 6.5.10; no presumed benefit from removing more protections |
 | Colosseum | Parked by maintainer direction | The maintainer explicitly authorizes re-evaluation |
 | Additional classical HCE fitting | Closed in the normal path | Serious NNUE retries fail and Phase 11 is explicitly entered |
 | Additional pre-NNUE search/time SPSA | Closed | Phase-9 co-adaptation freezes new interacting consumers and justifies a fit |

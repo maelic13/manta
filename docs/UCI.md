@@ -28,6 +28,11 @@ transcripts, `REQUIREMENTS.md`, and the owning plan entry together.
   second command.
 - Every stdout record is one complete, LF-terminated line. The presenter is the
   only stdout writer and flushes each published record before the next one.
+- Both standard streams are driven in the I/O mode of the inherited handle. On
+  Windows an interface may hand the engine synchronous or asynchronous
+  (overlapped) pipes; the engine queries the mode at startup for stdin and
+  stdout alike, and a handle whose mode cannot be determined is a fatal
+  initialization failure rather than a guess.
 - While the protocol session is active, stdout contains only UCI records and
   the explicitly specified `bench` and `go perft` records. Incidental logging,
   stack traces, and fatal details go to stderr.
@@ -118,7 +123,9 @@ info string failed <command>: <reason>
 ```
 
 This is not a parse rejection. Its transactional effect is defined by the
-owning resource or file contract.
+owning resource or file contract. A search-form `go` that cannot allocate its
+search emits `info string failed go: resource allocation failed`, publishes no
+`bestmove` for that command, and leaves the session idle and responsive.
 
 ## 4. Session states and ordering
 
@@ -177,7 +184,10 @@ job.
   have not started, join owned tasks, and exit successfully. They do not require
   a pending `bestmove` to be published.
 - A failed or permanently blocked stdout closes presentation, cancels work, and
-  cannot make shutdown unbounded.
+  cannot make shutdown unbounded. After `quit` or EOF the controller gets a
+  bounded interval to finish and is then cancelled, so an interface that has
+  stopped reading while required lines fill the output queue cannot keep the
+  process alive; the exit code stays 0 unless output or input failed.
 
 ## 5. Command matrix
 
@@ -192,7 +202,7 @@ job.
 | `go` | Search form in §6 or diagnostic `go perft <depth>` | Search info and one `bestmove`, or perft records only | Replaces an active job in order. |
 | `stop` | `stop` | Required search or diagnostic completion, if active | Urgent and epoch-tagged; otherwise no-op. |
 | `ponderhit` | `ponderhit` | Retained or eventual `bestmove` when normal limits end | Valid only for matching ponder epoch; otherwise no-op. |
-| `bench` | `bench [depth] [repeats] [threads]` | Bench records only | Diagnostic job; contract is in `PLAN.md` §4.2. |
+| `bench` | `bench [depth] [repeats]` | Frozen bench position records and summary only | Diagnostic job; contract is in `PLAN.md` §4.2 and ADR-0021. |
 | `quit` | `quit` | None required | Urgent bounded shutdown with exit code 0. |
 | EOF | Input stream closes | None required | Same lifecycle as `quit`. |
 
@@ -289,8 +299,12 @@ Perft never emits search `info` or `bestmove` records.
 `bench` follows the versioned 40-position work contract in `PLAN.md` §4.2.
 Arguments are positive decimal integers and requested depth shares the
 authoritative depth ceiling. `manta-search-bench-v1` defaults to depth `6`;
-repeats and threads default to one, repeats are capped at `16`, and the
-deterministic bench keeps its independent one-thread scope after SMP activation.
+its optional arguments are depth then whole-suite repeat count, in the
+order frozen by ADR-0021.
+Single-run output reports each position's completed depth, score, nodes, EBF,
+elapsed milliseconds and NPS, followed by the same aggregate summary layout.
+Repeats default to one and are capped at `16`; the deterministic bench keeps
+its independent one-thread scope after SMP activation.
 Bench does not consult the current
 Hash or Threads options. Each repeat clears a private 16 MiB TT and ordering
 history once, then shares those caches across the ordered positions. The
@@ -300,21 +314,32 @@ completion.
 A single repeat emits 40 ordered records:
 
 ```text
-info string bench position <index>/40 nodes <nodes> time_ms <time> nps <nps> ebf <ebf>
+bench <index>/40  depth <depth>  score <score>  nodes <nodes>  ebf <ebf>  time <time>ms  nps <nps>
 ```
 
 It then emits exactly:
 
 ```text
-info string bench total depth <depth> repeats 1 threads <threads> nodes <nodes> time_ms <time> nps <nps> ebf <ebf> median_nodes <nodes> top_share <ratio>
+=========================
+Nodes searched  : <nodes>
+Geomean EBF     : <ebf>
+Median nodes    : <nodes>
+Top-pos share   : <percent>%  (<maximum> nodes)
+Total time (ms) : <time>
+Nodes/second    : <nps>
 ```
 
 Multiple repeats omit position records, emit one compact line per run, then a
 summary. `fingerprint_nodes` is the deterministic node total from run one:
 
 ```text
-info string bench run <index>/<repeats> depth <depth> threads <threads> nodes <nodes> time_ms <time> nps <nps>
-info string bench summary depth <depth> repeats <repeats> threads <threads> fingerprint_nodes <nodes> best_nps <nps> median_nps <nps>
+run <index>/<repeats>  nodes <nodes>  time <time>ms  nps <nps>
+=========================
+Nodes searched  : <fingerprint-nodes>
+Geomean EBF     : <ebf>
+Median nodes    : <nodes>
+Top-pos share   : <percent>%  (<maximum> nodes)
+Nodes/second    : <best-nps>   (best of <repeats>; median <median-nps>, min <minimum-nps>)
 ```
 
 Cancellation emits one final line for fully completed work:
@@ -325,9 +350,10 @@ info string bench cancelled run <run>/<repeats> positions <completed>/40 nodes <
 
 Bench emits no `bestmove`. Timing, NPS, EBF, median, and share values are
 diagnostic measurements; the one-thread node total is the behavior
-fingerprint. EBF uses three decimal places, `top_share` is a six-place ratio,
-and the even-sized corpus reports the upper median. A zero-millisecond position
-reports its node count as NPS rather than inventing elapsed precision.
+fingerprint. Position EBF uses two decimal places, aggregate EBF uses three,
+top share is a one-decimal percentage with the maximum node count, and the
+even-sized corpus reports the upper median. A zero-millisecond position reports
+its node count as NPS rather than inventing elapsed precision.
 
 ## 7. UCI options
 
@@ -396,16 +422,39 @@ Scores use the root side's perspective. Centipawn and mate values obey
 root uses `score mate 0`. Bound tags are emitted only when the score is actually
 a lower or upper bound.
 
-During search, the bounded coalescible progress channel may emit:
+During search, live root-move progress may emit:
 
 ```text
 info depth <D> currmove <legal-root-move> currmovenumber <N> nodes <N> time <MS>
 ```
 
-Each fully completed iteration may emit the ordinary score/depth/PV line.
-Intermediate root information is observational only and may be replaced under
-load; a completed result and its required `bestmove` are not droppable. Partial
-or aborted iterations never manufacture PV, score or bound authority.
+Root-move lines are the only search output that may coalesce or drop: a newer
+sample replaces a pending one, and a line is discarded rather than waiting when
+the output queue is full.
+
+Each fully completed iteration emits the ordinary score/depth/PV line, once per
+depth and in depth order, for any `Threads` value. The searched principal
+variation may end at a transposition-table hit; for display it is then extended
+from the table: each appended move is the stored move of an authenticated
+non-upper-bound entry for the position reached, legal there, and the extension
+stops at the first missing entry, unusable move, repeated position or capacity
+limit. The searched prefix is unchanged and the extension carries no search
+authority. The `ponder` move of `bestmove` is the second move of that same
+displayed line, so it may come from the table. Completed-iteration lines
+are required output: they are neither coalesced with root-move progress nor
+dropped when the output queue is full, and they wait for presenter capacity.
+The worker-side record of completed iterations is bounded; if more than it
+holds complete before the controller drains it, the oldest are discarded and
+the newest always survives. A completed result and its required `bestmove` are
+not droppable. Partial or aborted iterations never manufacture PV, score or
+bound authority.
+
+Completed-iteration lines count the main worker's nodes. A search that did not
+end at its depth limit -- stopped, timed or node-limited inside an iteration --
+emits one closing line before `bestmove` that repeats its last completed depth
+and PV with the combined nodes, time and `nps` of all threads, or a depth-0
+score line when no iteration completed. A search that ends at its depth limit
+does not repeat its last depth, at any `Threads` value.
 
 Normal completion is:
 

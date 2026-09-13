@@ -185,7 +185,7 @@ fn runCase(
                     var expected_buffer: [256]u8 = undefined;
                     const rendered = std.fmt.bufPrint(
                         &expected_buffer,
-                        "info string bench position {d}/40 nodes {{{{U64}}}} time_ms {{{{U64}}}} nps {{{{U64}}}} ebf {{{{DECIMAL}}}}",
+                        "bench {d}/40  depth {{{{U64}}}}  score {{{{I64}}}}  nodes {{{{U64}}}}  ebf {{{{DECIMAL}}}}  time {{{{U64}}}}ms  nps {{{{U64}}}}",
                         .{position_index},
                     ) catch return error.UnexpectedOutput;
                     if (!matchesExpected(rendered, actual.slice())) {
@@ -205,7 +205,16 @@ fn runCase(
                     return err;
                 };
                 if (matchesExpected(expected, actual.slice())) break;
-                if (allow_info and validSearchInfo(actual.slice())) continue;
+                // While a specific completed iteration is expected, another
+                // completed iteration is a wrong, missing or repeated depth,
+                // never ignorable progress.
+                if (allow_info and validSearchInfo(actual.slice()) and
+                    !(expectsIteration(expected) and validIterationInfo(actual.slice()))) continue;
+                // A bench streams one row per completed position, so any line
+                // a transcript waits for during a bench may legitimately be
+                // preceded by rows. A cancelled bench is the case that races:
+                // whether a row lands before the stop depends on timing.
+                if (validBenchPositionLine(actual.slice())) continue;
                 std.debug.print("expected: {s}\nactual:   {s}\n", .{ expected, actual.slice() });
                 return error.UnexpectedOutput;
             }
@@ -217,6 +226,7 @@ fn runCase(
                 return error.UnexpectedOutput;
             }
         },
+        .sleep_ms => |milliseconds| timer(io, milliseconds),
         .send_oversized_line => {
             if (!stdin_open) return error.UnsupportedActiveDirective;
             const oversized: [65_538]u8 = @splat('x');
@@ -235,6 +245,10 @@ fn runCase(
             if (stdout_blocked) return error.UnsupportedActiveDirective;
             _ = output_future.cancel(io) catch {};
             output_finished = true;
+            while (try takeAvailable(io, &output)) |line| {
+                std.debug.print("unexpected stdout before block: {s}\n", .{line.slice()});
+                return error.UnexpectedOutput;
+            }
             stdout_blocked = true;
         },
         .allow_info_begin => allow_info = true,
@@ -264,7 +278,13 @@ fn runCase(
             try stdin_writer.interface.writeAll(command);
             try stdin_writer.interface.flush();
         },
-        .unblock_stdout => return error.UnsupportedActiveDirective,
+        .unblock_stdout => {
+            if (!stdout_blocked) return error.UnsupportedActiveDirective;
+            output = std.Io.Queue(StreamLine).init(&output_storage);
+            output_future = try io.concurrent(streamPump, .{ io, child.stdout.?, &output });
+            output_finished = false;
+            stdout_blocked = false;
+        },
         .exit => |expected_exit| {
             if (stdin_open) {
                 try stdin_writer.interface.flush();
@@ -441,6 +461,7 @@ fn takeAvailable(io: std.Io, queue: *std.Io.Queue(StreamLine)) !?StreamLine {
 }
 
 fn matchesExpected(expected: []const u8, actual: []const u8) bool {
+    if (std.mem.eql(u8, expected, "{{EMPTY}}")) return actual.len == 0;
     if (std.mem.eql(u8, expected, "{{ROOT_MOVE_INFO}}")) return validRootMoveInfo(actual);
     if (std.mem.eql(u8, expected, "{{ITERATION_INFO}}")) return validIterationInfo(actual);
     if (std.mem.eql(u8, expected, "{{SEARCH_INFO}}"))
@@ -469,13 +490,26 @@ fn matchesExpected(expected: []const u8, actual: []const u8) bool {
     return std.mem.eql(u8, expected[expected_cursor..], actual[actual_cursor..]);
 }
 
+fn expectsIteration(expected: []const u8) bool {
+    return std.mem.eql(u8, expected, "{{ITERATION_INFO}}") or
+        std.mem.indexOf(u8, expected, "{{ITERATION_FIELDS}}") != null;
+}
+
 fn matchesPlaceholder(placeholder: []const u8, value: []const u8) bool {
     if (std.mem.eql(u8, placeholder, "{{VERSION}}")) return std.mem.eql(u8, value, build_options.version);
+    if (std.mem.eql(u8, placeholder, "{{ITERATION_FIELDS}}")) return validIterationFields(value);
     if (std.mem.eql(u8, placeholder, "{{PONDER}}")) return matchesOptionalPonder(value);
     if (std.mem.eql(u8, placeholder, "{{U64}}")) return parseUnsigned(value, false);
+    if (std.mem.eql(u8, placeholder, "{{I64}}")) return parseSigned(value);
     if (std.mem.eql(u8, placeholder, "{{POSITIVE_U64}}")) return parseUnsigned(value, true);
     if (std.mem.eql(u8, placeholder, "{{DECIMAL}}")) return parseDecimal(value);
     return false;
+}
+
+fn parseSigned(value: []const u8) bool {
+    if (value.len == 0) return false;
+    _ = std.fmt.parseInt(i64, value, 10) catch return false;
+    return true;
 }
 
 /// Match either no continuation or one ` ponder <move>` suffix. A search cancelled
@@ -507,6 +541,15 @@ fn parseDecimal(value: []const u8) bool {
     return true;
 }
 
+/// A streamed bench row, `bench {index}/40  depth ...`. Matching the prefix
+/// and the rendered shape is enough: the row's own fields are checked where a
+/// transcript asserts the report itself with `{{BENCH_POSITION_LINES}}`.
+fn validBenchPositionLine(line: []const u8) bool {
+    if (!std.mem.startsWith(u8, line, "bench ")) return false;
+    const slash = std.mem.indexOf(u8, line, "/40  depth ") orelse return false;
+    return parseUnsigned(line["bench ".len..slash], true);
+}
+
 fn validSearchInfo(line: []const u8) bool {
     return validRootMoveInfo(line) or validIterationInfo(line) or validTimeTelemetry(line);
 }
@@ -535,6 +578,17 @@ fn validIterationInfo(line: []const u8) bool {
         std.mem.indexOf(u8, line, " time ") != null and
         (std.mem.indexOf(u8, line, " pv ") != null or
             std.mem.endsWith(u8, line, " pv"));
+}
+
+/// The fields after `info depth <D> ` in a completed-iteration line. A
+/// transcript spells the depth literally, so the placeholder must not absorb
+/// another depth value.
+fn validIterationFields(value: []const u8) bool {
+    return std.mem.startsWith(u8, value, "seldepth ") and
+        std.mem.indexOf(u8, value, " score ") != null and
+        std.mem.indexOf(u8, value, " nodes ") != null and
+        std.mem.indexOf(u8, value, " time ") != null and
+        (std.mem.indexOf(u8, value, " pv ") != null or std.mem.endsWith(u8, value, " pv"));
 }
 
 fn validBestMove(line: []const u8) bool {

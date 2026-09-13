@@ -30,8 +30,20 @@ fn runArchived(
     table: *manta.search.tt.Table,
     ordering: *manta.search.ordering.State,
 ) bench.Report {
+    // Every archived total below was recorded before Step 6.5.1b promoted the
+    // live-history staged picker, before Step 6.5.10.1 promoted complete mate
+    // windows and before Step 6.5.10 promoted the selective-search core, so
+    // faithful reconstruction restores the MAN-S19-era eager picker, the
+    // superseded crossing-only mate test and the pre-core search alongside the
+    // MAN-S19 parameter vector. Direct reconstructions outside this helper pin
+    // the umbrella off explicitly for the same reason: none of them may be
+    // restated on a head it never ran on.
+    comptime var archived = features;
+    archived.live_history_staging = false;
+    archived.mate_windows = false;
+    archived.selective_core = false;
     return bench.runWithFeaturesAndParams(
-        features,
+        archived,
         spec,
         clock,
         control,
@@ -61,7 +73,9 @@ test "bench aggregate metrics use upper median and fixed decimal scales" {
     report.finishFirstRun();
     try std.testing.expectEqual(@as(u64, 820), report.fingerprint_nodes);
     try std.testing.expectEqual(@as(u64, 21), report.median_nodes);
+    try std.testing.expectEqual(@as(u64, 40), report.maximum_nodes);
     try std.testing.expectEqual(@as(u64, 48_780), report.top_share_million);
+    try std.testing.expectEqual(@as(u64, 49), bench.topShareTenthsPercent(&report));
     try std.testing.expectEqual(@as(u64, 15_769), report.geomean_ebf_milli);
 }
 
@@ -91,7 +105,7 @@ test "bench repeats reset shared search state" {
     try std.testing.expectEqual(report.fingerprint_nodes, report.runs[1].nodes);
 }
 
-test "optimized safety and production modes preserve the accepted MAN-S29 fingerprint" {
+test "optimized safety and production modes preserve the accepted MAN-S36 fingerprint" {
     if (builtin.mode == .Debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
@@ -102,7 +116,12 @@ test "optimized safety and production modes preserve the accepted MAN-S29 finger
     var ordering: manta.search.ordering.State = .{};
     var control: manta.search.types.NeverStop = .{};
     var clock = IncrementingClock{};
-    const report = bench.run(
+    // This snapshot names the accepted production features explicitly, even
+    // when the executable under qualification selects the MAN-S31 arm.
+    // Artifact-selected bench behavior is checked separately by repeat tests
+    // and the prospectively frozen candidate report; do not relabel MAN-S30.
+    const report = bench.runWithFeatures(
+        .{},
         .{ .depth = bench.default_depth },
         &clock,
         &control,
@@ -111,9 +130,39 @@ test "optimized safety and production modes preserve the accepted MAN-S29 finger
         &ordering,
     );
     try std.testing.expect(!report.cancelled and !report.failed);
-    // This exact total was frozen only after MAN-S29 accepted H1. It is a
-    // diagnostic tree-shape contract, not the evidence that promoted it.
-    try std.testing.expectEqual(@as(u64, 799_610), report.fingerprint_nodes);
+    // MAN-S30 first moved this total from `799,610` to `775,451`, MAN-S35's
+    // complete mate windows moved it to `642,336`, and MAN-S36's coordinated
+    // selective-search core moved it to `359,259`. It is a diagnostic
+    // tree-shape contract, not the evidence that promoted any of them.
+    try std.testing.expectEqual(@as(u64, 359_259), report.fingerprint_nodes);
+}
+
+test "disabling the MAN-S36 core reconstructs the superseded MAN-S35 tree" {
+    if (builtin.mode == .Debug) return;
+    // MAN-S36 accepted H1 and became production, so its umbrella now runs the
+    // other way: switching it off must rebuild MAN-S35 exactly. That keeps the
+    // promoted package ablatable as a whole and preserves the causal ledger
+    // entry for the `642,336` to `359,259` change.
+    var hash = try manta.engine.runtime.HashResource.init(
+        std.testing.allocator,
+        bench.hash_bytes / (1024 * 1024),
+    );
+    defer hash.deinit(std.testing.allocator);
+    var thread = manta.search.types.ThreadState.init();
+    var ordering: manta.search.ordering.State = .{};
+    var control: manta.search.types.NeverStop = .{};
+    var clock = IncrementingClock{};
+    const report = bench.runWithFeatures(
+        .{ .selective_core = false },
+        .{ .depth = bench.default_depth },
+        &clock,
+        &control,
+        &thread,
+        &hash.table,
+        &ordering,
+    );
+    try std.testing.expect(!report.cancelled and !report.failed);
+    try std.testing.expectEqual(@as(u64, 642_336), report.fingerprint_nodes);
 }
 
 test "archived depth-authority cluster reproduces the MAN-S21 fingerprint" {
@@ -178,10 +227,13 @@ test "default-off candidate heads build and search" {
     }
 }
 
-test "MAN-R02 stability aspiration builds on current production parameters" {
+test "disabling MAN-S30 staging reconstructs the archived MAN-S29 fingerprint" {
     if (builtin.mode == .Debug) return;
-    // This exact total proves that the default-off candidate is live and
-    // buildable on MAN-S29, not that fewer nodes are speed or Elo.
+    // MAN-S30 accepted H1 and became production, so the switch now runs the
+    // other way: turning live-history staging off must still rebuild the
+    // superseded eager picker exactly on the unchanged MAN-S29 parameter head.
+    // That keeps the promoted mechanism independently ablatable and preserves
+    // the causal ledger entry for the `799,610` to `775,451` tree change.
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -192,7 +244,98 @@ test "MAN-R02 stability aspiration builds on current production parameters" {
     var control: manta.search.types.NeverStop = .{};
     var clock = IncrementingClock{};
     const report = bench.runWithFeatures(
-        .{ .aspiration = true },
+        .{ .live_history_staging = false, .mate_windows = false, .selective_core = false },
+        .{ .depth = bench.default_depth },
+        &clock,
+        &control,
+        &thread,
+        &hash.table,
+        &ordering,
+    );
+    try std.testing.expect(!report.cancelled and !report.failed);
+    try std.testing.expectEqual(@as(u64, 799_610), report.fingerprint_nodes);
+}
+
+test "disabling MAN-S35 mate windows reconstructs the superseded MAN-S34 tree" {
+    if (builtin.mode == .Debug) return;
+    // MAN-S35's switch runs the other way from its promotion: turning the
+    // complete clip off, on the pre-core head, must rebuild MAN-S34 exactly. That
+    // keeps the promoted mechanism independently ablatable and preserves the
+    // causal ledger entry for the `775,451` to `642,336` change. The saving is
+    // concentrated in the corpus positions holding a proven mate, so neither
+    // figure is a general node-efficiency claim.
+    var hash = try manta.engine.runtime.HashResource.init(
+        std.testing.allocator,
+        bench.hash_bytes / (1024 * 1024),
+    );
+    defer hash.deinit(std.testing.allocator);
+    var thread = manta.search.types.ThreadState.init();
+    var ordering: manta.search.ordering.State = .{};
+    var control: manta.search.types.NeverStop = .{};
+    var clock = IncrementingClock{};
+    const report = bench.runWithFeatures(
+        .{ .mate_windows = false, .selective_core = false },
+        .{ .depth = bench.default_depth },
+        &clock,
+        &control,
+        &thread,
+        &hash.table,
+        &ordering,
+    );
+    try std.testing.expect(!report.cancelled and !report.failed);
+    try std.testing.expectEqual(@as(u64, 775_451), report.fingerprint_nodes);
+}
+
+test "MAN-S33 singular exclusion horizon builds on the current production head" {
+    if (builtin.mode == .Debug) return;
+    // SCORE-011/QUAL-015: this frozen diagnostic proves the default-off switch
+    // selects the qualified candidate tree on MAN-S30. It is not strength
+    // evidence; only the prospectively registered time-controlled games decide
+    // whether the changed singular decisions are useful. Step 6.5.10.1 changed
+    // production after MAN-S33 was stopped, so mate windows stay off here
+    // rather than re-recording an unpromoted candidate on a head it was never
+    // measured against.
+    var hash = try manta.engine.runtime.HashResource.init(
+        std.testing.allocator,
+        bench.hash_bytes / (1024 * 1024),
+    );
+    defer hash.deinit(std.testing.allocator);
+    var thread = manta.search.types.ThreadState.init();
+    var ordering: manta.search.ordering.State = .{};
+    var control: manta.search.types.NeverStop = .{};
+    var clock = IncrementingClock{};
+    const report = bench.runWithFeatures(
+        .{ .singular_exclusion_horizon = true, .mate_windows = false, .selective_core = false },
+        .{ .depth = bench.default_depth },
+        &clock,
+        &control,
+        &thread,
+        &hash.table,
+        &ordering,
+    );
+    try std.testing.expect(!report.cancelled and !report.failed);
+    try std.testing.expectEqual(@as(u64, 773_779), report.fingerprint_nodes);
+}
+
+test "MAN-R02 stability aspiration builds on the MAN-S29 picker it was qualified under" {
+    if (builtin.mode == .Debug) return;
+    // This exact total proves that the default-off candidate is live and
+    // buildable on MAN-S29, not that fewer nodes are speed or Elo. Step 6.5.1b
+    // changed the production picker and Step 6.5.10.1 the mate windows after
+    // MAN-R02 was archived, so both switches stay off here rather than
+    // re-recording a rejected candidate's total on a head it was never
+    // measured against.
+    var hash = try manta.engine.runtime.HashResource.init(
+        std.testing.allocator,
+        bench.hash_bytes / (1024 * 1024),
+    );
+    defer hash.deinit(std.testing.allocator);
+    var thread = manta.search.types.ThreadState.init();
+    var ordering: manta.search.ordering.State = .{};
+    var control: manta.search.types.NeverStop = .{};
+    var clock = IncrementingClock{};
+    const report = bench.runWithFeatures(
+        .{ .aspiration = true, .live_history_staging = false, .mate_windows = false, .selective_core = false },
         .{ .depth = bench.default_depth },
         &clock,
         &control,

@@ -48,6 +48,10 @@
     -StabilityAspiration enables the default-off Step-6.0.3 stability-gated
     aspiration candidate. It changes no UCI surface.
 
+    The accepted Step-6.5.1b live-history staged picker is the production
+    default. -LiveHistoryStaging:$false reconstructs the superseded MAN-S29
+    eager picker for archived diagnostics. It changes no UCI surface.
+
     By default the build is smoke-tested before the manifest is written: the
     freshly built binary runs `bench` and must report a positive node count, so
     a broken build fails here rather than 3 hours into an SPRT. `-BuildOnly`
@@ -89,6 +93,30 @@
 .PARAMETER StabilityAspiration
     Build the Step-6.0.3 stability-gated aspiration candidate arm.
 
+.PARAMETER LiveHistoryStaging
+    Select the Step-6.5.1b live-history staged picker explicitly. It defaults
+    on; pass -LiveHistoryStaging:$false only for an archived reconstruction.
+
+.PARAMETER NonrootCheckExtension
+    Keep production non-root check extension. Pass
+    -NonrootCheckExtension:$false for the archived MAN-S31 candidate.
+
+.PARAMETER MateWindows
+    Keep the accepted Step-6.5.10.1 MAN-S35 mate windows. Pass
+    -MateWindows:$false to reconstruct the superseded MAN-S32 tree.
+
+.PARAMETER SelectiveCore
+    Keep the accepted Step-6.5.10 MAN-S36 selective-search core. Pass
+    -SelectiveCore:$false to reconstruct the superseded MAN-S35 tree.
+
+.PARAMETER SingularExclusionHorizon
+    Build the default-off Step-6.5.5 singular-exclusion-horizon candidate arm.
+    It changes only the depth of the same-position exclusion probe.
+
+.PARAMETER QsearchTacticalGeneration
+    Keep the accepted Step-6.5.7 tactical-only non-check qsearch path. It
+    defaults on; pass -QsearchTacticalGeneration:$false to reconstruct MAN-S30.
+
 .PARAMETER BenchDepth
     Depth for the verification bench. Default 6 (the manta-search-bench-v1
     default). Lower it for a quicker smoke test; the node count is only a
@@ -124,6 +152,12 @@ param(
     [switch]$RootConfidenceTime,
     [switch]$IntegratedTime,
     [switch]$StabilityAspiration,
+    [switch]$LiveHistoryStaging,
+    [switch]$NonrootCheckExtension,
+    [switch]$MateWindows,
+    [switch]$SelectiveCore,
+    [switch]$SingularExclusionHorizon,
+    [switch]$QsearchTacticalGeneration,
     [switch]$BuildOnly,
     [int]$BenchDepth = 6,
     [string]$TestEnginesDir = "$PSScriptRoot\test_engines",
@@ -138,8 +172,36 @@ $integratedTimeEnabled = if ($PSBoundParameters.ContainsKey("IntegratedTime")) {
 } else {
     $true
 }
+$liveHistoryStagingEnabled = if ($PSBoundParameters.ContainsKey("LiveHistoryStaging")) {
+    [bool]$LiveHistoryStaging
+} else {
+    $true
+}
+$qsearchTacticalGenerationEnabled = if ($PSBoundParameters.ContainsKey("QsearchTacticalGeneration")) {
+    [bool]$QsearchTacticalGeneration
+} else {
+    $true
+}
 
 if ($BenchDepth -lt 1) { throw "-BenchDepth must be positive." }
+
+$nonrootCheckExtensionEnabled = if ($PSBoundParameters.ContainsKey("NonrootCheckExtension")) {
+    [bool]$NonrootCheckExtension
+} else {
+    $true
+}
+
+$selectiveCoreEnabled = if ($PSBoundParameters.ContainsKey("SelectiveCore")) {
+    [bool]$SelectiveCore
+} else {
+    $true
+}
+
+$mateWindowsEnabled = if ($PSBoundParameters.ContainsKey("MateWindows")) {
+    [bool]$MateWindows
+} else {
+    $true
+}
 
 # Manta's bench holds the job until it completes, and both `quit` and EOF
 # cancel it (docs/UCI.md §4.2). Piping "bench`nquit" therefore returns nothing.
@@ -170,6 +232,12 @@ function Write-EngineManifest {
         [Parameter(Mandatory)][bool]$RootConfidenceTime,
         [Parameter(Mandatory)][bool]$IntegratedTime,
         [Parameter(Mandatory)][bool]$StabilityAspiration,
+        [Parameter(Mandatory)][bool]$LiveHistoryStaging,
+        [Parameter(Mandatory)][bool]$NonrootCheckExtension,
+        [Parameter(Mandatory)][bool]$MateWindows,
+        [Parameter(Mandatory)][bool]$SelectiveCore,
+        [Parameter(Mandatory)][bool]$SingularExclusionHorizon,
+        [Parameter(Mandatory)][bool]$QsearchTacticalGeneration,
         [switch]$SkipBench
     )
 
@@ -186,7 +254,7 @@ function Write-EngineManifest {
     if (-not $SkipBench) {
         Write-Host "Verifying bench fingerprint of $([IO.Path]::GetFileName($BinaryPath)) (depth $Depth) ..."
         $benchLine = Invoke-MantaBench -BinaryPath $BinaryPath -Depth $Depth
-        if ($benchLine -notmatch '\bnodes\s+(?<nodes>\d+)') {
+        if ($benchLine -notmatch 'Nodes searched\s*:\s*(?<nodes>\d+)') {
             throw "Could not parse a bench node count from '$benchLine' - refusing to write a manifest for an unverified engine."
         }
         $nodes = [int64]$Matches['nodes']
@@ -194,7 +262,7 @@ function Write-EngineManifest {
     }
 
     $manifest = [ordered]@{
-        schema_version     = 6
+        schema_version     = 9
         engine             = $binary.Name
         binary_sha256      = $binaryHash
         binary_size_bytes  = $binary.Length
@@ -208,6 +276,12 @@ function Write-EngineManifest {
         root_confidence_time = $RootConfidenceTime
         integrated_time     = $IntegratedTime
         stability_aspiration = $StabilityAspiration
+        live_history_staging = $LiveHistoryStaging
+        nonroot_check_extension = $NonrootCheckExtension
+        mate_windows = $MateWindows
+        selective_core = $SelectiveCore
+        singular_exclusion_horizon = $SingularExclusionHorizon
+        qsearch_tactical_generation = $QsearchTacticalGeneration
         search_spsa_bake    = $false
         git_sha            = $sha
         git_tree           = $tree
@@ -251,7 +325,18 @@ try {
     $integratedTimeText = $integratedTimeEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dintegrated-time=$integratedTimeText"
     if ($StabilityAspiration) { $buildArgs += "-Dstability-aspiration=true" }
-    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })"
+    $liveHistoryStagingText = $liveHistoryStagingEnabled.ToString().ToLowerInvariant()
+    $buildArgs += "-Dlive-history-staging=$liveHistoryStagingText"
+    $nonrootCheckExtensionText = $nonrootCheckExtensionEnabled.ToString().ToLowerInvariant()
+    $buildArgs += "-Dnonroot-check-extension=$nonrootCheckExtensionText"
+    $mateWindowsText = $mateWindowsEnabled.ToString().ToLowerInvariant()
+    $buildArgs += "-Dmate-windows=$mateWindowsText"
+    $selectiveCoreText = $selectiveCoreEnabled.ToString().ToLowerInvariant()
+    $buildArgs += "-Dselective-core=$selectiveCoreText"
+    if ($SingularExclusionHorizon) { $buildArgs += "-Dsingular-exclusion-horizon=true" }
+    $qsearchTacticalGenerationText = $qsearchTacticalGenerationEnabled.ToString().ToLowerInvariant()
+    $buildArgs += "-Dqsearch-tactical-generation=$qsearchTacticalGenerationText"
+    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($mateWindowsEnabled) { '' } else { '-crossing-mate-test' })$(if ($selectiveCoreEnabled) { '' } else { '-no-selective-core' })$(if ($SingularExclusionHorizon) { '-singular-exclusion-horizon' } else { '' })$(if ($qsearchTacticalGenerationEnabled) { '-qsearch-tacticals' } else { '-full-qsearch-generation' })"
 
     Write-Host ""
     Write-Host "Building Manta ($flavor) - suffix: $Suffix"
@@ -283,7 +368,13 @@ try {
         -CorrectionHistory ([bool]$CorrectionHistory) -Tune ([bool]$Tune) `
         -RootConfidenceTime ([bool]$RootConfidenceTime) `
         -IntegratedTime $integratedTimeEnabled `
-        -StabilityAspiration ([bool]$StabilityAspiration) -SkipBench:$BuildOnly
+        -StabilityAspiration ([bool]$StabilityAspiration) `
+        -LiveHistoryStaging $liveHistoryStagingEnabled `
+        -NonrootCheckExtension $nonrootCheckExtensionEnabled `
+        -MateWindows $mateWindowsEnabled `
+        -SelectiveCore $selectiveCoreEnabled `
+        -SingularExclusionHorizon ([bool]$SingularExclusionHorizon) `
+        -QsearchTacticalGeneration $qsearchTacticalGenerationEnabled -SkipBench:$BuildOnly
     Write-Host ""
     Write-Host "Done: $dest"
     Write-Host ""

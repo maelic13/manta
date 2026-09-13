@@ -219,13 +219,14 @@ The control mailbox is bounded. Ordinary commands preserve FIFO order and may
 apply backpressure while the independently running controller drains them.
 Urgent stop/quit/ponder state is published immediately through `EngineControl`
 with the active search epoch once its line is read. The output mailbox may
-coalesce obsolete search info. Its offer operation never blocks the controller:
-if a completion cannot transfer immediately, the controller retains it as its
-single pending critical event, does not start another search, continues to
-service commands/control and retries after presenter progress. Completion is
-therefore bounded and non-droppable without making stdout part of controller
-progress. Concrete mailbox primitives and capacities are Phase-1 decisions
-verified by process tests.
+coalesce or drop obsolete search info. Required lines apply bounded
+backpressure to the controller, but never to a search worker; the input task
+still applies urgent epoch-scoped stop/quit state immediately, and shutdown
+closes the output queue to release a waiting controller. A completed result
+remains in its single joined slot until its required output transfers, and the
+controller does not start another search first. Completion is therefore
+bounded and non-droppable. Concrete mailbox primitives and capacities are
+Phase-1 decisions verified by process tests.
 
 The worker return path is also bounded. Progress snapshots may be overwritten
 or coalesced, while each active worker/job has one owned completion slot or an
@@ -240,10 +241,19 @@ Phase 1 fixes both the command and output mailboxes at 64 records. A formatted
 output record is at most 4,096 bytes, while an input command is derived from a
 line of at most 65,536 bytes and retains only bounded parsed/sanitized fields.
 The shell uses separate Zig `std.Io` input, controller and presenter tasks. Its
-output offer never waits: saturation closes the session instead of stalling
-control. Step 6.1 adds one worker-to-controller coalesced progress slot and a
-separate joined completion result; completion and required `bestmove` are never
-stored in the droppable slot. The fixed mailbox capacities are unchanged.
+live root-move progress offer never waits and may be dropped when the presenter
+queue is full. Required protocol lines, including completed-iteration lines,
+wait for bounded presenter capacity; urgent stop/quit state is still applied
+independently by the input task, and shutdown waits a bounded interval for the
+controller before cancelling it, so a producer blocked behind a stalled reader
+is released. Both standard streams are opened in the inherited handle's I/O
+mode, queried at startup on Windows, because the threaded I/O has separate
+synchronous and asynchronous paths and a mismatch is unrecoverable inside the
+standard library. Step 6.1 adds a worker-to-controller progress slot and a
+separate joined completion result; completion and required `bestmove` are never stored
+in it. Root moves coalesce in one slot, while completed iterations queue in a
+fixed ring in arrival order, dropping the oldest on overflow. The fixed mailbox
+capacities are unchanged.
 
 ## 5. Ownership and lifetimes
 
@@ -438,6 +448,31 @@ interchangeable merely because each carries an integer. The implementation may
 use compact tagged values, compile-time node modes or proven local invariants;
 it shall not pay for a large runtime object at every node.
 
+Step 6.5.8's [ADR-0070](docs/adr/0070-shared-search-evidence-and-depth.md)
+freezes the future shared node/move depth plan and outcome-authority boundary.
+Board legality and raw evaluation remain inward producers; worker-local search
+owns contextual facts, prospective depth, verification and feedback. Root
+publication and the shared TT retain their separate authority. Step 6.5.9 now
+implements exact `StaticFacts`, `TtFacts`, `WindowFacts`, `MoveFacts`, `HistoryFacts`,
+`NodeDepthPlan`, `MoveDepthPlan` and scoped `SearchOutcome` adapters. The
+`search-evidence-observation` build selector defaults off; its zero-sized
+production state and every update branch are removed at compile time. When
+enabled, bounded worker-local storage retains last facts, aggregate counts and
+paired outcome/support samples under existing ordering relation keys. No
+production ordering, depth, history update, TT/PV or root-publication path
+consumes them. Each completed main and qsearch return carries one
+observation-only certificate: established producer, actually searched horizon,
+restrictive scope, verification state, inherited omission and whether any
+sibling was searched only as a reduced probe. The returned bound decides which
+certificate applies: a fail-high or exact result is certified by its winning
+move, a fail-low by the conservative aggregate across searched siblings, while
+restrictive scope and omission stay aggregated in every case. A restriction
+survives negation and recursive return, and shadow admission can refuse
+reduced, restricted or non-searched evidence. Three Astra reviews each produced
+a bounded repair whose functional and deterministic parity gates pass, and the
+fourth accepted the authority and lifetime boundaries, closing Step 6.5.9.
+Later consumers need separately approved implementation and playing gates.
+
 The Step-4.0 baseline realizes the single-worker subset with a borrowed root,
 concrete evaluator binding, injected stop policy and caller-owned `ThreadState`.
 That state holds reversible position slots, fixed-capacity PV rows, node count,
@@ -604,6 +639,25 @@ evidence. Checks, immediate prior nulls, non-ordinary beta values and positions
 without side-to-move non-pawn material are excluded. ADR-0022 is accepted:
 `MAN-S03` passed its registered zero-anomaly `[3,10]` time-based gate and this
 verified-null mechanism is retained architecture.
+
+ADR-0066/`MAN-S31` exposes the Step-6.5.3 default-off interior check-extension
+ablation through `-Dnonroot-check-extension=false`. It gates only the existing
+checker-to-depth increment at non-root nodes; checked-root extension, legal
+evasion generation, in-check qsearch and bound/provenance ownership remain
+unchanged. Runtime, bench and diagnostic entry points select the same
+compile-time arm. No new state, allocation or cross-worker communication is
+introduced. MAN-S31 was rejected by maintainer judgment without anomaly, so
+production keeps blanket extension and the remaining check/evasion relation is
+owned by Step 6.5.4.
+
+ADR-0067/`MAN-S33` exposes a default-off singular-exclusion-horizon candidate
+through `-Dsingular-exclusion-horizon=true`. It changes only the same-position
+probe from the accepted depth-minus-two horizon to a monotonic half-depth
+horizon with at least three searched plies. The legal ordinary TT move and its
+threshold still produce the question; the exclusion fail-low alone grants the
+extension. Exclusion state, null disablement, TT/PV/history isolation, board and
+observer restoration, allocation behavior and worker ownership are unchanged.
+Its material ordinary-position tree change requires an independent 1T SPRT.
 
 The accepted ADR-0023/`MAN-S04` mechanism gives the fourth and later
 ordered quiet non-checking moves at depth four or greater a one-ply-reduced
@@ -798,6 +852,32 @@ nonduplicating selection boundary. Equal-ranked moves retain generation order;
 search without heuristic state retains generation order entirely. Main,
 qsearch and ProbCut consume the same substrate, but neither node expectation
 nor stage label controls pruning, reduction, extension or TT storage yet.
+
+Step 6.5.1a retained this eager rank snapshot and rejected only the exact
+staged-generation formulation. A genuinely lazy quiet stage observed descendant
+worker-local history mutations and changed the production depth-six fingerprint
+from `799,610` to `775,451`; ranking quiets before the first child restored
+identity but eliminated the intended saved work. The prototype was removed.
+Step 6.5.1b reconstructs live-history staging behind the accepted default-on
+`live_history_staging` feature and `-Dlive-history-staging` artifact switch.
+Ordinary non-root, non-check, non-exclusion nodes generate the exact tactical
+subset first; after no TT or good tactical move remains, the same bounded list
+receives exact non-tactical quiets and ranks them from then-current worker-local
+history. Root, check-evasion and exclusion paths retain eager generation. The
+mechanism repeats deterministically at fingerprint `775,451`, which registered
+remote-host `MAN-S30` promoted to production after accepting H1 at
+`+13.19 +/- 7.28` nElo. Disabling the switch reconstructs the superseded eager
+picker at `799,610`.
+
+Step 6.5.2 extends that observer without changing any search decision. Every
+visited node is charged to the innermost speculative context on its path, which
+partitions the tree exactly, and to each enclosing context, which measures what
+a mechanism's subtrees actually cost. Exclusion search re-enters its own ply, so
+it saves and restores the observer's per-ply path facts exactly as it already
+saves the ply context. Transposition lookups and stores gain exact outcome
+partitions and in-check and extension runs gain chain histograms.
+`tt.Table.store` returns which replacement branch it took; the value is
+diagnostic and cannot change a stored record.
 
 Accepted ADR-0036 adds one independently ablatable dynamic base-LMR consumer.
 Eligibility remains the accepted late quiet, non-checking, non-singular scope.
@@ -1067,7 +1147,6 @@ baseline sizes and performance, then turns approved budgets into assertions.
 
 The following remain open until their evidence phase:
 
-- staged move-generation shape and any evidence-led layout-budget revision;
 - additional sliding-attack backends and retained backend selection;
 - TT cluster packing, replacement constants and optional 1T storage policy;
 - mailbox primitive and scheduling implementation;
@@ -1081,6 +1160,14 @@ Deferral is intentional: the architecture provides ownership and test seams
 without pretending that unmeasured low-level choices are already known.
 
 ## 18. Decision index
+
+The pre-NNUE board/search roadmap in
+[ADR-0068](docs/adr/0068-board-backbone-integrated-search-roadmap.md) preserves
+the existing dependency graph. Board facts remain position-owned; ordering,
+outcome evidence and prospective depth remain worker-local search policy;
+raw evaluation and completed-root publication keep their existing owners.
+New consumers must share those contracts rather than introduce parallel depth,
+history or evaluation authority. Concrete changes still need their owning ADR.
 
 The accepted decisions are indexed in [docs/adr/README.md](docs/adr/README.md).
 The Phase-0.3 exit verdict is recorded in `PLAN.md`. Later changes supersede an

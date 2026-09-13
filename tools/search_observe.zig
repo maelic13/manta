@@ -66,6 +66,18 @@ fn observe(
         .{
             .correction_history = search_build_options.correction_history,
             .aspiration = search_build_options.stability_aspiration,
+            .live_history_staging = search_build_options.live_history_staging,
+            .nonroot_check_extension = search_build_options.nonroot_check_extension,
+            .mate_windows = search_build_options.mate_windows,
+            .selective_core = search_build_options.selective_core,
+            .core_history = search_build_options.core_history,
+            .core_lmr = search_build_options.core_lmr,
+            .core_move_pruning = search_build_options.core_move_pruning,
+            .core_node_pruning = search_build_options.core_node_pruning,
+            .core_aspiration = search_build_options.core_aspiration,
+            .core_qs_checks = search_build_options.core_qs_checks,
+            .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
+            .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
         },
         &position,
         harness.binding(),
@@ -99,6 +111,16 @@ fn validate(
         return error.NodeTypeAccounting;
     if (counters.searched_main_moves + counters.searched_quiescence_moves != sum(counters.searched_by_source))
         return error.MoveSourceAccounting;
+    if (comptime search_build_options.live_history_staging) {
+        if (counters.live_history_quiet_stages > counters.live_history_staged_nodes)
+            return error.LiveHistoryStageAccounting;
+    } else if (counters.live_history_staged_nodes != 0 or
+        counters.live_history_tacticals_generated != 0 or
+        counters.live_history_quiet_stages != 0 or
+        counters.live_history_quiets_generated != 0)
+    {
+        return error.LiveHistoryStageAccounting;
+    }
     if (counters.main_cutoffs + counters.quiescence_cutoffs != sum(counters.fail_high_by_index) or
         counters.main_cutoffs + counters.quiescence_cutoffs != sum(counters.cutoffs_by_source))
     {
@@ -177,6 +199,36 @@ fn validate(
             counters.capture_futility_candidates)
     {
         return error.ShallowSelectivityAccounting;
+    }
+    // Step 6.5.2: the whole-tree charge is an exact partition of the visited
+    // tree, and both chain histograms must account for every node that was
+    // actually in check or actually extended. A charge that leaks nodes would
+    // silently misattribute the cost of one mechanism to another.
+    var charge_index: usize = 0;
+    while (charge_index < counters.nodes_by_charge.len) : (charge_index += 1) {
+        if (counters.nodes_under_charge[charge_index] < counters.nodes_by_charge[charge_index])
+            return error.AttributionAccounting;
+    }
+    if (sum(counters.nodes_by_charge) != counters.context_nodes or
+        counters.nodes_under_charge[@intFromEnum(search.diagnostics.WorkCharge.ordinary)] !=
+            counters.nodes_by_charge[@intFromEnum(search.diagnostics.WorkCharge.ordinary)] or
+        sum(counters.check_chain_lengths) != counters.context_in_check or
+        sum(counters.extension_chain_lengths) != counters.extended_depth_intents or
+        (counters.context_in_check == 0) != (counters.check_chain_max == 0) or
+        (counters.extended_depth_intents == 0) != (counters.extension_chain_max == 0))
+    {
+        return error.AttributionAccounting;
+    }
+    const lookup_outcomes = counters.tt_lookups_by_outcome;
+    const authenticated = lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.depth_rejected)] +
+        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.bound_rejected)] +
+        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.usable)];
+    if (authenticated != sum(counters.tt_probes_by_bound) or
+        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.usable)] !=
+            sum(counters.tt_usable_by_bound) or
+        sum(counters.tt_stores_by_outcome) != sum(counters.tt_stores_by_bound))
+    {
+        return error.TableLookupAccounting;
     }
     if (counters.context_nodes != result.nodes or counters.outcomes != result.nodes or
         sum(counters.context_by_route) != counters.context_nodes or
@@ -287,6 +339,18 @@ fn compareDisabled(
         .{
             .correction_history = search_build_options.correction_history,
             .aspiration = search_build_options.stability_aspiration,
+            .live_history_staging = search_build_options.live_history_staging,
+            .nonroot_check_extension = search_build_options.nonroot_check_extension,
+            .mate_windows = search_build_options.mate_windows,
+            .selective_core = search_build_options.selective_core,
+            .core_history = search_build_options.core_history,
+            .core_lmr = search_build_options.core_lmr,
+            .core_move_pruning = search_build_options.core_move_pruning,
+            .core_node_pruning = search_build_options.core_node_pruning,
+            .core_aspiration = search_build_options.core_aspiration,
+            .core_qs_checks = search_build_options.core_qs_checks,
+            .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
+            .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
         },
         &position,
         harness.binding(),
@@ -370,6 +434,10 @@ fn printRecord(case: search.observation.Case, record: Record) void {
     printEnumCounts(search.diagnostics.PruneCause, "prunes", record.counters.prunes_by_cause);
     printEnumCounts(search.diagnostics.ExtensionCause, "extensions", record.counters.extensions_by_cause);
     printEnumCounts(search.types.EntryRoute, "routes", record.counters.context_by_route);
+    printEnumCounts(search.diagnostics.WorkCharge, "charged_nodes", record.counters.nodes_by_charge);
+    printEnumCounts(search.diagnostics.WorkCharge, "nodes_under", record.counters.nodes_under_charge);
+    printEnumCounts(search.diagnostics.TableLookup, "tt_lookups", record.counters.tt_lookups_by_outcome);
+    printEnumCounts(search.tt.StoreOutcome, "tt_store_outcomes", record.counters.tt_stores_by_outcome);
     printEnumCounts(search.types.Arrival, "arrivals", record.counters.context_by_arrival);
     printEnumCounts(
         search.types.NodeExpectation,
@@ -397,6 +465,8 @@ fn printRecord(case: search.observation.Case, record: Record) void {
             record.counters.context_searched_depth,
         },
     );
+    printBuckets("check_chain", record.counters.check_chain_max, record.counters.check_chain_lengths);
+    printBuckets("extension_chain", record.counters.extension_chain_max, record.counters.extension_chain_lengths);
     std.debug.print(
         "mechanisms null={d}/{d}/{d}/{d} lmr={d}/{d}/{d}/{d} lmr_depth={d}/{d}/{d} history={d}/{d}/{d}/{d} tt_move={d}/{d}\n",
         .{
@@ -417,6 +487,15 @@ fn printRecord(case: search.observation.Case, record: Record) void {
             record.counters.history_penalty_depth,
             record.counters.tt_move_best,
             record.counters.tt_move_available,
+        },
+    );
+    std.debug.print(
+        "live_history_staging nodes={d} tacticals={d} quiet_stages={d} quiets={d}\n",
+        .{
+            record.counters.live_history_staged_nodes,
+            record.counters.live_history_tacticals_generated,
+            record.counters.live_history_quiet_stages,
+            record.counters.live_history_quiets_generated,
         },
     );
     std.debug.print(
@@ -552,6 +631,19 @@ fn printRecord(case: search.observation.Case, record: Record) void {
     );
 }
 
+/// Chain lengths are an open-ended histogram: bucket `i` counts runs of
+/// exactly `i + 1`, and the last bucket absorbs everything longer.
+fn printBuckets(label: []const u8, longest: u16, values: [search.diagnostics.max_chain_bucket]u64) void {
+    std.debug.print("{s} max={d}", .{ label, longest });
+    for (values, 1..) |count, length| {
+        if (length == values.len)
+            std.debug.print(" {d}+={d}", .{ length, count })
+        else
+            std.debug.print(" {d}={d}", .{ length, count });
+    }
+    std.debug.print("\n", .{});
+}
+
 fn printEnumCounts(comptime Enum: type, label: []const u8, values: anytype) void {
     std.debug.print("{s}", .{label});
     inline for (@typeInfo(Enum).@"enum".fields, 0..) |field, index|
@@ -562,6 +654,18 @@ fn printEnumCounts(comptime Enum: type, label: []const u8, values: anytype) void
 test "fixed observation suite has complete behavior-neutral accounting" {
     // PERF-006/QUAL-013: the offline observer must describe every searched
     // move and cutoff without changing legal root/PV evidence or node work.
+    //
+    // This suite is a contract about the MAN-S35 configuration, in both
+    // directions: every stage it accepted must be reached on the fixed twelve
+    // cases, and every rejected or default-off candidate must stay silent.
+    // Neither half describes the Step-6.5.10 core, which is now production and
+    // deliberately changes internal iterative reduction, adds a root window
+    // and narrows the tree far enough that a stage like a verified ProbCut need
+    // not appear in twelve fixed cases. The suite therefore runs only with
+    // `-Dselective-core=false`; the core's own accounting is asserted by the
+    // substrate tests. Re-deriving these expectations for the core is review
+    // work, and weakening them here would only hide that it has not been done.
+    if (search_build_options.selective_core) return error.SkipZigTest;
     var hash = try manta.engine.runtime.HashResource.init(std.testing.allocator, 1);
     defer hash.deinit(std.testing.allocator);
     var thread = search.types.ThreadState.init();

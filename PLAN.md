@@ -7,14 +7,21 @@ measurement verdicts.
 
 ## Current state
 
-Manta 1.0.0 is the release candidate. Phases 0–6 are closed and Phase 7 has not
-started. The production engine combines MAN-E19 classical evaluation, MAN-S29
-search parameters and MAN-T05 integrated clock parameters. One-thread depth-6
-bench is `799,610` nodes. The release configuration supports portable 64-bit
-Windows x86-64, Linux x86-64/ARM64 and macOS x86-64/ARM64 artifacts.
+Manta 1.1.0, released 2026-09-13, is the release baseline. Phases 0–6 are
+closed, targeted pre-NNUE performance Phase 6.5 is paused at that release with
+6.5.11 to 6.5.14 open, and Phase 7 has not started. Phase 7 remains
+blocked until all of Phase 6.5, including every retained candidate and evidence
+closeout below, is complete. The production
+engine combines MAN-E19 classical evaluation, MAN-S29 search parameters,
+MAN-T05 integrated clock parameters, MAN-S30 live-history move ordering,
+MAN-S34 tactical-only non-check qsearch generation, MAN-S35 complete mate
+windows and the MAN-S36 coordinated selective-search core.
+One-thread depth-6 bench is `359,259` nodes. The release configuration supports portable 64-bit Windows x86-64,
+Linux x86-64/ARM64 and macOS x86-64/ARM64 artifacts.
 
-No coding agent may start Phase 7, a game match, SPSA, data generation or other
-long run without explicit maintainer approval.
+No coding agent may start a Phase-6.5 implementation step, Phase 7, a game
+match, SPSA, data generation or other long run without explicit maintainer
+approval.
 
 ## Engineering and evidence contracts
 
@@ -51,8 +58,14 @@ long run without explicit maintainer approval.
   strength measurement.
 - Fixed-work and throughput measurements diagnose cost, scaling and quality per
   node but do not promote playing changes.
-- Once tournament-capable, one prospectively registered representative SPRT
-  decides a playing candidate. H1 promotes; H0 or an unresolved cap rejects.
+- A candidate claiming exact behavior must reproduce the accepted fingerprint,
+  PV and results. A mismatch requires a causal record and reclassifies a legal,
+  deterministic candidate as playing behavior; it does not reject it for
+  strength.
+- Once tournament-capable, every retained production-executable candidate,
+  including exact speed work, receives one prospectively registered,
+  representative SPRT. H1 promotes; H0 rejects and an unresolved cap does not
+  promote. Documentation, tests and disabled diagnostics require no games.
 - A cohesive bundle may be gated only when its parts are inseparable or below
   affordable independent resolution. Its result licenses only the bundle.
 - SPSA begins only after consumers freeze and a sensitivity pilot justifies the
@@ -63,8 +76,22 @@ long run without explicit maintainer approval.
 - Use exactly Zig 0.16.0 until a separately approved stable-toolchain migration.
 - Use Manta's checked fastchess bridge for matches and its pinned local Weather
   Factory wrapper for SPSA. Colosseum is parked until explicitly re-enabled.
-- The game/tuning host is one Ryzen 9 5950X. Agents prepare bounded resumable
-  commands and estimates; the maintainer starts long jobs.
+- Development, implementation and local diagnostics occur on the current
+  workspace computer. Authoritative games, tuning and final cross-engine
+  timings run on the separate designated Ryzen 9 5950X.
+- Agents prepare candidate and baseline from exact source identities with the
+  same Zig version, target and build options. A remote handoff records source
+  revision/tree or archive hash, binary SHA-256, feature switches, benchmark
+  fingerprint, runner/book hashes and the complete setup-only command.
+- The maintainer runs setup validation and the registered resumable job on the
+  designated host, then returns the manifest, log, PGN and checkpoint for
+  verification. Require a fresh bounded pilot only when a changed engine/
+  protocol, clock, runner, host, placement, book or adjudication boundary needs
+  qualification. Agents do not start long jobs on either host.
+- The checked fastchess SPRT harness is trusted from battle-tested Rarog and
+  Basilisk use. An ordinary Manta search candidate with unchanged operational
+  boundaries proceeds directly from setup-only validation to its final SPRT;
+  do not insert a candidate-specific pilot.
 - Do not overlap games, tuning or data generation on that host.
 
 ### Release policy
@@ -172,7 +199,11 @@ Closed with real search limits, cancellation and publication wired to UCI.
 
 #### 4.3 — Bench and test suites
 
-Closed with deterministic bench and full correctness/safety/process gates.
+Closed with deterministic bench and full correctness/safety/process gates. The
+2026-09-09 presentation alignment uses Rarog's `bench [depth] [repeats]`
+argument order, per-position fields and aggregate layout over the already
+identical forty-position corpus. Manta retains its depth-six default and exact
+`775,451` production fingerprint; only the diagnostic interface changed.
 
 #### 4.4 — Experiment tooling
 
@@ -239,6 +270,2510 @@ without anomaly. It establishes a material integrated release gain, not a
 precise rating or attribution to time, UCI or SMP individually.
 
 ## Open roadmap
+
+### Phase 6.5 — Board backbone and integrated search maturity
+
+Replanned on 2026-09-08 by maintainer request after MAN-S31 and the stopped
+MAN-S33 attempt. ADR-0068 supersedes the old open-step sequence; completed
+6.5.0–6.5.3 keep their historical numbers. Production remains MAN-S30 at
+`775,451`. This is implementation guidance, not permission to start engines,
+jobs, tuning or Phase 7.
+
+There are two independent delivery objectives. Neither may hide failure of the
+other, and neither is a substitute for playing strength:
+
+| Objective | Frozen comparison and exit target |
+|---|---|
+| Board backbone | On the idle designated 5950X, native optimized builds, identical `cross-engine-board-v1` inputs/work counts and SEE semantics: geometric mean of Manta/Basilisk throughput ratios across all six cells at least `1.00`, with no cell below `0.95`. Report every cell, not just the aggregate. These are maintainer-request-derived planning targets, not achieved measurements. |
+| Mature search | Revised 2026-09-12 by maintainer direction: the reference is the pinned final pre-NNUE Stockfish (`9587eeeb`), not the maintainer's own engines. Same immutable forty positions, 1T, Hash 64 MiB, fresh-process/reset policy: geometric branching over depths 4 to 12 at most `1.98` against the reference's host-measured value, depth-12 total elapsed at most `4x` the reference, ordinary and mate cohorts reported separately and both retained. Separately require routine `bench 13 1` (Hash 1 MiB) within 30 seconds. Historical Basilisk depth-13 figures remain recorded under 6.5.4 as diagnostics. |
+| Strength and safety | Legal results, correct terminal/draw/bound authority, unchanged hard time safety, each retained candidate's registered 1T H1, then cumulative H1 against immutable Manta 1.0.0. No inferred 4T strength improvement. |
+
+Step 6.5.4 binds reference revisions, tolerances, timing protocol and the
+absolute routine-bench limit before implementation measurements. Do not move a
+target after seeing a result. A failed target means an open deficit or explicit
+maintainer scope revision, not a completed phase because all ideas were tried.
+Native compiler/ISA capability must be comparable, not identical compiler brands.
+Board moves/s, perft nodes/s, full-search NPS, searched nodes and elapsed time
+are separate quantities. Fewer cheap nodes can lower NPS while saving time;
+removing useful search can shrink nodes without saving strength. Nominal depth
+is an operational comparison, not equal chess coverage across engines.
+
+**Reference and implementation rule.** Use modern Stockfish search structure,
+feature relationships and evidence flow, currently pinned at
+`edb0d9db6731067ec50ce619ff372b463bc4dd5d`, as the structural design reference.
+The final pre-NNUE Stockfish pinned in `config/eval-reference.json` is the
+search-shape and strength yardstick for a classical-evaluation engine and the
+HCE study reference; Basilisk remains the board-throughput comparison and the
+maintainer's engines are otherwise secondary data points.
+Reimplement selected structure and features as original Zig, with Manta-owned
+score units, history scales, depth semantics, safety predicates and tests.
+Do not import NNUE-dependent confidence assumptions or tuned constants. An
+absent/default-off family is a coverage question, not proof it will win here.
+
+**Delivery order and compatibility.** Board facts feed efficient generation and
+SEE; those feed qsearch and ordering; authoritative search outcomes train
+history; the same bounded evidence informs prospective depth, pruning,
+extensions and verification. Later candidates start from the accepted earlier
+head. A rejected dependency stays off and its dependent proposal must be
+re-derived; never quietly activate a rejected umbrella. The sequence is:
+
+`4 contracts -> 5 legal generation -> 6 transitions/SEE -> 7 qsearch ->
+8 search design -> 9 evidence substrate -> 10 coordinated core ->
+11 core fit -> 12 evaluator calibration -> 13 second-order relationships ->
+14 residual cost -> 15 targets, cumulative gate and release decision`
+(resequenced 2026-09-12).
+
+**Expected gains (planning estimates, 2026-09-13).** Anchors: the Colosseum
+pool of 42 engines and 52,491 games at `3+0.03` rates the core build `2670`
+against Manta 1.0.0 `2535`, Rarog 2.4.0 `3030`, Basilisk 1.10.0 `3031`,
+Stockfish 3 `3019` and Stockfish 5 `3256`, all `+/- 9`. The remaining gap to
+the maintainer's best engines is therefore about `360` Elo. The estimates
+below are ranges at 1T `3+0.03` against the head each step starts from; they
+are expectations to be refuted by the registered gates, not claims, and they
+are not additive with certainty because later steps change what earlier fits
+were fitted to.
+
+| Step | Lever | Expected gain | Confidence and basis |
+|---|---|---|---|
+| 6.5.10.4 `MAN-S36` gate | Coordinated selective core | `+90` to `+130` | High: local match `+117 +/- 23`, pool `+136` over 1.0.0 including the earlier `+50` |
+| 6.5.11 core and clock fit | SPSA of about twenty seed coordinates plus six time responses | `+20` to `+50` | Medium: seeds are order-of-magnitude values; fits of a coherent core rarely exceed this |
+| 6.5.12.1 king-danger game fit | Never-fitted nonlinear king danger, `MAN-E22` | `+30` to `+80` | Medium: attacking-cohort residuals of 100 to 765 centipawns against the reference |
+| 6.5.12.2 structural king-attack review | Conditional single change | `0` to `+40` | Low: only if the fit leaves the residual above 150 |
+| 6.5.12.3 and 12.4 refit on a core-generated corpus | Linear terms refitted on labels from a stronger, deeper search | `+40` to `+100` | Medium-low: the label-quality gamble; Rarog measured a `329` Elo class of evaluator deficit against the reference's HCE |
+| 6.5.12.5 correction history as pruning input | Evaluation reliability feeding search | `0` to `+20` | Low: MAN-S25 lost on the old head |
+| 6.5.13 second-order search packages | Capture history, singular review, ProbCut reuse, quiet SEE and repetition, TT aging | `+20` to `+60` total | Low-medium: each package is small and separately gated |
+| 6.5.14 residual cost and board target | Node speed `0.95 M` against `2.3 M` to `2.5 M` for the peers; a realistic `1.3x` to `1.6x` | `+30` to `+60`; PGO `+10` to `+20` more if it works | Medium: throughput gains convert reliably, the size of the gain does not |
+| 6.5.15 targets and cumulative gate | Measurement and decision only | `0` | The `MAN-C03` cumulative gate reports the sum |
+
+Sum of the ranges: `+230` to `+560` beyond the core, against a `360` Elo gap.
+Reaching Rarog 2.4.0 and Basilisk 1.10.0 is plausible only if the evaluator
+steps deliver near their upper ranges; the cheapest way to know before
+committing is the evaluator-isolation measurement (the reference search
+driving Manta's evaluator) named in the 6.5.12 rationale.
+
+**Common implementation ticket (applies to every open step).**
+
+- Read the named code/contract; state the changed producer, transformations,
+  all consumers and the excluded scope before editing. Work on one numbered
+  ticket, not the next step as well.
+- Freeze feature-off reconstruction, typed ordinary/mate/tablebase/draw scores,
+  TT depth/bound/provenance, complete-root publication, cancellation restoration
+  and worker-local ownership. No hot-path allocation, I/O, locks or avoidable
+  shared atomics. Preserve portable scalar authority and Zig 0.16.0.
+- While editing use compile/focused invariant tests. Once frozen run the
+  applicable complete correctness/safety/process gates once. Exact claims
+  require fingerprint, PV and result identity; explain legal mismatches rather
+  than blessing a changed expected value.
+- Use existing board, observation, attribution and branching tools. Add only a
+  missing counter needed for the ticket's decision, behind disabled diagnostics.
+  Inspect release-build cost, never observer timings. Use matched A/B order and
+  repeated samples; unresolved noise is not a speed claim.
+- Each independently meaningful retained production change gets one final
+  registered 1T SPRT. An inseparable producer/consumer package or demonstrated
+  below-resolution cohesive package gets one gate for the package, not games
+  after each partial implementation ticket. Register package membership and
+  switches before games; agreement with a reference is not bundling evidence.
+- Use the trusted existing fastchess harness: setup-only validation, then the
+  final command. No candidate-specific pilots, no automatic second time control,
+  no extending or splicing an inconclusive run. Freeze source/binaries, host
+  placement, budget, anomaly rule and stop rule; maintainer runs games.
+- H0, cap and maintainer-stopped inconclusive runs do not promote. Do not infer
+  equivalence from an interval containing zero, or a settled verdict from an
+  LLR trend. Store concise evidence in EXPERIMENTS; raw artifacts stay ignored.
+
+**Model assignments (revised 2026-09-12).** Claude Fable owns search design,
+interacting selective-search semantics, authority review and every chess
+question an implementer cannot settle from the written contract. Claude Opus
+implements frozen tickets from ADR and PLAN text, runs the named diagnostics
+and stops at an unresolved chess assumption rather than guessing. The
+historical GPT assignments in completed steps are records, not guidance.
+
+#### 6.5.0 — Comparable performance audit
+
+Complete. All engines used the same `cross-engine-board-v1` workload and the
+same forty search FENs. Native ReleaseFast Manta measured `1.12M` NPS and
+`28,858,278` nodes at depth ten, versus Rarog at `2.96M`/`2,055,303` and
+Basilisk at `3.58M`/`3,215,963`. Manta therefore searched `14.0x`/`9.0x` more
+nodes and processed a node `2.6x`/`3.2x` more slowly. Its depth-eight-to-ten
+tree grew `6.28x`, versus `2.61x` and `3.29x`.
+
+The board benchmark localized a smaller but real deficit. Manta reached
+`392M` legal moves/s, `93M` captures/s, `36M` make-unmakes/s, `239M` perft
+nodes/s and `323M` two-ply simulations/s. That is generally `7–17%` behind
+Rarog and `22–39%` behind Basilisk. Rarog's SEE uses different piece values,
+so only the Manta/Basilisk `31.6M`/`54.4M` SEE comparison is exact.
+
+The production observation supplied the mechanism evidence: about twenty-one
+moves were generated per searched move, roughly `85–86%` of cutoffs occurred
+on the first searched move, and the depth-ten opening case accepted `16,328`
+of `16,901` LMR probes without re-search. Its `573` re-searches are `3.4%` and
+its mean reduction is about `1.12` plies. Null move cut on `354` of `1,472`
+attempts, while `354` of `355` fail-highs survived mandatory verification.
+ProbCut converted `39` of the `44` moves that passed its qsearch filter. HCE
+measured `3.39M` evaluations/s; its call frequency and standalone cost make it
+a secondary per-node cost rather than an explanation for the search-tree gap.
+
+The audit creates priorities, not Elo claims. The repository remained
+unchanged while it was measured.
+
+#### 6.5.1a — Exact staged move picker
+
+Complete — rejected only as an exact optimization. The allocation-free
+prototype split ordinary non-check interior generation into validated TT, good
+tactical, lazy quiet and bad tactical stages. Its random legal-position
+differential covered equal membership, order and uniqueness, including
+castling, en passant and every promotion shape, and the full Debug gate passed.
+
+Lazy quiet generation and ranking produced `775,451` depth-six nodes instead
+of production `799,610`. The eager control retained `799,610`, and forcing the
+prototype to generate and rank quiets before searching its first child also
+restored `799,610`. Descendant searches update worker-local main, reply and
+continuation histories; the accepted picker snapshots every sibling rank at
+parent entry, while the lazy stage consumed later history. Preserving that
+snapshot required the eager quiet work and removed the intended saving. The
+prototype was removed and the production picker remains unchanged.
+
+This result rejects only the behavior-neutral formulation. It does not decide
+whether live-history ordering is stronger or whether its combined tree and
+per-node change improves time-controlled play.
+
+#### 6.5.1b — Live-history staged picker
+
+Complete — accepted and promoted. Registered `MAN-S30` crossed its `[1,5]` H1
+boundary after 8,752 games at `+13.19 +/- 7.28` nElo (`+8.93 +/- 4.93` Elo,
+LLR `2.95`, LOS `99.98%`). Live-history staging is now the production default,
+production fingerprint is `775,451`, and `-Dlive-history-staging=false`
+reconstructs the superseded MAN-S29 eager picker for archived diagnostics.
+Four completed time forfeits (three baseline, one candidate, no other fault)
+tripped the bridge's zero-timeout rule; the maintainer accepted the result by
+explicit judgment and `EXPERIMENTS.md` records both the waiver and the PGN
+reconstruction showing host scheduling pressure rather than a clock defect.
+
+The original step definition follows.
+
+Rebuild the lazy generator as an explicitly behavior-changing candidate. The
+producer is authoritative worker-local history updated by completed descendant
+searches; tactical and quiet generation transform it at the time each stage is
+entered; ordering is the sole consumer. It gains no legality, terminal/draw,
+score, bound, provenance, TT, PV, pruning, reduction, allocation or thread
+authority.
+
+Prove deterministic 1T execution, equal legal membership, uniqueness and state
+restoration across castling, en passant, all promotions, checks, evasions,
+terminal positions, repetitions and rule-50 cases. Record complete depth curves,
+per-stage generated/searched counts, NPS and wall time. The fingerprint and PV
+may change and receive a causal ledger entry. Prepare exact candidate/baseline
+artifacts and a setup-only manifest; the maintainer runs one prospectively
+registered 1T SPRT directly on the separate game host. No fresh pilot is needed
+because this candidate changes only internal search ordering and retains the
+qualified engine/protocol, clock, runner, host, placement, book and adjudication
+boundaries. Only clean H1 may promote it.
+
+Recommended model: GPT-6 Astra High; GPT-5.6 Sol XHigh fallback.
+
+Implementation record — the mechanism is complete and now default-on.
+`-Dlive-history-staging` selects it for the engine, built-in bench and
+search-observation executable. Direct legal generation now exposes exact
+tactical and non-tactical-quiet subsets whose filtered order and union match
+the complete generator across castling, en passant, checks and every promotion
+shape. Ordinary root, checked and singular-exclusion nodes retain eager
+generation. One caller-owned `MoveList` holds the tactical prefix, a validated
+quiet TT move if present, delayed quiets and retained bad tacticals without
+allocation or duplicate emission.
+
+The candidate repeats deterministically with legal PV and restored state. Its
+depth-six bench is `775,451` nodes versus production `799,610`, exactly matching
+the earlier diagnosed prototype and causally confirming live quiet-rank timing.
+The candidate observation passes all twelve fixed cohorts and reports tactical
+generation, quiet-stage entry, delayed quiet generation and existing searched-
+source counts. Across that completed cohort, `79,446` eligible staged nodes
+generated `88,027` tacticals; only `56,539` opened their quiet stage, so
+`22,907` completed nodes avoided quiet generation. Opened stages generated
+`1,579,505` non-tactical quiets. These are diagnostic results, not a strength
+verdict. A sequential five-repeat development-host depth-six check measured
+baseline/candidate median wall time `791/766 ms` and median NPS
+`1,010,884/1,012,338`: the `3.02%` smaller tree produced about `3.16%` lower
+wall time without resolved per-node regression. This was neither idle-host nor
+game evidence; registered `MAN-S30` on the separate 5950X supplied the
+promotion verdict recorded above.
+
+#### 6.5.2 — Whole-tree attribution
+
+Complete. `docs/SEARCH_ATTRIBUTION.md` holds the rebaselined depth curve,
+per-position distribution and mechanism attribution; no production mechanism
+changed and no games ran. The observer gained an exact whole-tree charge
+partition, an inclusive per-mechanism subtree cost, transposition lookup and
+store outcome partitions and check/extension chain histograms, and
+`zig build search-attribution` sweeps the forty-position corpus across depths
+and table sizes.
+
+Four historical results inform the reworked phase, without settling causality:
+
+- Two proven-mate positions are `47.5%` of the depth-ten corpus because Manta
+  has no mate-distance pruning. Removing them moves the corpus ratio against
+  Rarog from `12.3x` to `6.5x`, so the Step-6.5.0 aggregate overstated the
+  ordinary-position gap; the per-position median is `5.4x`.
+- Branching over depths four to twelve is `2.412` against `1.750` and `1.873`
+  for the siblings, so tree efficiency remains a substantial separate deficit.
+- Late move reduction reaches `3.3%` of searched main moves and re-searches
+  `0.71%` of those, while shallow pruning discards `57%` of candidates outright.
+  These conditional rates do not measure missed refutations or safe headroom.
+- A 16/64/256 MiB sweep changes Manta's depth-ten tree by `0.70%`, and first
+  move cutoffs reach `92.5%`. This weakens capacity-pressure and gross cut-node
+  misordering explanations on this workload, not all TT/ordering hypotheses.
+
+Mate-distance pruning was originally assigned to historical Step 6.5.5. The
+reworked shared-depth design in 6.5.8–6.5.10 now owns its complete contract.
+It remains a playing change, not an automatic cleanup or ordinary-tree solution.
+
+The original step definition follows.
+
+Rebaseline production MAN-S29 before selecting more search candidates. Use the
+same forty positions, 1T, native ReleaseFast, identical Hash and a fresh process
+per depth for Manta, Rarog and Basilisk. Measure depths four through ten first;
+extend to eleven and twelve only inside a recorded local time cap. Use a
+16/64/256 MiB Hash sweep to separate search policy from TT pressure. Stockfish
+is a search-shape reference under the same corpus, not an implementation target.
+
+Extend observation only where needed to partition main and qsearch nodes; PVS
+and aspiration retries; LMR probes and full-depth verification; null probes and
+verification; ProbCut; singular/exclusion work; check entries and extension
+chains; generated and searched moves; and TT probe, hit, usable-cutoff, depth
+rejection, collision and replacement yield. Report per-depth and per-position
+distributions so one opening or ending cannot decide the diagnosis.
+
+This step changes no production mechanism and runs no games. Its output ranks
+the following candidate questions and freezes the operational depth-curve
+baseline. Recommended model: GPT-5.6 Terra High.
+
+The subject is now production MAN-S30 rather than MAN-S29, because MAN-S30 was
+promoted before this measurement ran.
+
+#### 6.5.3 — Forcing-line selectivity
+
+Closed by maintainer judgment, not formal H0. MAN-S31 removed only non-root
+blanket check increments and retained checked-root extension. Qualification
+passed; depth-ten nodes fell 56.53%, or 35.34% excluding the two mate-heavy
+positions. At 7,958 games the result was `-3.08 +/- 7.63` nElo, LLR `-1.60`,
+without anomaly. Production remains unchanged.
+
+This does not prove a loss, equivalence, or why the change failed to establish
+a gain. Removing extensions changes tactical coverage at the same nominal
+depth. The old explanation that removing all checking-move protections would
+necessarily repair the result is withdrawn. A differently derived forcing-line
+policy may be considered only inside 6.5.10's shared depth contract; no isolated
+retry or automatic removal of all protections is authorized.
+
+MAN-S32 and MAN-S33 retain their experiment IDs and original registration under
+historical Step 6.5.5 / ADR-0067; open step numbers below are new:
+MAN-S32 mate-distance pruning remains default-off, with concentrated mate-tree
+savings rather than demonstrated ordinary-position strength. The maintainer
+stopped MAN-S33; the supplied 6,640-game snapshot is `+1.24 +/- 8.36` nElo,
+LLR `-0.39`. It is inconclusive and unpromoted, not H0. Do not restart it or
+treat its similar aggregate extension conversion as decision-quality proof.
+Final artifact reconciliation remains evidence housekeeping, not a new game job.
+
+#### 6.5.4 — Freeze the two targets and implementation contracts
+
+**Model:** GPT-6 Astra High. **Dependency:** completed evidence above.
+**Files:** PLAN, GUIDE, SEARCH_COVERAGE, existing benchmark manifests/tools;
+REQUIREMENTS and a relevant ADR only if their authority changes.
+
+1. Reuse the existing audit; do not repeat a broad profiling campaign. Bind the
+   exact production Manta, Basilisk and modern search-reference source/binary
+   identities. Verify the board profile's six denominators, reset behavior,
+   SEE values, native backend and no hidden legality/evaluator work differences.
+2. Freeze the two target protocols above, baseline timings and an absolute
+   `bench 13 1` limit on the designated host. Reuse comparable retained
+   measurements; request only missing baseline measurements from the maintainer.
+   Depth-13 jobs have a predeclared timeout and incomplete is not a fast result.
+3. Rank board cells by gap and representative search cost, using existing
+   profiles first. Explicitly separate generation, transition, SEE, evaluator,
+   ordering and TT costs. Inspect relevant emitted code before proposing an
+   unchecked fast path, table expansion or layout change.
+4. Freeze a legal regression population covering checks/evasions, forced mates,
+   quiet tactics, sacrifices, pawn/zugzwang endings, repetitions/rule-50 and
+   castling/EP/underpromotions. Reuse existing cases and independent oracles.
+   Keep timing inputs separate from correctness stress; no benchmark-specific
+   branches or tuned corpus recognition.
+
+**Gate/output:** one concise target/identity/cost table and bounded tickets for
+5–7; documentation/policy and missing setup checks only. No candidate or SPRT.
+Uncertain cost attribution must be marked, not filled with guessed percentages.
+
+**2026-09-08 execution checkpoint — complete.** The preparation pass froze the
+contracts below without engine or game work. The subsequent designated-host run
+bound fresh artifacts and followed the fixed stop rules. It establishes open
+performance deficits; it does not satisfy either Phase-6.5 exit target.
+
+Frozen identities (SHA-256 is over retained bytes, not a filename/version guess):
+
+| Input | Identity | Qualification status |
+|---|---|---|
+| Manta production source | `a500d6b3c37696b304c65a94d69bb1cf3b05d169`, tree `232593be935860e98fa5ab9a5df63eaac7db6f99` | Clean checkout; roadmap/tool changes leave the production search mechanism unchanged |
+| Production reconstruction | `tools/test_engines/manta-phase65-baseline.exe`, SHA `7727BB4FCB50BE1972E8A45BDE3EFEFC05DAFB3E2C507D5FDEE248DC9632CBB8` | Fresh schema-9 sidecar records clean source, Zig 0.16.0, native integrated-time/live-history/check-extension on, other candidates off, bench `775451` |
+| Historical Basilisk search binary | `D:/code/basilisk/build/dist/basilisk-v1.10.0-dev-windows-x86_64-pext-pgo.exe`, SHA `1034DE95AE556B972878F91FF265FED2F4F5CD13F10AAC721D12B62282072906` | Matches attribution record; exact source/compiler/PGO binding is missing. Do not bind it to current checkout by assumption |
+| Basilisk production baseline | `tools/test_engines/basilisk-phase65-baseline-pext-pgo.exe`, SHA `A8A574B57C3D700958847C87067D14893E83891D62C7928E9C8E6BDEF04CB0C4` | Clean `d0f262765a198c61dc8fe9fdf09db6a733b61fec`; Clang 22.1.8, native PEXT, PGO-use, bench `12568898` |
+| Modern search reference | `edb0d9db6731067ec50ce619ff372b463bc4dd5d`; `src/search.cpp` SHA `A934524DD2F386EC38CDF95B7B2E41CECDC85C9B17E12C0668621E6AE16BE28A` | Source reference, no reference binary needed for either performance target |
+| Forty-position timing corpus | `tools/bench_positions.epd`, SHA `F7451A4E7750C6DE5A9AC37AA6E3631782A6932B784B89EEB714BE533E6E1862` | Freeze order and all forty positions; ordinary subset excludes zero-based indices 6 and 30 only |
+| Manta board workload | `tools/board_bench.zig`, SHA `F98BF51D355A193FDE42BC0C324CC1E823A60C191D45846FFD0E997281DA38B0` | Work/SEE setup contract inspected; future code edits preserve the input/denominator contract rather than this implementation hash |
+| Basilisk board workload | `tests/board_performance.cpp`, SHA `95E2B546FF0BE6F825DC3D3A9B0B0C53C4E28D0C0551C0D23941B5493C68D7E3`, commit `d0f262765a198c61dc8fe9fdf09db6a733b61fec` | Source work counts, schedule and SEE setup endpoint agree; designated-host artifact binding pending |
+
+The old Basilisk binary reports version 1.9.3 despite its filename. Its current
+source checkout is not evidence of which code built it. A newly bound baseline
+may replace this unqualified historical binary only before candidate timings;
+record the replacement and do not combine old/new timing samples. No change
+to the target tolerances is implied.
+
+**Board work and cost contract.** Both sources use the same five-position
+`cross-engine-board-v1` corpus, reused move lists, threshold zero, no HCE
+evaluation callback, 150 ms warm-up and 11 x 150 ms samples, median/MAD.
+State is restored between iterations. Native BMI2/PEXT capability must match;
+record actual compiler/optimization/PGO and benchmark anti-elision support.
+Use optimized source-bound board artifacts, not a PGO-labelled search binary
+as proof of the board test's build settings.
+
+| Cell | Operations per corpus iteration | Historical Manta rate | Initial owner and limitation |
+|---|---:|---:|---|
+| Legal generation | 128 legal moves | 392M moves/s | 5: common unpinned/check-mask path; CPU share not measured |
+| Legal captures | 10 captures | 93M moves/s | 5: tactical subset; includes legality, not pseudo-legal output |
+| Make/unmake | 128 move pairs | 36M pairs/s | 6: includes generating the move list; not isolated transition cost |
+| Threshold SEE | 10 capture decisions | 31.6M decisions/s | 6: includes capture generation; historical Basilisk 54.4M is a diagnostic, not yet qualified equal-semantic work |
+| Start-position perft(4) | 197281 leaves | 239M nodes/s | 5+6: composite generation/transition cost, not search NPS |
+| Two-ply simulation | 4597 child legal moves | 323M moves/s | 5+6: composite generation/transition cost |
+
+Both SEE implementations use pawn/knight/bishop/rook/queen/king values
+`100/300/300/500/900/20000`. That alone does not prove equal semantics:
+Manta selects a legal recapturer using `recaptureIsLegal`; the inspected
+Basilisk threshold path uses cached pin filtering and its own swap loop.
+Before certifying this cell, compare decisions on the ten frozen captures and
+review king/pin/x-ray exceptions against Manta's independent exchange oracle.
+Never weaken Manta legality to match a faster approximation. If the existing
+benchmark exposes no decision signature, propose only a setup-only signature
+check, not a new search experiment. The six-cell target stays unqualified
+until this comparison contract is settled.
+
+The historical board record says a general 22–39% gap, but retained exact
+per-cell Basilisk medians/MADs and source-bound host metadata were not located.
+Do not manufacture a per-cell ranking from that range. Generation is first
+because it contributes to five of the six measured cells; transition and SEE
+follow after their cost is separated. HCE's historical 3.39M evaluations/s,
+18.5 generated moves per searched move and TT/node counts are not CPU shares.
+Qsearch visibly generates/ranks quiets it discards; its marginal speed benefit
+still requires measurement. No emitted-code speed claim has been made.
+
+**Prospective timing/acceptance protocol.** Freeze routine `bench 13 1` at
+30 seconds on the idle designated 5950X: a usability budget, not a prediction
+from the old curve. All forty cases and completed depth must be accounted for.
+Keep the 64-MiB relative target and six-cell limits above unchanged.
+
+- Pin one physical core, identical affinity/power conditions for each engine;
+  record OS, CPU, clocks/power mode, source, compiler, ISA, PGO and binary SHA.
+- Board final comparison: three alternating matched process pairs in A/B,
+  B/A, A/B order, each using the existing 11-sample protocol. For each cell use
+  the median of pairwise throughput ratios, then their geometric mean. Retain
+  individual medians/MADs. If pair ratios straddle a target, report unresolved;
+  no extra repeats or relaxed threshold chosen after inspecting results.
+- Search final comparison: same three-pair order; fresh process per depth,
+  `ucinewgame` and `isready` per position, 1T/64 MiB, no ponder/tablebases or
+  competing timed work. Each position's wall interval includes reset/readiness
+  through `bestmove`, excluding process startup/shutdown. Sum these intervals
+  for full and ordinary cohorts; retain nodes and reported UCI time separately.
+  Use median pairwise elapsed ratios for the two <=1.10 acceptance tests.
+- Freeze 60 seconds per position, 300 seconds per depth and 900 seconds per
+  engine's depth-4–13 sweep. Timeout/incomplete depth is not a fast result;
+  stop and retain the diagnostic. A final routine bench over 30 seconds fails
+  its separate operational target. The maintainer starts all timing jobs.
+- Retained depth-12 JSON shows Manta 170853905 nodes / 129045 ms and Basilisk
+  8506949 / 2524 ms. These are historical aggregate diagnostics: reports have
+  `engine:null`, no bound host metadata, no depth 13 and no per-position times.
+  They cannot substitute for the missing qualified target baseline.
+
+**Frozen regression selection.** Reuse `src/search/observation.zig` v23
+(current SHA `64C50D5CE20D08645B9AF3D3527D5EC1DA6A8F85B24188097A7129A42BBA27B4`):
+opening-start/castling-pressure, quiet-piece-tension/closed-center,
+tactical-wac001/hanging-queen, both file-check evasions, zugzwang-opposition/
+locked-wings and both endgames. Retain timing cases 6 and 30 as mate regressions.
+Use existing movegen checks/pins/castling/EP/promotion properties, transition
+ordinary/special/null/nested restoration tests, SEE legal-exchange/king/pin
+oracles, draw repetition/null-boundary/rule-50/checkmate tests and qsearch
+stalemate/quiet-only/evasion tests. Freeze legal expectations, not selective
+search scores or node counts. Extend only a missing edge case in its owning
+implementation ticket; never tailor a fast path to this population.
+
+**Bounded handoff tickets (not implementation authorization).**
+
+- **5-A, Terra High:** inspect `generateFor`, `pinnedPieces`, `generatePieces`
+  and native emitted code; identify duplicated king/pin/check work. Propose
+  one exact ordinary-path specialization with unchanged legal order. Keep
+  king/EP/castling exceptions intact. Gate: independent every-encoding legality,
+  partition/order, special-position perft and exact search fingerprint/PV.
+  No unchecked operation, new table or layout without a measured/proven need.
+- **6-A, Terra High / Astra legality review:** use the accepted generation head;
+  inspect `makeNormal` and state/key/checker updates, then one exact duplicated
+  work elimination. Gate: independent complete state/delta and nested unmake
+  restoration, ReleaseSafe, all six board cells and exact search identity.
+  SEE is a separate 6-B ticket after the comparability question above is closed;
+  do not bundle unrelated transition and exchange algorithms.
+- **7-A, Terra High:** reuse accepted tactical generation in non-check qsearch;
+  establish a legal-move witness before stand-pat can mask stalemate, retaining
+  every evasion and tactical tie order. Gate: quiet-only/stalemate, checks,
+  EP/underpromotion, typed TT/stand-pat authority and exact fingerprint/PV.
+  No new pruning margins or history semantics. Performance and final H1 remain
+  required by each ticket's parent step; tests are not strength evidence.
+
+**Tool completion and remaining blocker (2026-09-08).** The approved measurement
+repairs are implemented. `branching_profile.ps1` schema v2 binds executable,
+corpus and optional manifest hashes; records monotonic reset-through-bestmove
+time per position, full/ordinary depth summaries and UCI-reported time; enforces
+position/depth/run deadlines; and writes an explicit incomplete report before
+failing. A one-position depth-one smoke produced a complete bound report; a
+one-millisecond depth-13 canary produced an incomplete timeout report.
+
+`board_bench.zig` and Basilisk's source-bound board benchmark now emit the same
+opt-in `SEE-CONTRACT-V1` rows outside all timed regions. The new
+`compare_board_see.ps1` runs both preflights, requires exactly ten unique
+position/UCI-move rows, normalizes generation order, binds binary hashes and
+fails on any membership/result difference. The local ReleaseSafe Manta artifact
+`C27CAA08...94F5CD` and Basilisk release-pext artifact
+`BA8D8B5A...860DBD5` agreed on all 10 threshold-zero decisions. This closes
+the frozen-corpus semantic question, not general cross-engine SEE equivalence;
+Manta's legal exchange oracle remains authoritative. The Basilisk diagnostic
+endpoint is committed at `d0f262765a198c61dc8fe9fdf09db6a733b61fec`.
+
+Reproduction, setup only (no timed samples, search or games):
+
+```powershell
+zig build board-bench-bin -Dnative -Doptimize=ReleaseFast
+cmake --build D:/code/basilisk/build/release-pext --target board_performance_test
+./tools/compare_board_see.ps1 -MantaBench ./zig-out/bin/manta-board-bench.exe -BasiliskBench D:/code/basilisk/build/release-pext/board_performance_test.exe -OutFile ./zig-out/phase65-see-setup.json
+```
+
+**Designated-host baseline.** The idle Ryzen 9 5950X ran Windows 11 build 26200
+under the recorded Ultimate power plan, with each timed parent/process pinned to
+affinity mask `1`. Manta's native ReleaseFast board artifact is SHA
+`8ECE9988...C2FAFB`; Basilisk's Clang-22 release-pext board artifact is
+`BA8D8B5A...860DBD5`. The setup-only SEE comparison again passed 10/10.
+
+| Board cell | Manta median/s | Basilisk median/s | median pair ratio | target |
+|---|---:|---:|---:|---|
+| Legal generation | 393,644,600 | 615,801,720 | 0.636 | fail |
+| Legal captures | 93,144,489 | 114,560,960 | 0.814 | fail |
+| Make/unmake | 35,358,543 | 55,426,787 | 0.640 | fail |
+| Threshold SEE | 30,198,468 | 56,923,160 | 0.531 | fail |
+| Start-position perft(4) | 245,255,949 | 392,588,067 | 0.625 | fail |
+| Two-ply simulation | 322,450,289 | 524,301,686 | 0.615 | fail |
+
+The median-ratio geometric mean is `0.638`; all six cells miss the `0.95`
+individual floor. Pair ratios were wholly below the targets, so this is a
+resolved baseline deficit rather than timing noise. Generation feeds five
+cells, while threshold SEE is the largest isolated ratio gap; Steps 5 and 6
+retain that dependency order rather than optimizing SEE first in isolation.
+
+The first Manta profiler-v2 sweep completed depths 4–12. Depth 12 was
+`170,853,905` nodes / `133,704 ms` full and `69,374 ms` ordinary. At depth 13,
+positions 0–5 completed before mate-heavy position 6 exceeded the fixed 60 s
+position deadline; the report is explicitly incomplete. Per protocol, the
+remaining alternating sweeps were not run, so neither the full nor ordinary
+depth-13 ratio is claimed. The separate pinned `bench 13 1` check timed out at
+`30,034 ms` without a completed total. Both search targets therefore remain
+open failures; incomplete work is not credited as speed.
+
+Ignored raw evidence lives under `zig-out/phase65-baseline/`: board comparison
+SHA `1E28BD94...B2539`, incomplete search report SHA `D240B8E1...F0F26`, routine
+bench report SHA `6EC39CA9...1FF94`, and SEE setup SHA `E83F0389...B7F59`.
+Step 6.5.4 is complete because identities, targets, contracts and the baseline
+outcomes are now frozen. Step 6.5.5 is next; no candidate or SPRT was created.
+
+#### 6.5.5 — Legal generation and attack/check backbone
+
+**Model:** GPT-5.6 Terra High; Astra High for any legality proof change.
+**Dependency:** 4. **Files:** `src/chess/movegen.zig`, `queries.zig`,
+`attacks.zig`, relevant board tests; transition/state only for shared facts
+explicitly approved in the ticket.
+
+1. Follow `generateFor`, `pinnedPieces`, king safety and evasion masks.
+   Specialize the common unpinned/non-check path; compute position-wide
+   king/check/pin facts once per valid position, not once per candidate move.
+   A reused fact has an explicit invalidation boundary at every real/null move.
+2. Keep legal tactical and quiet subsets exhaustive, disjoint and in the
+   accepted filtered generation order. Do not replace legal generation with
+   speculative pseudo-legal counts to improve the board score.
+3. Preserve exact double-check king-only evasions, pin-ray mobility, king
+   destination attacks with changed occupancy, castling transit/final safety,
+   EP's two removed pawns and all promotion choices. Never infer king safety
+   solely from attack maps computed with stale king occupancy.
+4. Inspect native attack lookup/inlining and repeated bounds/classification
+   work; PEXT already exists. Adopt an ISA-specific change only with exact
+   scalar fallback and measured emitted-code benefit, not a language-based
+   expectation that Zig must be faster.
+
+**Gate:** legal-set/order oracle, perft, randomized state recomputation and
+special-move safety; exact full-search fingerprint/PV/results. Measure all
+board cells plus fixed-tree full-search throughput. Retain only a resolved
+cost improvement and final 1T H1 under the common package rule.
+**Handoff to 6:** documented reusable facts and ownership, not a new search
+policy or a broad representation rewrite.
+
+**2026-09-08 execution checkpoint — complete, no retained candidate.** Four
+bounded forms of the same generation/attack-path hypothesis were measured in
+three pinned A/B, B/A, A/B pairs and removed after refutation:
+
+- A compile-time unpinned/non-check specialization removed redundant masks and
+  the pinned-pawn loop. Legal-generation ratios `1.002/0.965/1.015` crossed
+  parity. Although capture generation and perft medians were `1.048` and
+  `1.038`, make/unmake and two-ply simulation were `0.991` and `0.981`.
+  Fixed-tree depth-eight search kept exactly `4,565,886` nodes but elapsed
+  ratios were `1.012/1.011/1.026`; isolated cells did not translate to search.
+- Forcing that pawn specialization inline made legal generation `0.958` and
+  make/unmake `0.935`; it was immediately rejected as code-growth harm.
+- Reusing one immutable enemy piece-class set across king-destination queries
+  put every six-cell median below parity (`0.942` perft, `0.958` generation).
+- Directly inlining the native slider lookup into legal generation remained
+  unresolved/negative: generation `0.985`, perft `0.996`, simulation `0.992`,
+  with individual pairs crossing parity. No emitted-code assumption overruled
+  the measurements.
+
+Both feature-off and candidate builds passed `test-fast`; candidate search
+retained fingerprint `775451`, and the temporary direct-slider path also passed
+the exhaustive independent occupancy oracle. All experimental source/build
+switches were then removed, leaving production source unchanged. No candidate
+qualified for registration, so no SPRT was prepared or run. The result closes
+this bounded ticket without claiming the board target: generation remains a
+measured deficit, and Step 6.5.6 starts from unchanged production rather than
+from a locally attractive isolated benchmark result.
+
+#### 6.5.6 — State transitions, SEE and board parity checkpoint
+
+**Model:** GPT-5.6 Terra High; Astra High for SEE legality semantics.
+**Dependency:** 5's accepted facts, or unchanged production if 5 was rejected.
+**Files:** `src/chess/transition.zig`, `state.zig`, `position.zig`,
+`queries.zig`, `see.zig`, board tests.
+
+1. Profile ordinary relocation/make-unmake and state-copy/update cost. Remove
+   demonstrably duplicated occupancy, key, checker or material work while
+   preserving the factual move delta used by HCE and the later NNUE runway.
+   Keep quiet/capture/promotion/castling/EP/null paths independently accountable.
+2. Reuse move class, victim, attack and pin facts in threshold SEE where valid.
+   Preserve legal least-attacker selection, pinned recaptures, king captures,
+   x-ray discovery, promotion value and EP occupancy. A threshold early return
+   needs an inequality proof, not equality to the current implementation.
+3. Validate exact undo of mailbox, bitboards, occupancies, side, kings, castling,
+   EP, material, Zobrist, checker, rule-50 and repetition state. Preserve
+   evaluator callback order, root/null history boundaries and cancellation.
+4. Re-run the frozen six-cell comparison once implementation freezes. Report
+   geometric mean and every cell against Basilisk, plus full-search throughput.
+   If the board target is missed, identify the remaining measured owner and
+   propose a bounded follow-up here; do not hide it behind search gains.
+
+**Gate:** independent make/unmake recomputation and SEE exchange oracle,
+ReleaseSafe, exact fingerprint/PV/results, controlled native A/B, final 1T H1.
+Exact changes sharing one derived-state invariant may form one preregistered
+package with 5; independent primitives are not bundled by default.
+
+**2026-09-09 execution checkpoint — complete, no retained candidate.** The
+bounded transition and SEE duplicate-work hypotheses were tested independently
+and removed after their end-to-end evidence failed:
+
+- Passing the already-known mover/victim into physical make/unmake updates
+  avoided mailbox rediscovery and improved the isolated make/unmake cell in all
+  three alternations (`1.018/1.089/1.084`). It did not transfer coherently:
+  perft's median ratio was `0.956`, other composite cells crossed parity, and an
+  exact-tree depth-six search alternation was about `1.021x` slower by elapsed
+  time. The node fingerprint remained `775451`.
+- Reusing the initial capture classification in threshold SEE preserved the
+  legal exchange oracle, but its paired threshold-cell ratios were
+  `0.964/1.028`. That unresolved interval provides no speed claim and did not
+  justify a whole-search candidate.
+
+ReleaseSafe `test-fast` passed while evaluating both exact forms. Final
+`transition.zig` and `see.zig` are byte-identical to the accepted production
+source; therefore the frozen designated-host board result remains authoritative:
+geometric mean `0.638`, with all six cells below the `0.95` floor. No candidate
+qualified for registration and no SPRT was prepared or run.
+
+The remaining deficit is not assigned to another speculative state rewrite.
+Generation still contributes to five composite cells, while threshold SEE is
+the largest isolated ratio gap; this benchmark also folds generation into both
+named cells and exercises SEE only at threshold zero. Step 6.5.14 must refresh
+the profile on the accepted search head, add transition-only and representative
+search-threshold attribution only if still needed, and select the single largest
+measured owner. This is the bounded board follow-up; the now-complete Step 6.5.7
+does not conceal the open board target behind reduced qsearch work.
+
+#### 6.5.7 — Qsearch work proportional to tactical search
+
+**Model:** GPT-5.6 Terra High. **Dependency:** accepted board head.
+**Files:** `src/search/baseline.zig` qsearch, `ordering.zig`,
+`src/chess/movegen.zig` only for a necessary legality-existence interface.
+
+1. Replace non-check qsearch's full legal generation and quiet ranking with
+   tactical-only generation/selection. Reuse the accepted board facts and
+   tactical/quiet partition instead of implementing a second move generator.
+2. Preserve stalemate: no tactical moves does not mean no legal moves.
+   Before stand-pat can mask stalemate, establish a legal-move witness through
+   a bounded existence query or equivalent proven contract. Checkmate still
+   requires complete legal evasions; all evasions are eligible for search.
+3. Preserve TT move eligibility, tactical tie order, SEE/delta decisions,
+   stand-pat and searched-bound provenance, draw precedence, promotions/EP and
+   exact terminal stores. Do not add qsearch pruning or change margins here.
+4. Avoid duplicate legality scans and eager ranking at stand-pat cutoffs while
+   retaining the terminal witness. Measure saved generation/ranking work and
+   whole-search elapsed/NPS, not just generated/searched move ratios.
+
+**Gate:** stalemate with/without pseudo-legal captures, quiet-only legal moves,
+checks, promotions and EP; exact fingerprint/PV/results; controlled full-search
+speed gain and final 1T H1. Legal behavioral mismatches require diagnosis and
+a playing classification, not silent relaxation of this exact ticket.
+
+**2026-09-09 completion checkpoint — accepted and promoted.** `MAN-S34`
+implements the exact tactical-only non-check
+qsearch path specified by ADR-0069. It reuses the accepted `.tacticals` and
+`.non_tactical_quiets` partition in one `MoveList`: a tactical is immediately a
+legal witness; only an empty tactical list triggers quiet generation, whose
+count proves mobility before the list is reset without ranking. Checked nodes
+retain the complete `.all` evasion list. No pruning, score, bound, provenance,
+depth, history, allocation or thread authority changed.
+
+The independent full-legal-list test covers actual stalemate, quiet-only
+mobility, a legal capture and checked quiet evasions. Candidate-on and off
+ReleaseSafe gates pass, including the full suite and all 24 UCI process cases.
+Across the twelve frozen observation cohorts, both arms have identical best
+moves, scores, bounds, provenance, main/qsearch node split and total nodes.
+Generated moves fell from `6,974,800` to `3,023,797` (`-56.65%`). Three-order
+native ReleaseFast comparisons retained fingerprint `775451`; representative
+median NPS was about `1.34x` production (`1,572,922` versus `1,173,148` in the
+final recorded pair). This is exact-cost qualification, not strength evidence.
+
+Frozen setup identities:
+
+| Arm/input | Identity |
+|---|---|
+| Candidate A | `tools/test_engines/manta-MAN-S34-candidate.exe`, SHA-256 `7707EF8832650603C145A05C2CAB1DDC2C669BA4F3BDDE9A007938881F598B78`; native ReleaseFast Zig 0.16.0; qsearch tactical generation on; bench `775451` |
+| Baseline B | `tools/test_engines/manta-MAN-S34-baseline.exe`, SHA-256 `D73FA1D181BDDB8DB7E9AC16FCB053E9866D96707DB6C12D2FBFA36DAA1A03BC`; identical settings with qsearch tactical generation off; bench `775451` |
+| Source state | HEAD `a500d6b3c37696b304c65a94d69bb1cf3b05d169`, tree `232593be935860e98fa5ab9a5df63eaac7db6f99`, executable-source/tool diff identity `1a88898fdc26e737eee39ba3a3c9cf5d25f7f153`; both sidecars explicitly record the dirty state |
+| Harness/book | `sprt.ps1` SHA `487836C5068B1C3652A66D9D72EB886808F9F66451BE1F97AE629C9C45898BF1`; fastchess SHA `8444E73965AE44E716CDE1BB546A7D7C8C9FC7A442A44194A0C71A3BFFA7DD0D`; UHO book SHA `7A7F6470615A69C6CF23D565417701D38732876F480AF90D67B42ABADE35644A` |
+
+The unchanged trusted 5950X/fastchess boundary required no pilot. The final
+registered 1T `3+0.03`, 64-MiB, concurrency-14, normalized `[1,5]` SPRT with
+seed `751289825` accepted H1 at the official 1,614-game decision snapshot:
+W/L/D `505/320/789`, pentanomial `[23,150,321,245,68]`,
+`+59.77 +/- 16.95` nElo (`+40.00 +/- 11.45` Elo), LLR `2.95`, LOS `100%`.
+No completed time forfeit or engine, protocol or affinity anomaly occurred.
+Two already-running games completed after the boundary, so the retained PGN
+and full log contain 1,616 games; they are completion evidence, not a change
+to the 1,614-game SPRT verdict. The artifacts are
+`tools/results/sprt_MAN-S34_vs_MAN-S30_20260909_082719.{log,pgn}` with their
+candidate, baseline and run manifests.
+
+MAN-S34 is production by default. Explicit
+`-Dqsearch-tactical-generation=false` reconstructs MAN-S30's full qsearch
+generation for archived diagnostics. Both arms retain fingerprint `775451`.
+Step 6.5.7 is closed; Step 6.5.8's subsequent design closure is recorded below.
+
+#### 6.5.8 — Modern search design and one evidence/depth contract
+
+**Model:** GPT-6 Astra XHigh. **Dependency:** accepted 7 head.
+**Files:** SEARCH_COVERAGE, owning ADR/requirements, PLAN; read
+`baseline.zig`, `types.zig`, `ordering.zig`, `tt.zig`, `params.zig`.
+**Complete, 2026-09-09. This is a design ticket, not a game candidate.**
+
+[ADR-0070](docs/adr/0070-shared-search-evidence-and-depth.md) is the frozen
+implementation contract: concrete fact interfaces and lifetimes, ordered
+node/move pipeline, signed horizon arithmetic, consumer eligibility/authority,
+feedback admission, package boundaries and independent legal edge-case gates.
+SEARCH_COVERAGE records the source-bound reference check and current gaps.
+The approved design leaves production MAN-S34 and fingerprint `775451`
+unchanged. Step 6.5.9 is next, not a playing candidate or SPRT preparation.
+
+Verification: `git diff --check` passes. `zig build policy` reports no issue in
+this step's documents, but repository-wide success is blocked by three unchanged
+bench-contract reference-name violations in `docs/adr/0021-search-benchmark-and-qualification.md`,
+`docs/UCI.md` and `tests/uci/README.md`. These are already present at the source
+head above; no policy repair is bundled. The design is complete. The separate
+repair landed on 2026-09-12: the two format documents now cite ADR-0021
+instead of naming the outside engine, that ADR is allowlisted as the design
+record, and `zig build policy` passes repository-wide.
+
+Write a Manta-native node/move pipeline from the pinned modern reference:
+terminal/draw and mate bounds -> authenticated TT/static evidence -> safe
+node-level pruning -> ordered legal candidates -> prospective move depth ->
+shallow pruning -> extension/reduced probe -> required re-search -> one
+authoritative outcome update/store. Specify the exact ordering where a producer
+depends on a searched result; never create a circular depth/extension decision.
+
+For each fact, name its producer, lifetime and consumers: raw HCE, ordinary
+compatible TT refinement, improving/opponent trend, expected PV/cut/all node,
+TT move/depth/bound/PV provenance, root/current window widths, move class,
+history strength and sample support, check/evasion state and singular result.
+Distinguish nominal depth, extension, reduction, probe depth and verification
+depth with signed intermediates and checked/clamped conversion to legal plies.
+
+Cover mature families explicitly: PVS/aspiration, mate-distance window bounds,
+TT/IIR, quiet/tactical ordering and outcome feedback, LMR, LMP/futility/SEE,
+null/verification, ProbCut, singular/forcing extensions, verified razoring,
+upcoming-repetition bounds, qsearch and optional correction history. Existing,
+rejected and missing
+consumers are different statuses; code behind a disabled umbrella is not
+production maturity.
+
+**Gate/output:** frozen interfaces, eligibility/authority table, legal edge-case
+matrix and numbered implementation sub-tickets for 9–12. For each candidate
+package state why parts interact, what stays off and what refutes the claim.
+No copied reference constants, NNUE assumptions, automatic revived switches or
+target re-search percentage. Design review must precede smaller-model coding.
+
+#### 6.5.9 — Shared ordering and outcome-evidence substrate
+
+**Model:** GPT-5.6 Terra High for frozen interfaces/tests; Astra High review.
+**Dependency:** 8. **Files:** `types.zig`, `ordering.zig`, `baseline.zig`,
+`params.zig`, `build.zig` for the default-off diagnostic selector, disabled
+observation counters and focused `tests/search_substrate.zig` properties.
+
+Implement these bounded sub-tickets in order, as one behavior-neutral step.
+Names, fields and admission rules are in ADR-0070; no coefficient fitting or
+new production consumer is part of this work.
+
+**Step 6.5.9 is complete.** Three Astra High authority reviews each rejected a
+defect class and each was repaired inside the step; the fourth accepted the
+result. The first Astra review rejected the initial
+substrate: shadow feedback inherited legacy admission, restrictive scopes did
+not survive descendant routes, several shortcuts overstated searched horizon,
+move plans did not exactly describe legacy depth use, and `HistoryFacts` was
+absent. The second Astra review rejected that repair on five remaining
+authority defects: shadow history still admitted alternatives and winners whose
+outcome source and scope were unchecked and could not distinguish an entry made
+as a reduced probe; restrictive scope was lost on return and draw results never
+carried `history_local`; reduced-only and null-verification results reported
+nominal rather than actual searched horizon; qsearch outcomes reported
+`omitted_siblings = false` despite SEE/delta omissions and lost the stored
+producer on a TT cutoff; and only the per-move snapshot existed where ADR-0070
+also requires a ranking-time history fact. The third Astra review accepted the
+authority and lifetime boundaries and found no evidence leak on any repaired
+path, but blocked closure on four certificate-labeling defects and one implicit
+design decision: an aggregate that certified exact results with a sibling's
+reduced verification and producer; a `reduced_probe` route relabelled
+`completed` by the internal null-move or ProbCut verification it returned
+through; stored `speculative_cutoff` records labelled exclusion evidence; a
+qsearch cutoff inheriting every searched child's omission instead of its
+winner's; and no written rule for which certificate describes a completed node.
+All were diagnostic-substrate defects, not evidence that production playing
+strength regressed. The repeated review confirmed every third-repair fix,
+reproduced ADR-0070's admission profile from the substrate's own per-search
+counters, and accepted the authority and lifetime boundaries. Its one
+documentation correction is applied: the pre-repair admission figures were
+produced by module-level probes that accumulated across a whole test binary,
+so ADR-0070 publishes only the exact per-search profile and no before/after
+comparison. Step 6.5.9 closes; Step 6.5.10 is unblocked.
+
+1. **6.5.9.1 — Exact fact adapters (`types`, `baseline`).** Add `StaticFacts`,
+   `TtFacts`, `WindowFacts` and `MoveFacts` views at existing producers. Preserve
+   raw/refined separation, original TT producer and unknown PV-origin. Trend
+   validity records root/null/exclusion boundaries without changing legacy
+   pruning. Keep selected ordinal and actually-searched count distinct; legacy
+   policy continues using its existing ordinal. Test absent/stale/decisive TT,
+   move-class EP/promotion and perspective/chain-boundary cases.
+2. **6.5.9.2 — Depth/outcome observations (`types`, `baseline`).** Record
+   `NodeDepthPlan`, `MoveDepthPlan` and `SearchOutcome` at existing dispatch and
+   completion boundaries. Observe current check/IIR/singular/probe/verification
+   depth; do not move the check wrapper or replace any formula yet. Preserve
+   same-ply scratch restoration, origin and scope. Test signed boundary
+   arithmetic, reduced-alpha-rise orchestration, exclusion/null re-entry and
+   interrupted outcomes. Observation cannot alter PV, TT storage or feedback.
+3. **6.5.9.3 — Paired shadow outcomes (`ordering`, `types`, `baseline`).**
+   Define ADR-0070's signed value/saturating-support cell and once-only eligible
+   update packet. Add `-Dsearch-evidence-observation=false` as the default,
+   with no public UCI option. Compile-time-disabled shadows may use existing
+   main/reply/continuation keys only; keep current live staging and production updates
+   exact. Pair values/counts from identical admitted outcomes. Test searched
+   sibling filtering, reset/saturation, root/null boundaries and shared-key
+   aliasing. No capture-history revival, new table family or periodic aging.
+4. **6.5.9.4 — Integration closure.** Compare default and observation-enabled
+   results, PV, node fingerprint and restoration; prove default removes shadow
+   allocations/updates, bound diagnostic worker storage and run the owning
+   safety gate once after freeze. Update the interface map with actual symbols.
+   Astra High reviews the authority boundary before closing the step.
+
+**Gate:** feature-off and observation-on exactness at `775451`, legal PV/result
+equivalence, synthetic outcome/reset/chain-boundary tests, allocation and lifetime
+checks. Disabled substrate needs no games. Stop and diagnose any mismatch;
+do not conceal a playing change in this step. Richer support is not calibrated
+confidence and has no initial production consumer in 10.2.
+
+Implementation evidence before review:
+
+- `types.zig` now owns optional static/TT/window/move facts, explicit node/move
+  depth plans, scoped outcomes and a bounded signed value/support cell. The TT
+  adapter keeps the original producer, generation/freshness and unknown PV
+  origin. Static trends require uninterrupted real-move chains.
+- `baseline.zig` observes the accepted check/IIR, shallow omission, LMR/PVS,
+  null/exclusion and qsearch routes without replacing their formulas. Selected
+  ordinal and actually searched count are separate. Final source/scope and
+  verification facts are retained; no result, PV, TT or root publication reads
+  the observation.
+- The `search-evidence-observation` build selector defaults false and maps only
+  to a compile-time search feature. The default `SearchEvidenceObservation` is
+  zero bytes. Its enabled bounded worker-local storage is at most 128 KiB and
+  adds no UCI option. Shadow values/support use exact existing relation keys,
+  admit only completed ordinary exact/cutoff quiet outcomes, ignore unsearched
+  siblings and avoid double-counting identical shared continuation contexts.
+- The repair adds the missing per-move `HistoryFacts` view with separate live
+  main/reply/continuation values, exact production keys and optional paired
+  shadows. It propagates restricted-root/null/exclusion/ProbCut scope through
+  descendants, preserves original TT/search producers across negation, records
+  shortcut and verified horizons separately, restores same-ply static facts,
+  and admits one deduplicated shadow packet only after a completed non-root
+  ordinary exact/cutoff result whose winning child has searched authority.
+- `MoveDepthPlan` now records the legacy parent-depth pruning input separately
+  from nominal/probe child depth, grants singular depth only to the singular
+  move, and names the child wrapper's check grant without moving or consuming it.
+- The second repair carries one observation-only completion certificate through
+  negation and every recursive return: established producer, actual searched
+  horizon, restrictive scope, verification state and inherited omission. A
+  parent horizon is derived from that child certificate instead of its own
+  active depth, so a reduced-only winner, a null verification and a ProbCut
+  cutoff each report the horizon actually searched. Draw and empty-exclusion
+  returns take `history_local` and `exclusion` scope, and a stored-producer TT
+  cutoff takes the scope its producer implies, so a restriction cannot be
+  discarded by returning through an ordinary parent.
+- Shadow admission requires that certificate for the winner and for every
+  alternative, plus an ordinary main entry route. A reduced probe, restricted
+  scope, non-searched producer or short horizon is refused, so unverified or
+  speculative evidence cannot train the paired relation.
+- Qsearch completion records its own restrictive scope, original producer and
+  omitted-sibling fact. SEE/delta omissions and TT cutoffs no longer report a
+  complete result under generic returned provenance.
+- `HistoryFacts` carries an explicit `ranking`/`depth` observation point.
+  Ranking facts are captured when the picker is constructed and when the
+  delayed quiet stage is ranked, before any descendant can mutate worker-local
+  history; depth facts remain per selected move at its depth decision.
+- The third repair makes the returned bound choose the certificate. A fail-high
+  and an exact result take producer, horizon and verification from the winning
+  move; a fail-low keeps the conservative aggregate; restrictive scope and
+  omitted siblings stay aggregated in every case. A probe-only sibling is
+  reported through the new `reduced_siblings` fact instead of shortening the
+  winner's horizon. The entry route now dominates the verification label, so a
+  `reduced_probe` stays `reduced_only` through an internal null-move or ProbCut
+  verification. A stored `speculative_cutoff` keeps its producer under ordinary
+  scope rather than claiming exclusion evidence, because reverse futility and
+  singular multi-cut share that provenance and a record cannot separate them.
+  Qsearch cutoffs inherit the winning child's omission, matching the main
+  search. ADR-0070 records the rule and its measured admission profile.
+Verification used a clean isolated Zig 0.16.0 installed by the repository's
+SHA-256-pinned `tools/ci/install-zig.ps1`. The earlier report of a truncated
+standard-library file was a host I/O artifact: the named files read intact on
+direct inspection, the failure moves between unrelated files, and it recurs at
+`-j1`. No toolchain file was modified. Retrying the same command clears it.
+
+The second repair ran the full Debug `zig build test` in both arms, including
+all 24 UCI process cases. By maintainer direction of 2026-09-12, full suites are
+no longer a routine per-step gate during rapid development; they run before a
+release. The third repair therefore ran the gates that verify it: default and
+observation-enabled compile checks of every test root, the enabled focused
+executable tests covering the new certificate/route/omission properties, and the
+deterministic behavior gate. Default and enabled ReleaseFast `bench 6 1` each
+produced 40 identical depth/score/node/EBF records and the accepted aggregate
+fingerprint `775451`, geomean EBF `4.821`, median `12447` and top share `16.9%`
+(`130895`). Single-run time/NPS differ as expected for enabled observation and
+make no throughput claim. The three unchanged bench-reference policy violations
+listed under 6.5.8 still fail their policy dependency. `zig build fmt` and
+`git diff --check` pass. No games, pilot or experiment registration applies.
+
+The accepting review independently reran the gates on the third-repair commit:
+default `test-fast` `227/232` with the five enabled-only tests skipped, enabled
+`232/232`, only the three known bench-reference policy failures, ReleaseFast
+`bench 6 1` at `775451` with all 40 records identical across arms, and clean
+formatting and whitespace. Because full suites are no longer a routine per-step
+gate, the pre-release run still owes 6.5.9 one full `zig build test` in both
+arms; the second repair's full-suite pass plus these focused gates are the
+evidence of record until then.
+
+The Astra review owns 6.5.9.4 closure. It must verify that table collisions are
+diagnostic drops rather than merged samples; support is lifetime count rather
+than probability/recency; shadow reset matches its per-search owner; qsearch,
+null, exclusion and restricted-root scope cannot acquire ordinary feedback/TT
+authority; and the default-off code is genuinely erased. The repeated review
+additionally owns the earlier repaired paths: no reduced, restricted or
+non-searched result reaches shadow admission by any entry route; every
+restriction, including `history_local` draws, survives recursive return and
+negation; every reported horizon is the horizon actually searched; qsearch
+reports its own omission and stored producer; and ranking-time history is
+observed before descendants can mutate it. It also re-confirms the third
+repair: the bound chooses the certificate, a reduced probe keeps that label
+through an internal verification, a stored speculative cutoff is not exclusion
+evidence, qsearch cutoffs follow their winner, and ADR-0070's recorded
+admission profile matches the substrate's own counters. That review is
+complete and accepted, so 6.5.9.4 is closed. Step 6.5.10 may begin; it is a
+separately approved package and inherits no permission from this step beyond
+the frozen contract and the recorded admission profile.
+
+#### 6.5.10 — Coordinated selective-search core
+
+**Redefined on 2026-09-12 by maintainer direction.** The remaining Phase-6.5
+search work is one package, `MAN-S36`, designed in
+[ADR-0071](docs/adr/0071-coordinated-selective-search-core.md) and contracted
+by `SCORE-034`. The maintainer wants a large registered strength gain from this
+step; the step is not complete until that gate has run and the continue-or-
+release decision of 6.5.15 is recorded. **Model:** Claude Fable owns design,
+review and every chess or authority question; Claude Opus implements each
+ticket below from the ADR text and reports; Fable reviews before the local
+diagnostic match and again before the SPRT is prepared. **Dependency:**
+production head `596159e` (MAN-S35, fingerprint `642,336`). **Files:**
+`src/search/baseline.zig`, `ordering.zig`, `types.zig`, `params.zig`,
+`build.zig`, `tests/search_substrate.zig`, `tests/search_qualification.zig`,
+`tests/bench_qualification.zig`; `tt.zig` only if the storage-authority change
+needs it; `src/chess/movegen.zig` for the quiet-check generation mode and
+`src/chess/see.zig` for the quiet-move exchange path that ticket E2 needs. No
+other board file and no evaluation, UCI, clock or SMP files.
+
+**Search-shape reference.** By maintainer direction the comparison engine for
+tree shape is the final pre-NNUE Stockfish pinned in `config/eval-reference.json`
+(commit `9587eeeb`), built with the recorded `zig c++` command; the maintainer's
+own engines are secondary data points. Baselines measured on the workspace host
+on 2026-09-12, forty positions, 64 MiB, 1T, fresh process per depth:
+
+| Quantity | Manta `596159e` | Classical Stockfish `9587eeeb` |
+|---|---:|---:|
+| Geometric branching, depths 4 to 12 | `2.225` | `1.88` |
+| Nodes at depth 12 | `82,249,155` | `2,598,338` |
+| Elapsed at depth 12 | `57,494 ms` | `1,321 ms` |
+| Depth-12 ordinary-subset elapsed | `55,875 ms` | `1,300 ms` |
+
+Nominal depths are not equal coverage across engines; the branching factor is
+the durable comparison. The package's pre-game targets are branching at most
+`1.95`, depth-12 nodes at most `25 M`, NPS at least `0.85` of baseline, both
+cohorts improving, and a local diagnostic match of at least `+80` Elo.
+
+**Current-mechanism inventory at `596159e`.** Symbols are in
+`src/search/baseline.zig` unless noted. Every row changes under the core; the
+ADR gives the replacement formulas.
+
+| Mechanism | Present implementation | Under the core |
+|---|---|---|
+| Quiet history | `recordLegacyQuietCutoff` adds `depth` to a positive-saturating `i16` main table with no malus; reply/continuation use signed gravity with `historyBonus = depth^2`; `balanced_history` bonus/malus path exists but is off | One linear bonus `min(2048, 150*depth - 60)` and equal malus through `updateBounded` for main, reply and continuation; malus only to quiets actually searched before the winner |
+| Late-move reduction | `lateMoveEligible`: depth >= 4, `search_index >= 3`, quiet, not in check, not giving check, not singular; `min((depth-3)/3, log2(index+1)-2)` scaled by `116`, plus one, capped at `depth-2`; probe `reduced(depth-1, r)`, alpha rise re-searched at `full_child_depth` | Compile-time log-log table in 1024ths with PV/improving/cut/TT/history/root adjustments, from the third selected move at depth >= 2, quiets and losing captures, clamped to `[0, new_depth]` so a probe may run in quiescence; dispatch shape unchanged |
+| Shallow move omission | `shallowMovePruneEligible`: non-PV zero window, `search_index != 0`, parent `depth <= 3`, non-pawn material; LMP/futility/SEE read parent depth | One prospective depth `pd = max(0, new_depth - estimated reduction)`; LMP, futility and losing-capture SEE to `pd <= 8`, history pruning to `pd <= 6`; guard is one move actually searched; LMP trigger skips the node's remaining quiets |
+| Omission fail-low storage | `speculativeStoreValue` relabels a pruned fail-low as `reduced_search` and `tableDepth` stores it one ply shallower | Ordinary upper bound at nominal depth; the omission stays a diagnostic fact |
+| Reverse futility, razoring | RFP at `depth == 1` only with margin `68`; razoring parked at depth 1 | RFP to depth 8 with `68*depth + 50*depth*(not improving)`; razoring to depth 3 with `200*depth` through quiescence |
+| Null move | Fixed `R = 2`, minimum depth 4, verification at every fail-high at `depth - R` with null disabled | `R = 3 + depth/4 + min(3, (eval-beta)/200)` from depth 3; fail-high below depth 10 cuts without verification; from depth 10 the existing verification decides |
+| IIR | PV node, depth >= 5, no TT move | Every node type, depth >= 4, no legal TT move |
+| Aspiration | `features.aspiration = false` (MAN-R02 stability gate, symmetric doubling) | `core_aspiration`: `delta = 20 + |s|/32`, failed-side widening, geometric growth, one side opens fully after four failures; only exact attempts commit |
+| Unchanged | ProbCut (`depth >= 5`, margin `103`, reduction 3), singular extension, check extension, quiescence, TT format, publication, clock, SMP | Same |
+
+Sub-tickets, in order. 6.5.10.1 is complete; 6.5.10.2 is approved for
+implementation by this redefinition; 6.5.10.3 and 6.5.10.4 follow without a
+further approval step but each records its outcome here before the next begins.
+
+**6.5.10.1 frozen contract.**
+
+1. Placement is the existing MAN-S32 slot: non-root, after `isSearchDraw`
+   and the max-ply exit, before `probeTable`. Compute `lower = matedIn(ply)`
+   and `upper = mateIn(ply+1)`, then `alpha' = max(alpha, lower)` and
+   `beta' = min(beta, upper)`. When `alpha' >= beta'` return the existing
+   proof; otherwise the node continues with `alpha'/beta'` as its window, so
+   the TT probe, null/ProbCut/static windows, the move loop, the PVS test and
+   the final bound classification all read the narrowed window. Root never
+   narrows; completed-root, aspiration and root-confidence logic are untouched.
+2. Bound authority: a result at or below `alpha'` is `.upper`, at or above
+   `beta'` is `.lower`, between them exact. These remain valid against the
+   caller's wider window because no score reachable from this ply lies in the
+   clipped ranges; that is a SCORE-004 arithmetic property, tested from the
+   rules rather than from the implementation. TT storage keeps the existing
+   `scoreToTable` normalization and format. A checkmated or stalemated node
+   inside a narrowed window still returns within the clipped bounds.
+3. Zero windows are unchanged from MAN-S32 by the existing equivalence
+   property; the new behavior is confined to PV windows: the first ply below
+   root, `pv_research` children and full-window aspiration retries. The
+   default `-Dsearch-evidence-observation=false` arm records nothing; the
+   enabled arm records the narrowed window as the invocation's current width.
+4. Proposed selector, to confirm at ticket start: replace
+   `features.mate_distance_pruning` and `-Dmate-distance-pruning` with
+   `features.mate_windows` and `-Dmate-windows`, default off. The crossing-only
+   arm is removed rather than kept as a third configuration, because ADR-0070
+   states it is not the contract and two default-off mate switches would create
+   an untested combination. MAN-S32 keeps its historical registration. The off
+   arm must reproduce `775,451`, identical PV and results.
+5. Tests, each with an independent oracle: forced mates for both sides at
+   several plies giving identical mate distance and legal PV in both arms;
+   the window property in item 2 over crossing and non-crossing windows,
+   including a PV window that narrows without crossing; a scripted child that
+   confirms the returned bound is valid against the unnarrowed window; mate
+   bounds stored under a narrowed window and read back through the TT; root
+   mate positions (corpus indices 6 and 30) completing with the same best move
+   and score in both arms; terminal nodes inside a narrowed window.
+6. Evidence before games: `zig build search-attribution` and
+   `tools/branching_profile.ps1` over the forty positions in both arms,
+   reporting the full corpus, the ordinary subset and the two mate cases
+   separately, with nodes, elapsed and NPS as separate columns. A mate-cohort
+   saving is expected and is not ordinary-position strength.
+7. Gate: focused tests, off-arm fingerprint, then one registered 1T SPRT of
+   the on arm against this head under the unchanged trusted harness. The
+   candidate takes the next free `MAN-S` identifier when it is frozen; nothing
+   is registered now. 10.2 rebases on the accepted arm either way.
+
+**6.5.10.1 implementation record (2026-09-12).** Implemented as frozen, with
+one clarification the contract did not state and the code now documents. The
+clip drops *both* band edges from the searched window, because a window is an
+open interval: `alpha' = matedIn(ply)` excludes being mated on this ply and
+`beta' = mateIn(ply + 1)` excludes mating on the next. Neither exclusion loses
+a searchable outcome. A node that still has a legal move cannot score
+`matedIn(ply)` -- that value requires no legal move at all, and the terminal
+rule decides it above the window -- and a result that reaches `mateIn(ply + 1)`
+is the fastest mate the ply can hold, so the fail-high lower bound it returns
+is already the whole truth rather than a window artifact. Every score strictly
+inside the band keeps the same membership in the clipped and requested windows,
+which is what keeps a bound proven against the clipped edges valid for a caller
+holding a wider one.
+
+`features.mate_distance_pruning` and `-Dmate-distance-pruning` are replaced by
+`features.mate_windows` and `-Dmate-windows`, default off; `mateDistanceBound`
+becomes `mateWindow`, returning either the two unchanged crossing proofs or the
+clipped window. `negamaxNode` now searches that window, and the invocation
+reports it back so enabled observation records the width its own consumers
+read rather than the width requested. `MAN-S32`'s crossing-only arm is gone,
+ADR-0067's retention decision is marked superseded, and `SCORE-033` owns the
+mechanism.
+
+Gates that ran on the designated 5950X. Focused and full `zig build test` pass,
+including the rewritten band/clip properties, zero-window equivalence, both-side
+mate distance, terminal precedence, clipped-window table round trip and corpus
+mate-position identity. Native ReleaseFast `bench 6 1` reproduces `775,451` in
+the off arm and records `642,336` in the on arm, replacing `MAN-S32`'s frozen
+`642,394`: the complete clip narrows open principal windows that the crossing
+test could not touch. `zig build fmt`, `zig build policy` and `git diff --check`
+pass. No games have been run.
+
+Evidence before games, from `zig build search-attribution` (depths 4-10, 64 MiB,
+40 positions) and `tools/branching_profile.ps1` (same range, fresh process per
+depth, engines `manta-6510-baseline` / `manta-6510-candidate`). Both harnesses
+report identical node counts, so the cohorts below are one measurement seen
+twice. Nodes, elapsed and NPS are separate columns on purpose.
+
+| Cohort | Depth | Nodes off | Nodes on | Change |
+|---|---:|---:|---:|---:|
+| Ordinary 38 | 6 | 639,198 | 638,250 | `-0.15%` |
+| Ordinary 38 | 8 | 3,280,907 | 3,266,629 | `-0.44%` |
+| Ordinary 38 | 9 | 6,491,409 | 6,373,812 | `-1.81%` |
+| Ordinary 38 | 10 | 14,063,000 | 14,091,873 | `+0.21%` |
+| Mate 6 and 30 | 8 | 1,143,314 | 38,321 | `-96.65%` |
+| Mate 6 and 30 | 10 | 12,715,901 | 1,459,111 | `-88.53%` |
+| Full corpus 40 | 10 | 26,778,901 | 15,550,984 | `-41.93%` |
+
+The full-corpus total is the attribution error this ticket was told to avoid:
+`-41.9%` at depth 10 is almost entirely the two mate positions. On the ordinary
+subset the effect is within half a percent at every depth, positive at depth 10,
+and only 13 of 38 ordinary positions change at all -- those whose trees contain
+a mate score somewhere. Two of them move substantially in opposite directions
+(position 33 `-25.2%`, position 38 `+33.2%`), which is legal window-dependent
+behavior, not a saving. Ordinary elapsed time is noise-dominated: the
+in-process sweep read `-2.95%` at depth 10 while the first cross-engine run read
+`+7.11%`, and repeated depth-10 runs gave baseline `11,709 / 12,787 / 12,156` ms
+against candidate `12,541 / 12,360 / 12,389` ms, so the candidate's spread lies
+inside the baseline's own. No ordinary throughput change is claimed in either
+direction, and none of this is strength evidence.
+
+**6.5.10.1 gate and closure (2026-09-12).** The registered 1T SPRT ran on the
+designated 5950X from the prepared arms: candidate SHA-256
+`82CA7B3396B0C84948838E3358F01937497BDA5A7DE521C0BF217DA606B0D125`
+(`-Dmate-windows=true`, bench `642,336`) against the same-source baseline
+`04C0F60117D6B6A54AFDEB8BF76195DC75C09F6ACEF9CC18D942B1ADE577FFE4`
+(bench `775,451`), 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized
+UHO, normalized `[1,5]` at alpha/beta `0.05`, seed `1079633543`. The maintainer
+stopped it at 1,998 games: W/L/D `484/461/1053`, `+4.00 +/- 9.32` Elo
+(`+6.54 +/- 15.23` nElo), LLR `0.23`, no anomaly of any kind. The interval
+straddles zero. That is neither H0 nor H1; it is a neutral result.
+
+**The mechanism is production by an explicit maintainer exception, not by the
+gate.** The recorded reasons are that the result is neutral to slightly
+positive and that the change completes a previously functional feature rather
+than introducing a speculative one. The gate itself was misdesigned: gainer
+bounds were registered for a mechanism whose own pre-game evidence already
+predicted no ordinary-position gain, and a non-regression design should have
+been chosen prospectively, before any games ran. That error is recorded here so
+it is not repeated. **The exception is not precedent.** Only H1 promotes; a
+neutral or H0 candidate is not retained on judgment again without the
+maintainer making that same call explicitly.
+
+Promotion changes the deterministic identity. `features.mate_windows` and
+`-Dmate-windows` default on, production `bench 6 1` is `642,336` with geomean
+EBF `4.703`, upper median `12,201` and top share `16.1%` (`103,615`), and the
+switch-off arm reconstructs the superseded `775,451` tree exactly. Every
+archived reconstruction in `tests/bench_qualification.zig` pins the switch off
+through `runArchived`, so each historical fingerprint still names the head it
+was measured on; MAN-S33 and MAN-R02 pin it off for the same reason. Focused
+and full `zig build test`, `zig build fmt`, `zig build policy`, `zig build lint`
+and `git diff --check` pass.
+
+**6.5.10.2 — Implement the core (Opus, from ADR-0071).** Work the tickets in
+this order. Every ticket ends with: both arms compile (`zig build check` with
+`-Dselective-core=false` and `true`), the off arm reproduces `642,336` in
+native ReleaseFast `bench 6 1` with identical PV and results, the ticket's
+focused tests pass, and one commit. Do not tune the ADR's seed constants by
+hand; a changed seed needs a demonstrated defect and a recorded reason. Do not
+read other engines' sources; the ADR is the contract.
+
+- **A. Switches.** Add `-Dselective-core` and `features.selective_core` plus
+  the five component flags `core_history`, `core_lmr`, `core_move_pruning`,
+  `core_node_pruning`, `core_aspiration`, each effective only when the umbrella
+  is on. Extend the feature-ledger test, `build.zig` option plumbing and
+  `tests/bench_qualification.zig`'s `runArchived` so every archived fingerprint
+  pins the umbrella off. The core requires `live_history_staging`; make the
+  incompatible combination a compile error.
+- **B. `core_history`.** `historyBonus` per ADR A; main history moves to the
+  bounded gravity update with bonus to the exact or cutoff quiet winner and
+  malus to every quiet actually searched before it, collected at every node
+  regardless of reply context; reply and continuation keep their producers.
+  Killers and ranking weights unchanged. Tests: bonus bounds and monotonicity,
+  gravity stays within `history_limit`, only searched quiets are penalised,
+  winners at exact PV nodes are rewarded, killers rotate as before.
+- **C. `core_lmr`.** Comptime log-log table, one `coreReduction` returning
+  1024ths from a named-input struct, eligibility per ADR B, the `stat` input
+  from the picker's ranking value, root relief, and the clamp to
+  `[0, new_depth]` at dispatch (a zero probe depth enters quiescence through the
+  existing depth-zero dispatch). Reduced fail-lows keep `reduced_search`
+  provenance and the reduced TT depth. Under the core the archived
+  `dynamic_lmr`, `lmr_desaturation`, `lmr_synchronization` and `history_lmr`
+  paths are not consulted. Tests: table monotonic in both arguments, sign of
+  each adjustment, clamp bounds, first two selected moves never reduced, checks,
+  promotions, good captures and the singular move never reduced, every reduced
+  alpha rise verified before PV, cutoff or feedback authority, and a zero
+  reduction behaving as the ordinary scout.
+- **D. `core_move_pruning`.** Pre-make estimate with `gives_check = false`,
+  `pd`, the four omission rules per ADR C, `skipQuiets` on the live picker
+  after the first late-move-count trigger (bad captures still emitted), and the
+  storage change: a fail-low with omitted siblings stores as an ordinary upper
+  bound at nominal depth under the core. Tests: `pd <= new_depth`, no omission
+  before one move actually searched, no omission of a checking move after
+  make, no omission at PV nodes, in check, under decisive windows or without
+  non-pawn material, skipped quiets counted as omitted, remaining bad captures
+  still searched, and the nominal-depth upper-bound store.
+- **E. `core_node_pruning`.** RFP to depth 8, razoring to depth 3 through the
+  existing parked path, null move per ADR D with no verification below depth
+  10 and the existing same-node verification from depth 10, mate-range null
+  scores clamped to beta, and all-node IIR at depth >= 4 without a legal TT
+  move. Tests: no null move without non-pawn material, in check, at PV nodes or
+  directly after a null; verification subtree cannot null-prune at its root;
+  RFP and razoring refuse PV, check, exclusion and decisive windows; IIR never
+  fires at exclusion nodes; the existing zugzwang, fortress and tactical
+  canaries; WAC.001 `g3g6` at depth 5.
+- **F. `core_aspiration`.** A new root window per ADR E, separate from the
+  archived MAN-R02 path: only exact attempts commit, root evidence resets per
+  attempt, the retained completed result survives cancellation mid-retry, and
+  a mate or tablebase previous score uses the full window. Tests: bounded
+  attempt count, scripted fail-low and fail-high sequences, cancellation.
+- **G. Integration diagnostics.** With the mechanisms frozen, run once and
+  report as one table in this section: both-arm `bench 6 1`;
+  `tools/branching_profile.ps1` depths 4 to 12 at 64 MiB in both arms
+  (branching, depth-12 nodes, elapsed, NPS, ordinary and mate cohorts);
+  `zig build search-attribution -- --min-depth 4 --max-depth 10 --hash 64` on
+  the core arm (LMR probe share, re-search rate, each omission rule's share
+  with its eligibility denominator, null attempts, cutoffs and verifications,
+  aspiration retries); the tactical canaries; one full `zig build test` per
+  arm. Then the local diagnostic match on this workstation, authorized by this
+  plan as a design diagnostic and not as a gate:
+
+  ```bash
+  pwsh -NoProfile -File .\tools\sprt.ps1 -EngineA .\zig-out\manta-core.exe -EngineB .\zig-out\manta-base.exe -NameA MAN-S36-core -NameB MAN-S35-base -Mode fixed -Games 500 -Concurrency 8 -TC 3+0.03 -Hash 64
+  ```
+
+  Report W/L/D and the Elo estimate. Below `+30` Elo, stop and run the ADR's
+  ablation order once; between `+30` and `+80`, stop for review; at or above
+  `+80`, proceed to review. Do not run anything on the designated host.
+
+Stop rules for Opus: any legality, PV, terminal or restoration failure stops
+the ticket; a changed canary is recorded with its cause, never re-blessed or
+deleted silently; a fingerprint change in the off arm is a defect; questions
+about authority or chess semantics stop for Fable rather than being resolved
+by guess.
+
+**6.5.10.2 progress and stop (2026-09-12, Opus).** Tickets A to D are complete
+and committed; ticket E is implemented in the working tree but **not committed,
+because its required canary fails**. Work stopped at E under the ticket's own
+stop rule rather than continuing to F and G.
+
+| Ticket | Commit | Off-arm `bench 6 1` | Core-arm `bench 6 1` |
+|---|---|---:|---:|
+| A switches | `c15a5f9` | `642,336` | `642,336` |
+| B `core_history` | `f5960f0` | `642,336` | not measured |
+| C `core_lmr` | `db6cc6e` | `642,336` | `464,169` |
+| D `core_move_pruning` | `1d77e6d` | `642,336` | `313,881` |
+| E `core_node_pruning` | uncommitted | `642,336` | not accepted |
+
+The off arm reproduced `642,336` at every ticket and still does, with WAC.001
+answering `g3g6` at depths 3, 5 and 7. Nothing below is a defect of the accepted
+head.
+
+**The blocker.** `SCORE-034` and ADR-0071's invariant list both require WAC.001
+`g3g6` at depth 5. The core arm answers `f6h5`. The same position is the
+ADR's named canary and the Step-6.5.10.2 ticket text states it must hold, so
+this is a stop, not a canary change to be recorded and passed.
+
+Localisation, all at depth 5 on the workspace host, one build flag per
+component so no duplicate `-D` shadows another:
+
+| Arm | WAC.001 at depth 5 |
+|---|---|
+| Umbrella off | `g3g6` |
+| Umbrella on, all four components off | `g3g6` |
+| `core_history` only | `g3g6` |
+| `core_lmr` only | `g3g6` |
+| `core_move_pruning` only | **`f6e8`** |
+| `core_node_pruning` only | **`f6h5`** |
+
+Two components break the canary independently of each other; history and the
+reduction surface do not. The umbrella-on/all-components-off row is the useful
+control: it reproduces the accepted answer exactly, so the switch design itself
+leaks no behavior and the regression is in the two mechanisms, not the
+plumbing.
+
+Inside `core_node_pruning` the cause is **not** a single rule. Disabling
+reverse futility, razoring, all-node IIR or the null move one at a time each
+still answers `f6h5`; only disabling the component as a whole restores `g3g6`.
+The remaining localisation step is to enable the four rules one at a time
+rather than disable them one at a time, which is where this ticket stopped.
+
+`g3g6` is a queen sacrifice, so the two plausible mechanisms are the ones that
+price material and static evaluation:
+
+- ADR-0071 C prunes a non-promotion capture at `pd <= 8` when SEE falls below
+  `max(-1000, -see_pruning_unit * pd)`. At `pd = 6` that threshold is `-642`
+  and the sacrifice is worth about a queen for a pawn, so the mating move is
+  omitted before it is searched. At `pd = 8` the threshold is `-856` and it
+  survives. The rule therefore deletes exactly the forcing sacrifices this
+  canary exists to protect, and it does so more often as the reduction surface
+  lowers the prospective depth.
+- ADR-0071 D extends reverse futility from depth one to depth eight. The
+  repository has already refuted that scope on this exact position: the comment
+  on `tests/search_qualification.zig`'s canary records "the same forcing-move
+  failure mode already refuted for wider reverse-futility scope (ADR-0027)".
+  ADR-0071 does not cite ADR-0027 or say why the refutation no longer applies.
+
+**Open questions for the Fable review.** These are design decisions the ADR
+does not settle, and none of them is an implementation detail Opus should
+resolve by choosing a constant.
+
+1. Does the losing-capture omission need a forcing-move exemption -- a check,
+   a recapture, or a move that leaves the opponent's king with few replies --
+   or is the SEE floor itself wrong at low prospective depth?
+2. Does ADR-0071 D's depth-eight reverse futility survive ADR-0027's
+   refutation, and if so on what evidence? The ADR asserts the scope without
+   addressing the prior result.
+3. ADR-0071 C says a triggered late-move count makes the picker "skip every
+   remaining quiet without making it", while the invariant list says nothing
+   is pruned "when giving check". A quiet checking move can only be recognised
+   after `make`, and Manta has no pre-make check test. The implementation
+   currently skips by picker source, so a quiet checking move can be dropped
+   unmade. Which statement governs?
+4. ADR-0071 D says internal iterative reduction applies "at every node type".
+   The implementation keeps the existing root, in-check and exclusion-node
+   exclusions and changes only the expectation and depth rule, because the
+   completed-iteration contract is stated in the root's nominal depth. Confirm
+   that reading.
+
+**Decisions taken beyond the ADR text so far.** Recorded here so the review can
+accept or reverse them rather than discover them.
+
+- The five component switches default on and are effective only through
+  accessors on `Features`, so `-Dselective-core=true` alone selects the whole
+  package and an umbrella-off build is unaffected by any component's state.
+- `historyBonusFor` reaches `2048` at depth 15, not depth 14; `150 * 14 - 60`
+  is `2040`. The formula is the contract and the ADR's prose rounds it.
+- Main history under the core trains from a dedicated searched-quiet list
+  rather than the contextual one, because the contextual list is only filled
+  when a reply context exists and is decremented when LMR feedback claims a
+  move.
+- The null-move mate clamp is one-sided. Clamping a mate score against the
+  side to move would convert "passing here loses immediately" into a fail-high;
+  only scores above beta are capped.
+- `PruneCause` gained a `history` variant so the omission rules can be reported
+  separately with their own denominators in ticket G.
+
+**Review resolution after ticket E (Fable, 2026-09-12).** The stop was
+correct and the diagnosis was not. On the workspace host the classical
+reference answers WAC.001 `g3g6` first at depth 5 (`mate 3`), the off arm at
+depth 3 (`mate 2`), and the core arm with tickets A to E never through depth 9
+(`cp 26`, `f6h5`). A mate in two invisible at depth nine is a missing relation:
+the count-based quiet skip drops the late quiet `Qh7#` unmade, and the
+unverified null probe at the defender's node falls into a quiescence that
+generates no quiet checks, so passing looks safe. The sacrifice itself is a
+quiet move, so the SEE-floor hypothesis does not apply, and ADR-0027's
+reverse-futility "refutation" was this same canary without games. ADR-0071 now
+records the resolution, adds component F `core_qs_checks`, amends the
+omission invariant (per-move tests never omit a checking move; the count skip
+may drop unmade quiets), confirms the IIR reading and accepts every decision
+Opus recorded. Ticket E is accepted for commit as implemented. The canary
+moves to ticket E2; F and G are unchanged and still pending.
+
+- **E2. `core_qs_checks` (ADR-0071 F).** Add `Mode.quiet_checks` to
+  `src/chess/movegen.zig`: legal non-capture, non-promotion moves giving direct
+  check, computed per moving piece from the enemy king square with the mover's
+  origin removed from the occupancy (knight, bishop, rook and queen attack sets
+  from the king; pawn single and double pushes into the squares from which a
+  pawn of the side to move attacks the king); no king moves, castling or
+  discovered checks; legality through the existing pin and check-mask
+  machinery. Thread a quiescence ply counter through `quiescence` (zero from
+  the depth-zero dispatch, razoring and ProbCut entries; plus one on
+  recursion). At a non-check node with the component on and quiescence ply
+  zero, after the tactical partition and only when stand-pat did not cut,
+  append the direct checks; a non-empty check set satisfies the terminal
+  witness, otherwise the MAN-S34 witness rule is unchanged. In the loop, quiet
+  moves are searched only when checks were generated (witness quiets and
+  checks never coexist in one list), each only if `seeAtLeast(move, 0)`,
+  without delta pruning; children enter in-check quiescence at ply one.
+  Verify first that `seeAtLeast` prices a quiet move whose mover is attacked
+  on its destination (a queen check onto a pawn-attacked square must return
+  false); if it does not, stop and report before implementing a filter.
+  Tests: for the existing property corpus, every generated quiet check is a
+  legal non-tactical quiet and gives check after `make`, and every
+  non-tactical quiet that gives check with the moved piece as the sole checker
+  is generated; witness verdicts (stalemate, quiet-only, check, EP, promotion
+  cases) unchanged with the component on; a mate in one by a quiet check found
+  from a depth-zero entry; off-arm quiescence and fingerprint exact. Then the
+  full core arm must answer WAC.001 `g3g6` at depth 5; add that case with
+  `.selective_core = true` to `tests/search_qualification.zig` and re-run the
+  per-component localisation table with F included.
+
+**E2 pre-check stop (2026-09-12, Opus).** Ticket E is committed as `fa142fc`
+under its amended gate: both arms compile, the off arm reproduces `642,336`
+with geomean EBF `4.703`, upper median `12,201` and top share `16.1%`, and the
+focused node-pruning tests pass. The two mate-in-two cases in the ticket-D
+substrate test are WAC.001 and its colour mirror; they moved to E2 with a
+comment naming this resolution, and E2 restores them.
+
+E2's mandated pre-check **fails, so implementation stopped before the filter.**
+`seeAtLeast` does not price a quiet move at all. `src/chess/see.zig`'s
+`atLeast` returns `threshold <= 0` for any non-capture non-promotion move
+before it looks at the board:
+
+```zig
+if (!movegen.isCapture(value, chess_move) and chess_move.kind() != .promotion) {
+    return threshold <= 0;
+}
+```
+
+Confirmed on a constructed position rather than by reading alone. With black
+king `g8`, black pawns `d5` and `h3`, white queen `a2` and white king `e1`
+(`6k1/8/8/3p4/8/7p/Q7/4K3 w - - 0 1`), `Qa2-g2+` is a legal quiet check onto a
+square the `h3` pawn attacks, with no defender: the queen simply hangs.
+`seeAtLeast(Qg2, 0)` returns `true`, and so does `seeAtLeast(Qg2, -10000)`.
+The result is independent of the position; only the sign of the threshold
+matters.
+
+ADR-0071 F's filter is therefore a no-op as written. "Search each generated
+check only if its destination is not a losing square (`seeAtLeast(move, 0)`)"
+admits every direct quiet check the new generator produces, including ones
+that drop a queen for a spite check. The component would still be sound -- a
+checking child is an in-check quiescence node with complete evasions, no
+stand-pat and no further check generation, so the extension stays bounded by
+one ply -- but it would carry every hanging check in the position at every
+first-ply quiescence node, which is the cost the filter exists to prevent.
+
+This is a chess-semantics question, so it stops here rather than being resolved
+by choosing a threshold or writing a quiet-move exchange path unasked. Options
+for the review, not ranked:
+
+1. Give `see.atLeast` a real quiet-move path: run the existing exchange
+   sequence on the destination square with an empty initial gain, so a quiet
+   move that hangs its mover prices as the mover's value. This is the faithful
+   reading of "not a losing square" and makes the ADR text work unchanged, but
+   it edits `src/chess/see.zig`, which is outside the files PLAN 6.5.10 lists,
+   and it changes a function every existing consumer shares -- the capture
+   paths would be unaffected by construction, but that is a claim the review
+   should want tested, not assumed.
+2. Filter with a cheaper in-scope predicate: drop a check whose destination is
+   attacked by an enemy pawn, or attacked by anything and undefended, using
+   the attack machinery `movegen` already has. This keeps the change inside
+   the declared files and catches the case that motivated the filter, but it
+   is a different rule from the one the ADR states and needs its own wording.
+3. Drop the filter and search every direct quiet check, relying on the one-ply
+   bound. Simplest and closest to what the classical reference does at its
+   first quiescence ply, but it spends nodes on obviously losing checks and
+   the ADR's cost argument would need restating.
+
+Nothing else in E2 was implemented: `Mode.quiet_checks`, the quiescence ply
+counter and the loop wiring all depend on which of these the review picks,
+because the filter sits inside the same loop. The working tree is clean at
+`fa142fc`; tickets F and G are untouched and still pending.
+
+**Review decision on the E2 pre-check (Fable, 2026-09-12).** Option 1. The
+filter's meaning is the exchange on the destination square, and the classical
+reference applies exactly that to its quiescence checks. Extend `see.atLeast`
+so a non-capture, non-promotion, non-castling move takes the existing
+`exchangeAtLeast` path with zero initial gain and the mover as the first
+occupant, origin removed from the occupancy; `capturedType` already yields
+`.none` for it. Castling keeps `threshold <= 0`. Evidence that the accepted
+tree cannot move: every umbrella-off caller in `baseline.zig` and
+`ordering.zig` prices captures or promotions only, and the board benchmark's
+threshold-SEE cell prices legal captures only, so no frozen workload changes.
+Extend `tests/chess_differential.zig`'s `expectSeeProperties` to quiet moves:
+the existing bounds, threshold monotonicity, and the floor `-value(mover)`
+instead of the capture floor. Add Opus's constructed position as a focused
+case: `Qa2-g2+` in `6k1/8/8/3p4/8/7p/Q7/4K3 w - - 0 1` must fail
+`seeAtLeast(move, 0)` and pass at `-900`. `src/chess/see.zig` joins the
+ticket's files for this change only. Then implement the rest of E2 as
+specified and continue.
+
+**E2 implemented; the canary still fails (2026-09-12, Opus).** Both parts of
+E2 are committed and E2's own tests pass, but component F does not restore
+WAC.001 at depth 5, so work stopped at step 3 rather than continuing to F and
+G. No constant was adjusted.
+
+| Commit | Content |
+|---|---|
+| `96cd303` | `see.atLeast` prices quiet moves through the exchange path |
+| `6a5671b` | `Mode.quiet_checks`, the quiescence ply counter and the wiring |
+
+Part one landed as decided. `see.atLeast` now routes every non-castling move
+through `exchangeAtLeast`; castling keeps `threshold <= 0`. Evidence the
+accepted tree cannot move: the off arm reproduces `642,336` with geomean EBF
+`4.703`, upper median `12,201` and top share `16.1%`, WAC.001 still answers
+`g3g6` with `mate 2` and PV `g3g6 g7f6 g6h7` at depth 5, and the board
+benchmark's `SEE-CONTRACT-V1` signature is byte-identical before and after the
+change (both hash to `9d93659914...`), because both SEE cells generate
+`.captures` only. `expectSeeProperties` now covers quiet moves.
+
+One correction to the stated floor. `-value(mover)` does not hold on the
+promotion ranks: a quiet rook move to rank eight can be answered by a pawn
+recapture that promotes, so the exchange costs the rook plus the pawn-to-queen
+upgrade. The corpus found it immediately (`a8b8`, floor `-500`). This is a
+property of the exact gain-array path `atLeast` already used for ranks one and
+eight, not of quiet pricing -- a capture landing there could always reach it,
+quiet moves just arrive far more often. The test now asserts
+`captured - value(mover) - (queen - pawn)` on those ranks and the plain floor
+elsewhere.
+
+Part two landed as specified. `Mode.quiet_checks` generates direct checks only,
+computed from the enemy king square with the mover's origin removed from the
+occupancy, no king moves, castling or discovered checks, legality through the
+existing pin and check-mask machinery. The generator is validated in both
+directions over the whole property corpus by a make-and-look oracle rather
+than by re-deriving its own attack sets: every generated move is a legal
+non-tactical quiet whose destination is the sole checker after `make`, and
+every legal non-tactical quiet that is a sole direct check is generated. The
+quiescence ply counter is zero at the depth-zero dispatch, both razoring
+entries and the ProbCut entry, and plus one on recursion. Checks are appended
+after the tactical partition and only when stand-pat declined to cut, filtered
+by `seeAtLeast(move, 0)`, with no delta pruning. Checks are a subset of the
+non-tactical quiets, so the MAN-S34 witness already covers F's witness clause;
+that subset relation is asserted directly rather than adding redundant logic.
+The component is measurably live: the arm that generates checks searches
+strictly more quiescence moves across the corpus, and the core bench moves from
+`231,920` without F to `252,091` with it.
+
+**The table, WAC.001 at depth 5, one build flag per component.**
+
+| Arm | Best move | Core `bench 6 1` |
+|---|---|---:|
+| Umbrella off | `g3g6` | `642,336` |
+| Umbrella on, all six components off | `g3g6` | -- |
+| `core_history` only | `g3g6` | -- |
+| `core_lmr` only | `g3g6` | -- |
+| `core_move_pruning` only | **`f6e8`** | -- |
+| `core_node_pruning` only | **`f6h5`** | -- |
+| `core_qs_checks` only | `g3g6` | `696,153` |
+| `core_move_pruning` + `core_qs_checks` | **`f6e8`** | -- |
+| `core_node_pruning` + `core_qs_checks` | **`f6h5`** | -- |
+| `core_move_pruning` + `core_node_pruning` | **`f6h5`** | -- |
+| A to E, F off | **`f6h5`** | `231,920` |
+| **All six on** | **`f6e8`** | `252,091` |
+
+`core_aspiration` is declared and switchable but has no consumer until ticket
+F, so it is inert in every row above.
+
+**The review's diagnosis is not confirmed by measurement.** F was accepted as
+the safety net that would keep the mate threat visible one ply later, and it
+does not rescue either breaking component: `core_move_pruning + core_qs_checks`
+still answers `f6e8` and `core_node_pruning + core_qs_checks` still answers
+`f6h5`. F alone is behaviour-correct on this canary, so the failure is not the
+absence of first-ply checks.
+
+What the rows do say: each of `core_move_pruning` and `core_node_pruning`
+breaks the canary on its own, and F is orthogonal to both. The earlier
+resolution attributed the loss to the count-based quiet skip dropping `Qh7#`
+unmade plus a blind null probe; if that were the whole relation, adding
+first-ply checks to the defender's quiescence would restore the answer, and it
+does not. Either the skip drops the move earlier than the review's account
+assumes, or the mate is lost at a node the check generation never reaches --
+for instance inside a reduced probe that lands in quiescence at a deeper
+quiescence ply, where F deliberately generates nothing.
+
+**Open questions for the review.**
+
+1. Does the count-based skip need the checking-move exemption after all? The
+   amended invariant explicitly permits dropping quiet checks unmade, with F
+   as the compensation; F does not compensate here.
+2. `core_node_pruning` breaks the canary alone, and F does not rescue it.
+   Earlier one-rule-at-a-time disabling never isolated a single rule inside it.
+   The remaining localisation is one-rule-at-a-time *enabling*, which needs
+   either four temporary sub-switches or a review decision about which rule to
+   suspect first.
+3. Is depth 5 the right anchor at all? The classical reference finds `g3g6`
+   first at depth 5 with a far narrower tree, and the core arm is narrower
+   still per ply. A canary anchored to another engine's nominal depth may be
+   measuring depth equivalence rather than the relation the package needs.
+
+**Not done, deliberately.** The two mate-in-two substrate cases and the
+`.selective_core = true` WAC.001 case in `tests/search_qualification.zig` are
+still withheld: adding either now commits a red suite for a failure the review
+has not resolved. Both are one edit away once it is. Tickets F and G, the
+diagnostic table and the local match are untouched.
+
+**Third review resolution (Fable, 2026-09-12): traced, not hypothesised.** A
+scratch build of two component arms printed every decision at plies one and
+two on `go depth 5 searchmoves f6h5 g3g6`. The first root move scores `-206`,
+so the black node after `Qg6` runs in `[205, 206]` and must return at least
+`206` for the sacrifice to fail. It did, for two different reasons:
+
+| Arm | Node | What the trace shows |
+|---|---|---|
+| `core_move_pruning` + F | white after `1.Qg6 Nxe5`, depth 3, eval `-838` | `dxe5` searched; three king moves futility-pruned; the fourth quiet `a2a3` hit the late-move count and the picker skipped every remaining quiet **unmade, including `Qh7#`**; only `Qxh6+` and `Qxg7+` were then searched; white returned `-206` |
+| `core_node_pruning` + F | black after `1.Qg6`, depth 4 reduced to 3 by IIR, eval `+570` | reverse futility cut at once: `570 - (68 + 50) * 3 = 216 >= 206`; the evaluator already rates the root three pawns better for Black because its unfitted king danger misses White's attack (see 6.5.12), the pawn attack on the queen adds about 250 more, and the seed margin was the depth-one fitted value |
+
+F was correct and irrelevant to both: the skip never made the checking move,
+and the static cut never reached a move loop. Opus's three questions are
+answered by the amendments now in ADR-0071 and `SCORE-034`: the count skip
+keeps direct quiet checks (question 1); the node-pruning rule was reverse
+futility with a margin far below Manta's evaluation swings, and razoring
+returns to depth one (question 2); depth 5 stays the anchor, because the
+traced failures are design defects that the reference does not have, not
+depth equivalence (question 3). A third amendment follows from the same
+mechanism: reduced probes keep one main-search ply, since a zero-depth probe
+hands the opponent a quiescence where our own quiet mate threats are invisible.
+
+- **E3. Apply the three amendments.** (1) `coreReduction` clamps to
+  `[0, new_depth - 1]` and does not reduce when `new_depth == 0`; the
+  prospective-depth estimate uses the same clamp. (2) When the late-move count
+  first triggers at a node, compute the node's direct-check squares once, per
+  piece type from the enemy king with the mover's origin removed, through a
+  helper shared with `generateQuietChecks`, and make `skipRemainingQuiets`
+  keep any quiet whose destination is in that set for its piece type; a kept
+  move is then made and judged by the existing post-make check exemption.
+  (3) Reverse futility margin `(150 + (improving ? 0 : 60)) * depth` to depth
+  8; razoring only at `depth == 1` with `pruning_eval + 300 <= alpha`. Update
+  the focused tests these formulas already have. Gate: both arms compile, off
+  arm `642,336` exact, focused tests pass, one commit.
+- **E4. Canary and table.** The full core arm must answer WAC.001 `g3g6` at
+  depth 5. Add that case with `.selective_core = true` to
+  `tests/search_qualification.zig`, restore the two mate-in-two substrate
+  cases, re-run the per-component localisation table with all six components
+  and record it here. If depth 5 still fails, trace it the same way (ply one
+  and two decisions on the two-move root) and report the trace, not a guess.
+  Then F and G proceed unchanged.
+
+**E3 and E4 complete (2026-09-12, Opus).** The three amendments are committed
+as `77375b6` and the canary passes: the full core arm answers WAC.001 `g3g6`
+with `mate 2` and PV `g3g6 g7f6 g6h7` at depth 5, and again at depth 7. The
+off arm is untouched at `642,336`, geomean EBF `4.703`, upper median `12,201`,
+top share `16.1%`, still answering `g3g6` at depth 5.
+
+The canary case is now in `tests/search_qualification.zig` with
+`.selective_core = true`, and the two mate-in-two substrate cases are restored.
+
+**Per-component localisation, WAC.001 at depth 5, one build flag per
+component.** `core_aspiration` is inert until ticket F.
+
+| Arm | Best move | Core `bench 6 1` |
+|---|---|---:|
+| Umbrella off | `g3g6` | `642,336` |
+| Umbrella on, all six off | `g3g6` | `642,336` |
+| `core_history` only | `g3g6` | `609,509` |
+| `core_lmr` only | `g3g6` | `565,953` |
+| `core_move_pruning` only | `g3g6` | `422,504` |
+| `core_node_pruning` only | **`f6e8`** | `471,033` |
+| `core_qs_checks` only | `g3g6` | `696,153` |
+| **All six on** | **`g3g6`** | `342,929` |
+
+Two rows deserve comment. `core_qs_checks` alone costs nodes rather than
+saving them, which is expected: it adds forcing moves to the first quiescence
+ply and removes nothing. And `core_node_pruning` alone still answers `f6e8`,
+while the complete package answers `g3g6`. The contract's canary is the full
+core arm and the components are ablation diagnostics that are never gated
+separately, so this is not a gate failure, but it is recorded rather than
+left for someone to rediscover: with node pruning as the only live component
+the tree is wide everywhere else, and whatever visibility its remaining rules
+remove is restored in the full package by the probe floor and the skip
+exemption that live in the other components. Which of its four rules is
+responsible is unresolved; the earlier one-at-a-time disabling never isolated
+one, and one-at-a-time enabling needs temporary sub-switches.
+
+The bench total rose from `252,091` before E3 to `342,929` after it. That is
+the amendments working as intended: the probe floor spends a main-search ply
+the old surface gave away, and razoring at depth one only stops replacing two
+further plies with quiescence.
+
+**F and G complete (2026-09-12, Opus). Every pre-game target is met and the
+local diagnostic match is `+110.60` Elo.** Commits: `aa22dd0` the root
+aspiration window, `5915468` two accounting repairs the observation build
+caught.
+
+Both arms are native ReleaseFast from the same source. Core arm SHA-256
+`AC7089964FEBAA2139A6B6B00D437B981169F77CC2035F3AEC628A661C2D72F7`
+(`-Dselective-core=true`, bench `339821`); base arm
+`AF14EC5FCDEB8E608349A6EE6329E63A6648B9253B13202B76318BBDB55B02C2`
+(bench `642336`). Both were built from a dirty tree, so they are diagnostic
+binaries only; 6.5.10.4 rebuilds from a clean commit.
+
+**Targets.** Forty positions, 64 MiB, one thread, fresh process per depth.
+
+| Diagnostic | Baseline | Target | Core arm | Verdict |
+|---|---:|---:|---:|---|
+| Geometric branching, depths 4 to 12 | `2.225` | at most `1.95` | **`1.765`** | met, and narrower than the reference's `1.88` |
+| Nodes at depth 12 | `82,249,155` | at most `25 M` | **`9,327,682`** | met, `0.113x` |
+| NPS relative to baseline at depth 12 | `1.00` | at least `0.85` | **`0.904`** | met |
+| Ordinary and mate cohorts | | both improving | see below | met |
+| Local diagnostic match | | at least `+80` Elo | **`+110.60`** | met |
+
+**Depth curve, both arms.**
+
+| Depth | Base nodes | Core nodes | Ratio | Base ms | Core ms | Base NPS | Core NPS | Rel |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 4 | `137,167` | `98,847` | `0.721` | `313` | `287` | `438,233` | `344,415` | `0.786` |
+| 6 | `655,442` | `342,560` | `0.523` | `693` | `452` | `945,804` | `757,876` | `0.801` |
+| 8 | `3,304,950` | `953,653` | `0.289` | `2,794` | `916` | `1,182,874` | `1,041,106` | `0.880` |
+| 10 | `15,550,984` | `3,690,152` | `0.237` | `11,985` | `2,828` | `1,297,537` | `1,304,863` | `1.006` |
+| 11 | `30,887,235` | `5,641,596` | `0.183` | `23,838` | `4,606` | `1,295,714` | `1,224,836` | `0.945` |
+| 12 | `82,249,155` | `9,327,682` | `0.113` | `58,267` | `7,312` | `1,411,591` | `1,275,668` | `0.904` |
+
+NPS is lowest at shallow depths, where the extra first-ply quiescence checks
+are a large share of a small tree, and recovers to about `0.9` by depth 12. The
+off-arm row reproduces PLAN's recorded baseline exactly -- branching `2.225`,
+depth-12 nodes `82,249,155` -- which is the check that the measurement setup
+is the same one that produced the baseline.
+
+**Cohorts, reported separately.** Both improve, and the ordinary subset carries
+the gain rather than the two mate positions.
+
+| Cohort | Depth | Base nodes | Core nodes | Ratio | Base ms | Core ms | NPS rel |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Ordinary 38 | 10 | `14,091,873` | `3,449,266` | `0.245` | `11,322` | `2,692` | `1.029` |
+| Ordinary 38 | 12 | `78,660,840` | `8,756,302` | `0.111` | `56,661` | `6,988` | `0.903` |
+| Mate 6 and 30 | 10 | `1,459,111` | `240,886` | `0.165` | `663` | `136` | `0.805` |
+| Mate 6 and 30 | 12 | `3,588,315` | `571,380` | `0.159` | `1,606` | `324` | `0.789` |
+
+**Attribution on the core arm**, `zig build search-attribution -- --min-depth 4
+--max-depth 10 --hash 64`, corpus totals with each rule's own denominator.
+
+| Quantity | Value | Denominator |
+|---|---:|---|
+| Main nodes | `3,976,932` | |
+| Searched main moves | `3,803,718` | |
+| LMR probes | `390,783` | `10.3%` of searched main moves |
+| LMR re-searches | `8,726` | `2.23%` of probes |
+| Late-move-count omissions | `5,433,189` | `48.30%` of `11,247,818` selected main moves |
+| Quiet-futility omissions | `291,697` | `2.59%` of selected |
+| History omissions | `134,643` | `1.20%` of selected |
+| Losing-capture SEE omissions | `1,584,571` | `14.09%` of selected |
+| Null attempts | `129,913` | |
+| Null cutoffs | `64,589` | `49.7%` of attempts |
+| Null verifications | `0` | `0%` of attempts; none of these nodes reached depth 10 |
+| Reverse-futility cuts | `444,367` | `11.17%` of main nodes |
+| Razoring cuts | `108,046` | `2.72%` of main nodes |
+| Aspiration fail-lows / fail-highs | `407` / `391` | |
+
+The `2.23%` re-search rate is a diagnostic, not evidence that the reductions
+are safe: a low re-search rate is equally consistent with reducing too little
+to matter and with reducing correctly. What it does say is that the surface is
+not thrashing. Two thirds of all selected moves are omitted before they are
+made, which is the shape change the branching factor reports.
+
+**Canaries on the core arm.** Mate in one at depth 1 (`g6g7`, `mate 1`);
+hanging queen at depth 1 taken by the king, `cp 1361`; KQK and KBNK positive at
+depth 2 (`cp 1765`, `cp 1501`); WAC.001 `g3g6` with `mate 2` at depth 5.
+
+**Full `zig build test` per arm: both pass.** One scoping change was needed and
+is recorded below.
+
+**Local diagnostic match**, this workstation, 1T `3+0.03`, Hash 64 MiB,
+concurrency 8, 500 fixed games, no adjudication (ADR-0071's own harness rule):
+
+`MAN-S36-core` vs `MAN-S35-base`: **W/L/D `219/65/216`, `+110.60 +/- 22.52`
+Elo, `+160.19 +/- 30.45` nElo, LOS `100.00%`**, pentanomial
+`[3, 29, 73, 101, 44]`, draw ratio `29.20%`, pairs ratio `4.53`. Zero
+anomalies: no time forfeit, crash, disconnect, illegal move or stall in the
+log. Terminations were `205` threefold draws, `149` white mates, `135` black
+mates, `9` insufficient material and `2` fifty-move draws -- every game ended
+by a rule of chess, as ADR-0071 requires.
+
+That is above the `+80` threshold, so by the ADR's own rule the package
+proceeds to review rather than to ablation. The match authorizes nothing: it is
+a fixed-size diagnostic on the development host with no SPRT stop rule, and
+only the registered 1T gate of 6.5.10.4 can promote.
+
+**Decisions beyond the ADR text, this session.**
+
+1. `PruneCause` gained a `history` variant and the attribution row gained
+   `prunes_history`, `prunes_razoring` and `null_verifications`, so ticket G
+   could report each omission rule against its own denominator.
+2. `diagnostics.Counters` gained `nullMoveCutoff`. ADR-0071 D cuts on a null
+   fail-high below depth 10 without verifying, and the observation build's
+   accounting invariant is `null_move_cutoffs == prunes_by_cause[.null_move]`.
+   Folding the unverified cutoff into `nullMoveVerification` would have
+   reported a verification that never ran and made the verification rate
+   meaningless.
+3. Each quiet dropped inside the picker is counted as both a late-move-count
+   candidate and an omission by that rule, so the aggregate never exceeds its
+   own candidate denominator.
+4. A quiet check dropped by F's exchange filter is counted as a quiescence SEE
+   omission, which keeps the cross-cutting `see` aggregate equal to the sum of
+   its two phase counters.
+5. `tools/search_observe.zig`'s twelve-case suite now skips under the umbrella.
+   It asserts in both directions that the **production** configuration reaches
+   every accepted stage and leaves every rejected one silent. The core arm
+   reaches no verified ProbCut in twelve fixed cases simply because its tree is
+   narrower, and it deliberately changes IIR and adds a root window, so neither
+   half of that contract describes it. Weakening the assertions instead would
+   have removed the protection the accepted head has; the core arm's accounting
+   is asserted by the substrate tests and by the table above.
+6. `build_test.ps1` gained `-SelectiveCore` so the two diagnostic binaries
+   carry hash-bound provenance manifests.
+7. The differential SEE floor is `captured - value(mover) - (queen - pawn)` on
+   the promotion ranks. `-value(mover)` is not a floor there, because a
+   recapturing pawn can promote; the corpus found it on `a8b8` immediately.
+   This is a property of the exact gain-array path `atLeast` already used for
+   ranks one and eight, not of quiet pricing.
+
+**Open questions for the review.**
+
+1. `core_node_pruning` alone still answers WAC.001 `f6e8` at depth 5, while the
+   full package answers `g3g6`. The canary is a full-arm contract and the
+   components are ablation diagnostics, so this blocks nothing, but which of
+   its four rules is responsible is still unresolved: one-at-a-time disabling
+   never isolated one, and one-at-a-time enabling needs temporary sub-switches.
+   Worth settling before 6.5.12 touches any of those rules.
+2. Null verifications are `0` over the whole depth-4-to-10 sweep, so the
+   depth-10 threshold is untested by these diagnostics. The first real evidence
+   about it will come from the registered gate's deeper searches.
+3. Shallow-depth NPS is `0.79` to `0.80`, recovering to `0.90` by depth 12.
+   If the registered gate runs at a control where shallow depths dominate, the
+   first-ply check generation is the obvious cost to re-examine; it is the only
+   component that adds work rather than removing it (`696,153` bench nodes
+   alone against `642,336`).
+4. The aspiration window fires `407` fail-lows and `391` fail-highs over the
+   sweep with no observed pathology, but ADR-0071 E's four-failure opening rule
+   has not been exercised by a real search in these diagnostics -- only by its
+   property test. A position that repeatedly fails one side at the root would
+   be the honest check.
+
+**Review-1 repair and re-run (2026-09-12, Opus).** The authority finding is
+repaired in `22419a8`: the core's unverified null cutoff below
+`core_null_verification_depth` returns beta with `null_move` provenance and
+stores nothing. The verified path from depth 10 keeps its storage unchanged.
+
+The focused test states the invariant without naming the threshold, which
+6.5.11 may fit: a table entry produced by `null_move` can only follow a
+verification, so over any search
+`tt_stores_by_producer[null_move] <= null_move_verifications`. The oracle is
+the store site, not the repaired branch -- `ttStore` counts what the table
+actually received, by producer, wherever the call came from. Non-vacuity is
+asserted separately, because `null_move_cutoffs` counts accepted verifications
+plus unverified cutoffs, so any excess over `null_move_verifications` can only
+come from the unverified branch. The test was verified to fail with the
+`storeTable` call reinstated and to pass with it removed.
+
+Gate: both arms compile, the off arm reads `642,336` with geomean EBF `4.703`,
+upper median `12,201`, top share `16.1%` and WAC.001 still `g3g6`/`mate 2` at
+depth 5, and the full suite passes.
+
+**Re-run of the affected ticket-G rows**, both arms rebuilt from the clean
+repair commit `22419a8`. Core arm SHA-256
+`90563AB69AAE2048E465894E61223C97D5FA4CBA25892979136C23BA6EEFA818`, base arm
+`63A30FD5386EAFDE...`, neither from a dirty tree this time.
+
+| Row | Pre-repair (`f9f82ad`) | Post-repair (`22419a8`) | Target |
+|---|---:|---:|---|
+| Off-arm `bench 6 1` | `642,336` | `642,336` | exact |
+| Core-arm `bench 6 1` | `339,821` | `359,259` | diagnostic |
+| Geometric branching, depths 4 to 12 | `1.765` | `1.775` | at most `1.95` |
+| Nodes at depth 12 | `9,327,682` | `9,693,589` | at most `25 M` |
+| Elapsed at depth 12 | `7,312 ms` | `7,120 ms` | |
+| NPS relative at depth 12 | `0.904` | `0.964` | at least `0.85` |
+| Local match | `+110.60 +/- 22.52` | `+117.55 +/- 22.68` | at least `+80` |
+
+Every target is still met. The tree grew about `3.9%` at depth 12, which is
+the cost of not reusing an unverified null bound, and the core bench rose from
+`339,821` to `359,259`. Elapsed time did not rise with it: the depth-12 run was
+slightly faster and relative NPS improved from `0.904` to `0.964`, because the
+refused entries were also refused TT work. The off-arm baseline row is
+unchanged and was not re-measured.
+
+**Cohorts, post-repair.** Both still improve, and the ordinary subset still
+carries the gain.
+
+| Cohort | Depth | Base nodes | Core nodes | Ratio | NPS rel |
+|---|---:|---:|---:|---:|---:|
+| Ordinary 38 | 10 | `14,091,873` | `3,044,057` | `0.216` | `1.060` |
+| Ordinary 38 | 12 | `78,660,840` | `8,947,601` | `0.114` | `0.959` |
+| Mate 6 and 30 | 10 | `1,459,111` | `204,339` | `0.140` | `0.829` |
+| Mate 6 and 30 | 12 | `3,588,315` | `745,988` | `0.208` | `0.843` |
+
+**Attribution, post-repair** (`--min-depth 4 --max-depth 10 --hash 64`), beside
+the pre-repair column.
+
+| Quantity | Pre-repair | Post-repair | Post share |
+|---|---:|---:|---|
+| Main nodes | `3,976,932` | `3,862,255` | |
+| Searched main moves | `3,803,718` | `3,679,535` | |
+| LMR probes | `390,783` | `403,303` | `10.96%` of searched main moves |
+| LMR re-searches | `8,726` | `9,953` | `2.47%` of probes |
+| Late-move count | `5,433,189` | `5,759,096` | `50.04%` of `11,508,251` selected |
+| Quiet futility | `291,697` | `279,619` | `2.43%` of selected |
+| History | `134,643` | `163,177` | `1.42%` of selected |
+| Losing-capture SEE | `1,584,571` | `1,626,824` | `14.14%` of selected |
+| Null attempts | `129,913` | `136,410` | |
+| Null cutoffs | `64,589` | `69,539` | `50.98%` of attempts |
+| Null verifications | `0` | `3` | `0.00%` of attempts |
+| Reverse futility | `444,367` | `450,549` | `11.67%` of main nodes |
+| Razoring | `108,046` | `100,996` | `2.61%` of main nodes |
+| Aspiration fail-low / fail-high | `407` / `391` | `414` / `413` | |
+
+Main nodes fell while selected moves rose: without the stored null bound more
+nodes run their move loop instead of taking a cached cutoff, so each surviving
+node does more work and the total node count still rises. Null verifications
+moved from `0` to `3`, which is the first direct evidence in these diagnostics
+that the depth-10 threshold is reachable at all; the review's answer to
+question 2 predicted it would only appear in deeper searches.
+
+**Canaries, post-repair.** Mate in one at depth 1 (`g6g7`, `mate 1`); hanging
+queen at depth 1, `cp 1361`; KQK `cp 1765` and KBNK `cp 1501` at depth 2;
+WAC.001 `g3g6` with `mate 2` at depth 5.
+
+**Local match, post-repair.** Same command, same thresholds.
+`MAN-S36-core` vs `MAN-S35-base`, 1T `3+0.03`, Hash 64 MiB, concurrency 8, 500
+fixed games, no adjudication: W/L/D `215/52/233`, **`+117.55 +/- 22.68` Elo,
+`+170.47 +/- 30.45` nElo**, LOS `100.00%`, pentanomial `[4, 21, 82, 94, 49]`,
+draw ratio `32.80%`, pairs ratio `5.72`. Zero anomalies. Terminations: `219`
+threefold, `144` white mates, `123` black mates, `12` insufficient material,
+`1` stalemate, `1` fifty-move. The repair did not cost strength on this
+sample; the point estimate rose by `7` Elo, well inside the intervals.
+
+**6.5.10.4 handoff (prepared and preflighted, not run).** `MAN-S36` is
+registered in `EXPERIMENTS.md` as registered-and-preflighted. Both arms are
+built from the clean repair commit `22419a8` by `tools/build_test.ps1`, so each
+carries a hash-bound provenance manifest and neither reports a dirty tree.
+
+| Arm | Binary | SHA-256 | `bench 6 1` |
+|---|---|---|---|
+| A `MAN-S36` | `tools/test_engines/manta-S36-core.exe` | `90563AB69AAE2048E465894E61223C97D5FA4CBA25892979136C23BA6EEFA818` | `359,259` |
+| B `MAN-S35` | `tools/test_engines/manta-S36-base.exe` | `63A30FD5386EAFDE9FA010A93C62F5B2D267071B90E6226999F92F4429435510` | `642,336` |
+
+Both native, same commit, same Zig `0.16.0`; their manifests differ in exactly
+one field, `selective_core`. `tools/sprt.ps1 -DryRun` passed its setup-only
+preflight: compiler equality, build-contract equality, option advertisement,
+physical-core placement and book resolution, with no game process started and
+no result artifact written. No pilot is warranted -- the harness boundaries are
+unchanged since the adjudication retirement of ADR-0071's own rule, which both
+arms already run under.
+
+The maintainer command, to run on the designated 5950X:
+
+```bash
+pwsh -NoProfile -File ./tools/sprt.ps1 -EngineA "tools\test_engines\manta-S36-core.exe" -EngineB "tools\test_engines\manta-S36-base.exe" -NameA "MAN-S36" -NameB "MAN-S35" -Elo0 1 -Elo1 5 -Alpha 0.05 -Beta 0.05 -MaxGames 16000 -Hash 64 -Threads 1 -TC "3+0.03"
+```
+
+It resolves to 1T `3+0.03`, Hash 64 MiB per engine, concurrency 14 on 16
+physical cores with an explicit CPU list, paired randomized UHO openings,
+`natural-v1` game end with no adjudication, normalized `[1,5]` at alpha/beta
+`0.05` and a 16,000-game cap. The opening seed is generated and recorded in the
+run manifest at launch. Completed time forfeits are fatal, because clock policy
+is not the measured subject; every engine, protocol, affinity or infrastructure
+fault is fatal as well.
+
+Budget, derived from the local 500-game match on this host (500 games in
+`563 s` at concurrency 8, `3,027` PGN bytes per game): about `93` games per
+minute at concurrency 14, so the full cap is roughly `2.9` hours of wall time
+and about `46 MiB` of PGN plus a log and the copied manifests. A decisive
+candidate resolves far sooner. The harness has no checkpoint or resume: an
+interrupted run keeps its partial PGN and log for inspection but must be
+restarted, and partial runs are never spliced.
+
+Stop rule: accept H1, accept H0, or exhaust the cap. Only H1 promotes, and it
+promotes the package rather than any component -- the six switches are
+ablation diagnostics and were never gated separately. On H1 the umbrella
+defaults on, `359,259` becomes the recorded production fingerprint, the off arm
+keeps reconstructing `642,336`, the archived fingerprints stay pinned, and
+`SCORE-034`, `EXPERIMENTS.md`, `GUIDE.md` and this section are reconciled. H0
+or an exhausted cap does not promote; one ablation cycle in ADR-0071's order is
+permitted, then a re-plan. Record the returned manifest, log, PGN and decision
+snapshot before any verdict is written.
+
+**6.5.10.3 — Review loop (Fable).** Review the implementation against ADR-0071
+and `SCORE-034`: verification before PV, cutoff, TT or feedback authority;
+provenance and scope through negation; null-verification scope; exclusion-node
+behavior; the omission storage change; every legality exemption; arithmetic
+at saturation and negative 1024ths; plausibility of the G diagnostics with
+their denominators; and test independence. Each finding returns to Opus as a
+bounded repair that re-runs its ticket gate and the affected G rows. The loop
+ends when Fable records acceptance here with the final diagnostic table.
+
+**Review 1 (Fable, 2026-09-12) on `f9f82ad`.** Read the whole code diff
+since `ed1553c` against ADR-0071 and `SCORE-034`, and reproduced the headline
+diagnostics from a clean build of that head: off arm `bench 6 1` `642,336`,
+core arm `339,821`, core-arm `branching_profile.ps1` geometric branching
+`1.765` and `9,327,682` nodes at depth 12, identical to the ticket-G table.
+Timing rows were not reproduced because the host was compiling concurrently.
+
+Accepted as implemented: the six component switches behind accessors and the
+`live_history_staging` compile guard; the linear bonus and gravity malus for
+main, reply and continuation with a dedicated searched-quiet list; the
+compile-time log-log surface with its adjustments, the `stat` taken from the
+picker's own ranking value, the `[0, new_depth - 1]` clamp and the zero
+reduction as an ordinary scout; the pre-make estimate that differs from the
+applied reduction only in `gives_check`; the omission gate, the four rules,
+the count skip that keeps direct quiet checks through `givesDirectCheck`, the
+post-make check exemption and the nominal-depth storage of omission fail-lows;
+reverse futility, depth-one razoring and all-node IIR behind one node-proof
+gate; the root window that widens the failed side and commits only exact
+attempts; the direct quiet checks generated after stand-pat at quiescence ply
+zero, filtered by the extended exchange, never delta-pruned and never generated
+deeper; the quiet-move exchange path with castling as the one shortcut; the
+`nullMoveCutoff` counter and the observe-suite skip under the umbrella. The
+new tests carry independent oracles: make-and-look for the check generator in
+both directions, monotonicity and clamp properties for the surface and count,
+the traced reverse-futility node as a regression case, legal PV and restored
+root for every core search, and the WAC.001 canary on the full arm.
+
+Opus's four questions: (1) no rule change; the canary is a full-arm contract
+and the ablation arms are diagnostics, and 6.5.11 fits the margins the
+node-pruning arm alone trips over. (2) Zero verifications in a depth-10 sweep
+is expected, since only the root reaches depth 10 and the root never
+null-prunes; the local match's deeper searches exercised the threshold, and
+the registered gate exercises it further. (3) The shallow-depth NPS deficit is
+the first-ply check generation and exchange filter; it recovers to `0.90` by
+depth 12 and stays inside the `0.85` floor, so it is a 6.5.14 cost item, not a
+review block. (4) The four-failure opening rule is property-tested for
+termination and needs no real-search witness.
+
+**One finding, authority class, to repair before the gate.** Under the core
+an unverified null-move fail-high below depth 10 is stored in the table as a
+lower bound at the node's nominal depth with no move (the `storeTable` call in
+the new early-cutoff branch, inherited from the verified path). The evidence
+behind it is one reduced null probe at `depth - 1 - R`. Stored that way it is
+reused as a full-depth cutoff at any later visit, including principal nodes
+and nodes where the null move itself would not be allowed. ADR-0070's rule
+that a null probe is speculative and only a completed real-move verification
+carries searched authority is the standing contract, and the classical
+reference does not store null results at all. Repair: the unverified cutoff
+returns beta with `null_move` provenance and stores nothing; the verified path
+at depth 10 and above is unchanged. ADR-0071 D is amended to say so. This
+changes the core tree, so the affected rows are re-run after the repair:
+both-arm `bench 6 1`, the branching profile, the attribution sweep, the
+canaries and the 500-game local match; the off arm must still read `642,336`.
+
+Two observations recorded for 6.5.11, not repairs: history pruning at
+prospective depth zero prunes any quiet with negative history because its
+threshold is `-4000 * 0`, which only matters at depth-one nodes and is a seed
+to fit; and reverse futility, razoring and the count skip all read the
+TT-refined pruning evaluation, which is the accepted MAN-S19 producer and is
+left as is.
+
+**Review 1 closure (Fable, 2026-09-13).** The repair in `22419a8` was read and
+accepted: the unverified branch stores nothing, the verified path is
+unchanged, and the new test's oracle is the store site by producer, verified
+to fail with the call reinstated. The post-repair rows all stay inside their
+targets (branching `1.775`, `9,693,589` nodes at depth 12, relative NPS
+`0.964`, local match `+117.55 +/- 22.68`). Two external readings agree: the
+42-engine Colosseum pool of 52,491 games rates the core build `+136` over
+Manta 1.0.0, and the maintainer's `bench 13` shows the core arm at `1.6 M`
+nodes on position 39 where the off arm needs `31.7 M`. The review loop is
+closed. The maintainer launched the registered `MAN-S36` gate on the
+designated host on 2026-09-13 and directed that, on H1, Phase 6.5 pauses at a
+consolidation release of Manta 1.1.0 (see 6.5.15); 6.5.11 to 6.5.14 stay open
+for when development resumes.
+
+**6.5.10.4 — Registered gate and decision.** Prepare `MAN-S36` per the
+EXPERIMENTS template: candidate `-Dselective-core=true` against the same-source
+baseline, both native ReleaseFast with recorded SHA-256, bench fingerprints
+and manifests; 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized
+UHO, normalized `[1,5]` at alpha/beta `0.05`, 16,000-game cap, setup-only
+preflight, every fault fatal, no pilot. The maintainer runs it on the
+designated host. H1 promotes: the umbrella defaults on, the new fingerprint is
+recorded, the off arm keeps reconstructing `642,336`, the archived fingerprints
+stay pinned, and `SCORE-034`, EXPERIMENTS, GUIDE and this section are
+reconciled. H0 or the cap does not promote: one ablation cycle in the ADR's
+order is permitted, then a re-plan. After the verdict the maintainer records
+in 6.5.15 whether Phase 6.5 continues through 6.5.11 to 6.5.14 or Manta
+releases 1.1.0 on the accepted head and freezes.
+
+**6.5.10.4 record (2026-09-13): H1, promoted.** The maintainer ran the
+registered `MAN-S36` SPRT on the designated host from the prepared arms:
+candidate SHA-256
+`90563AB69AAE2048E465894E61223C97D5FA4CBA25892979136C23BA6EEFA818` (core,
+bench `359,259`) against baseline
+`63A30FD5386EAFDE9FA010A93C62F5B2D267071B90E6226999F92F4429435510` (bench
+`642,336`), both from `22419a8`. It accepted H1 after 670 games, W/L/D `283/80/307`, `+108.68 +/- 17.86` Elo (`+170.97 +/- 26.31` nElo), LLR `2.95` on normalized `[1,5]`, LOS `100%`, draw ratio `34.93%`, pairs ratio `5.41`, pentanomial `[0,34,117,131,53]`, no anomaly of any kind.
+Artifacts: `tools/results/sprt_MAN-S36_vs_MAN-S35_20260913_093208.{log,pgn,manifest.txt}`
+and the two copied engine manifests. The result sits inside PLAN's prospective
+expectation of `+90` to `+130` and agrees with both local diagnostic matches.
+
+Promotion applied as the handoff specified. `-Dselective-core` and
+`features.selective_core` default on; production `bench 6 1` is `359,259`
+(geomean EBF `4.228`, upper median `5,905`, top share `16.8%`), and
+`-Dselective-core=false` reconstructs `642,336` exactly. Every archived
+reconstruction stays pinned: `runArchived` pins the umbrella off for the
+MAN-S19-era totals, and the direct reconstructions of `799,610`, `775,451`,
+MAN-S33 and MAN-R02 pin it explicitly, because routing them through
+`runArchived` would also swap their picker and parameter vector. A new test
+pins the umbrella off to reconstruct MAN-S35 at `642,336`.
+
+Tests that read `.{}` as the pre-core head were updated by pinning, never by
+changing an assertion. Seven substrate tests ablate pre-core switches that the
+core supersedes and now ignores (MAN-R02 aspiration, the accepted LMR, qsearch
+SEE, verified null move, the shallow-selectivity family, frontier reverse
+futility, balanced history); both arms of each pin the umbrella off. The
+reverse-futility test's authority half -- speculative cutoffs never reach the
+table -- is restated for production in a new test, so pinning did not drop it.
+In `tests/search_qualification.zig` only the WAC.001 depth-3 case pins the
+umbrella off, per ADR-0071's rule that depth 3 is an off-arm property; mate in
+one, the hanging queen, KQK, KBNK and WAC.001 at depth 5 keep running on
+production. The in-file IIR test now names the pre-core rule explicitly and
+asserts ADR-0071 D.4's production rule beside it.
+
+One coverage change is recorded rather than hidden. `tools/search_observe.zig`'s
+twelve-case accounting suite describes the MAN-S35 configuration and skips
+under the umbrella, so it no longer runs in the default build; it still runs
+with `-Dselective-core=false`. Re-deriving which stages the production core must
+reach on those twelve cases is review work, not a promotion edit.
+
+Per the maintainer's direction of 2026-09-13, Phase 6.5 pauses at the Manta
+1.1.0 consolidation release; the pre-release full gates are recorded in 6.5.15.
+
+**Promotion review (Fable, 2026-09-13) on `a276fe8`: accepted, no finding.**
+Read the whole diff against `ca7f401`. The two defaults flip together and the
+component accessors still route through the umbrella, so the off arm is
+MAN-S35 by construction; every archived reconstruction pins the umbrella off
+either through `runArchived` or explicitly, and no assertion was changed to
+make a test pass. The only canary moved to the off arm is WAC.001 at depth 3,
+which ADR-0071 already names an off-arm property, with depth 5 still required
+of production. Reproduced from clean ReleaseFast builds of `a276fe8`:
+production `bench 6 1` `359,259`, `-Dselective-core=false` `642,336`; the
+repository test root passed `123` with `12` skips and no failure; the fast
+subset and policy check passed; the search-observe suite passed in the off
+arm. The skip of that suite under the umbrella is the one recorded coverage
+gap and is release-acceptable because the core's accounting is asserted by
+the substrate tests. Next are the pre-release full gates in both arms and the
+`docs/RELEASING.md` procedure for 1.1.0.
+
+#### 6.5.11 — Fit of the accepted core (conditional, expected)
+
+**Model:** Fable designs the coordinate set; Opus wires the tune-only registry.
+**Dependency:** accepted 6.5.10 and a maintainer decision to continue.
+
+The core's seeds are order-of-magnitude values, so a joint fit is expected to
+be worth its budget once the mechanisms are frozen. Expose only live
+coordinates through the existing tune-only `params.zig` registry: table base
+and divisor, history divisor, PV/improving/cut/TT adjustments, late-move base,
+scale and improving bonus, futility unit, history-prune unit, SEE unit, RFP
+margins, razoring unit, null-move base, depth and margin divisors, aspiration
+delta and growth, history bonus slope and cap. Exclude categorical switches,
+safety and terminal predicates. Use the existing Weather Factory bridge on the
+designated host with prospective ranges, iteration horizon and stop rule; the
+maintainer runs it. Bake one rounded vector and gate it once as `MAN-S37`.
+
+**Gate:** complete valid checkpoints, bounded active theta, no infrastructure-
+contaminated gradients, one final production 1T H1. An inconclusive or rejected
+fit leaves the accepted seeds in place.
+
+**6.5.11.3 — Conditional clock refit (`MAN-T06`).** Reviewed on 2026-09-12:
+the integrated clock policy (ADR-0065, MAN-T05) is mature and safe. It has
+distinct optimum and maximum budgets, a contracting sudden-death horizon,
+increment credit net of future overhead, bounded stability, score, effort and
+helper factors fitted by a 1,000-iteration SPSA, once-consumed ponder credit,
+a fixed maximum rooted at receipt, a 1,024-node hard poll and two unspent
+overheads plus the bridge margin; the only forfeits ever seen were host stalls
+below 40 ms with both sides in the tens of milliseconds. Its structure matches
+the classical reference's optimum, maximum, falling-score and best-move
+instability factors, and it needs no redesign. Its six responses were,
+however, fitted to the old tree's root statistics. The core changes how often
+the best move changes between iterations, how effort concentrates and how
+scores move under aspiration, so after an accepted core the fitted responses
+may be off. If 6.5.11's search fit runs, add the six time coordinates to the
+same maintainer-run Weather Factory campaign under the time-sensitivity
+scoring that ADR-0065 already qualified; otherwise leave MAN-T05 in place. No
+separate clock candidate is authorized, and hard safety, minimum depth and
+publication authority stay outside the tuning surface.
+
+#### 6.5.12 — Evaluator calibration: king danger and the unfitted nonlinear terms
+
+**Model:** Fable derives the coordinate set and any structural change; Opus
+wires the tune-only exposure and the bake. **Dependency:** the accepted and,
+if run, fitted core; a maintainer decision to continue. Added on 2026-09-12
+after the evaluator review recorded below.
+
+**Why this step exists.** The classical evaluator is structurally complete and
+its 1,109 linear coefficients are at their fitted optimum (ADR-0056 and the
+single-attractor sweep in `docs/HCE_FITTING.md`). The 103 coefficients the
+linear fit excluded were never fitted at all, and the whole king-danger table
+is among them: `king_attack_weight`, `king_pawn_attack_weight`,
+`safe_check_weight`, `unsafe_check_weight` and `king_danger_divisor` are the
+hand-set seeds. The residual harness (`zig build eval-residual`, run on
+2026-09-12 at `559b59a`) shows the consequence. Against the pinned classical
+reference the quiet, pawn-ending and rule-fifty cohorts sit within about 20
+centipawns, one outlier at 82, while every attacking cohort disagrees by
+hundreds:
+
+| Cohort position | Manta raw, white view | Reference | Gap |
+|---|---:|---:|---:|
+| `tactical-wac001` | `-324` | `+441` | `765` |
+| `king-attack-castled-pressure` | `-221` | `+37` | `258` |
+| `tactical-wac003` | `-186` | `-33` | `153` |
+| `king-attack-exposed-king` | `-136` | `-39` | `97` |
+
+Manta rates White's queen-and-two-knights swarm on WAC.001 as three pawns
+worse for White; the reference gives White four and a half, almost all of it
+king safety, and after `Qg6` its king-safety term alone reaches 11.9 pawns.
+The fitted linear terms around the seeds (threats, mobility, piece-square) were
+scaled to the data and the nonlinear king danger was not, so the two halves of
+the evaluator are on different scales. That is the incoherence, and it costs
+more once the core prunes on static evaluation to depth 8. A second limit is
+label quality: the fit corpus is Manta self-play at 8,000 nodes per move on
+the pre-fit evaluator, about depth six, which under-resolves exactly the
+attacking positions above.
+
+SPSA is necessary but not sufficient. The king-danger group cannot be fitted by
+the linear Texel path, and the current labels would mislead a nonlinear offline
+fit, so games are the right oracle for it. Games cannot tell a missing
+relationship from a wrong weight, so a structural review follows. And the
+linear refit is not conditional: by maintainer direction of 2026-09-12 the
+linear terms are refitted on data generated by the accepted core, because the
+existing corpus was labelled by a search several hundred Elo weaker at 8,000
+nodes per move, and a changed nonlinear block moves the linear optimum in any
+case. The refit is preceded by a proper analysis of the oracle and settings,
+so the second corpus is designed rather than repeated.
+
+1. **6.5.12.1 — King-danger game fit (`MAN-E22`).** Expose the king-danger
+   scalars above, the king-ring attacker threshold and the shelter and storm
+   scales through a tune-only runtime path that the production build compiles
+   away exactly: the evaluator keeps its constants and only the `-Dtune` build
+   reads a parameter block. Freeze prospective ranges from the residual gap,
+   not from the reference's numbers. Run one Weather Factory fit on the
+   designated host under the accepted core, maintainer-run, at most twelve
+   coordinates; bake one rounded vector; gate it once with a 1T SPRT. Re-run
+   the residual harness before and after as the diagnostic that the attacking
+   cohorts closed without the quiet cohorts opening.
+2. **6.5.12.2 — Structural king-attack review (conditional).** If 12.1 leaves
+   the attacking-cohort residual above 150 centipawns, derive at most one
+   structural change from the traces: queen contact with the king zone,
+   attacker weighting by piece and count, the shelter-moderated danger that
+   MAN-E21 tested on the old head, or the open-file and safe-check coupling.
+   One candidate, one SPRT, re-derived on the fitted core rather than
+   re-enabling MAN-E21.
+3. **6.5.12.3 — Oracle and label analysis before the refit (design ticket,
+   Fable).** Decide the second corpus prospectively, from measurements on the
+   existing data and small pilots, and record every choice with its evidence
+   before a game is generated:
+   - *Oracle strength.* Label engine is the accepted core, fitted if 6.5.11
+     ran, at a node budget chosen from a pilot that measures label agreement
+     with the pinned classical reference and with a deeper Manta search on
+     the residual cohorts and a held-out sample; the budget rises until the
+     attacking-cohort disagreement stops falling, with 40,000 nodes per move
+     as the floor to test first.
+   - *Label form.* Compare game outcome only, search score only, and an
+     outcome-score blend with a fitted mixing weight, selected on validation
+     loss and on the attacking-cohort residual, never on the frozen test.
+   - *Position selection.* Quiet-only versus qsearch-resolved rows, in-check
+     exclusion, per-game correlation cap, phase quotas and start-family caps,
+     re-decided from the existing extractor's audit rather than inherited.
+   - *Loss and scale.* Refit `K` on the new labels; keep the logistic mean-
+     squared loss unless the analysis shows a measured calibration reason to
+     change it; keep the six semantic sign bounds and add any the king-danger
+     fit introduced.
+   - *Nonlinear block.* Held fixed at the 12.1 and 12.2 values; the linear
+     fit sees its `fixed_residual` exactly as the v3 schema already does.
+   - *Budget.* Games, storage and host time from the pilot rate, with the
+     same three-way train, validation and frozen-test split and a one-time
+     frozen-test read.
+4. **6.5.12.4 — Second corpus and linear refit (`MAN-E23`).** Generate the
+   corpus on the designated host with the recorded settings, maintainer-run;
+   extract, compile and fit with the existing `manta-hce-fit` pipeline
+   extended only where 12.3 requires; audit sign crossings; bake one rounded
+   vector; re-run the residual harness; gate once with a 1T SPRT against the
+   head that includes 12.1 and 12.2. A rejected refit leaves the accepted
+   vector in place and records what the labels disagreed on.
+5. **6.5.12.5 — Correction history as a live pruning and reduction input.**
+   Producer and consumers together, re-derived on the core rather than
+   re-enabling MAN-S25; it belongs here because it is evaluation reliability
+   feeding search.
+
+**Gate:** residual-harness before and after tables per cohort, deterministic
+property tests for every changed nonlinear term, feature-off reconstruction of
+the accepted evaluator, evaluator throughput within the accepted allowance,
+and one registered 1T H1 per retained candidate. A static residual improvement
+promotes nothing.
+
+#### 6.5.13 — Second-order search relationships on the accepted core (conditional)
+
+**Model:** Fable derives each package; Opus implements. **Dependency:** the
+accepted and, if run, fitted core; a maintainer decision to continue.
+
+Candidates in this order, each its own package with its own diagnostics and one
+1T SPRT, each derived on the actual accepted head; deferral or rejection is a
+valid closure and nothing is retried automatically:
+
+1. **6.5.13.1** Capture history with a capture-aware SEE pruning threshold and
+   capture futility.
+2. **6.5.13.2** Singular review: threshold scale, half-depth exclusion
+   horizon, non-PV double extension and multi-cut, on the new reduction
+   surface.
+3. **6.5.13.3** ProbCut move cap and typed TT proof reuse.
+4. **6.5.13.4** Quiet SEE pruning and the upcoming-repetition lower bound.
+5. **6.5.13.5** TT replacement and aging review under the new tree.
+
+#### 6.5.14 — Residual full-search cost and board target
+
+**Model:** Opus for profile-owned exact work; Fable for any TT semantic change.
+**Dependency:** search and evaluator heads frozen through 6.5.13 or the decision to skip them.
+
+1. Refresh the profile on the frozen tree and rank time in HCE, SEE, picker,
+   TT and transition. Fix the largest evidenced residual owner, not every
+   listed mechanism.
+2. Compare occupied-piece traversal with the 64-square HCE scan and inspect
+   the pawn cache before any cache redesign; incremental HCE only on a
+   concentrated profile with an exact refresh contract.
+3. TT work separates cache-line and prefetch cost from capacity and
+   replacement; a changed replacement decision is playing behavior.
+4. Measure the six-cell board target against Basilisk on the designated host;
+   PGO and LTO are optional and need a reproducible pipeline first.
+
+**Gate:** exact scalar, fingerprint, PV and result identity for exact work,
+repeated release-build whole-search timing, applicable concurrency tests, and
+one 1T H1 per retained playing change.
+
+#### 6.5.15 — Targets, cumulative gate and release decision
+
+**Model:** Opus collects evidence; Fable performs the final review.
+**Dependency:** every prior disposition explicit.
+
+1. Freeze source, binaries, toolchain, feature ledger and fingerprints. Run the
+   final correctness, ReleaseSafe and ReleaseFast, UCI, time, SMP lifecycle and
+   platform gates once each.
+2. On the idle designated host, measure the forty-position depth curve 4 to
+   13 for Manta and the pinned classical Stockfish under the identical fresh-
+   process protocol, and the six board cells against Basilisk. Record nodes,
+   NPS, elapsed, branching, ordinary and mate cohorts and per-position tails.
+3. Search target, revised on 2026-09-12: geometric branching over depths 4 to
+   12 at most `1.98` against the reference's host-measured value, depth-12
+   total elapsed at most `4x` the reference, and routine `bench 13 1` at most
+   30 seconds. Board target unchanged from 6.5.4. These are planning targets;
+   a miss is an open deficit, never a moved target.
+4. Run the cumulative registered 1T SPRT of the final head against immutable
+   Manta 1.0.0 as `MAN-C03` on the trusted harness.
+5. The maintainer decides: continue Phase 6.5 on the recorded deficits, or
+   release Manta 1.1.0 on the accepted head and freeze development. GUIDE
+   records the board target, the search target and the strength gate
+   separately. Phase 7 still needs its own approval.
+
+**Maintainer direction, 2026-09-13.** Once `MAN-S36` accepts H1, Phase 6.5
+pauses at a consolidation release: promote the core, run the pre-release full
+gates in both arms, then follow `docs/RELEASING.md` to ship Manta 1.1.0. The
+board and search targets and items 2 to 4 above are deferred with 6.5.11 to
+6.5.14, not abandoned; the expected-gains table in the Phase 6.5 introduction
+is the basis for deciding whether and when to resume.
+
+**6.5.15.1 record (2026-09-13): pre-release full gates, all pass.** The gates
+first passed on head `c3ba519` (the MAN-S36 promotion `a276fe8` plus its review
+record). After the issue #2 repairs recorded in the addendum below they were
+re-run once each, serially, on head `13eb275` (the repairs; the commit that
+records this table changes documents only) with Zig `0.16.0` on the
+workstation, native ReleaseFast unless stated:
+
+| Gate | Outcome on `13eb275` |
+| --- | --- |
+| `zig build test` (default, core on) | Pass: 53/53 steps, 444/462 tests, 18 skipped; transcript 26 cases |
+| `zig build test -Dselective-core=false` | Pass: 53/53 steps, 445/462 tests, 17 skipped; the MAN-S35 observation suite runs and passes |
+| `zig build test -Doptimize=ReleaseSafe` | Pass: 53/53 steps, 444/462 tests, 18 skipped |
+| `zig build fmt` | Pass |
+| `zig build policy` | Pass |
+| `zig build lint` | Pass: 0 errors, 0 warnings across 53 files |
+| `zig build test-uci` | Pass: 18/18 tests, transcript 26 cases |
+
+The one skip difference between arms is `tools/search_observe.zig`, which
+skips under the core as the 6.5.10.4 record explains. No expectation was
+changed. The table was run a third time on `e05dbaa`, the head carrying repair 5
+and addendum B: `zig build test` (default), `zig build test
+-Dselective-core=false`, `zig build test -Doptimize=ReleaseSafe`, `zig build
+test-uci`, `zig build lint` (which includes `fmt` and `policy`) all passed, and
+both-arm `bench 6 1` read `359,259` and `642,336`. One honest note: the first
+attempt at the default and off-arm suites on that head failed while another
+`zig build` was running against the same cache for a document edit; each was
+re-run alone and passed. Concurrent builds in one cache are not a valid gate
+run, and this record counts only the isolated runs. The final release head `f6c2959` (addendum C) then passed the whole
+table once more, alone: `zig build test` default, `-Dselective-core=false`
+and `-Doptimize=ReleaseSafe`, `test-uci`, `lint`, both-arm `bench 6 1`. Its
+release soak, run by Fable and afterwards agreed to belong to the maintainer,
+was 100 fastchess games at `Threads 6`, `Hash 16`, `10+0.1`, concurrency 2,
+against the pre-fix core arm with crash recovery on: 39 disconnects, every one
+the pre-fix arm, none for the release build, no panic in the merged engine log
+(`tools/results/release_soak.*`). On `c3ba519` the default `zig build test` was executed a second time
+only to confirm from the step summary that test runs are not served from cache;
+it passed identically. The time, SMP lifecycle and platform gates of item 1,
+and items 2 to 4, are deferred with the maintainer direction above; the release
+workflow's native smoke tests and cross-platform bench agreement remain the
+platform check for 1.1.0.
+
+**6.5.15.1 addendum (2026-09-13): issue #2 repairs.** Before the 1.1.0 tag,
+four defects were repaired in `13eb275`: two reported in GitHub issue #2
+against 1.0.0 at `Threads 6`, and two found in Fable's review of the same
+paths. The reporter's attached patch archive was not downloaded or applied; the
+repairs follow the maintainer's ticket. All four are one-thread-neutral: native
+ReleaseFast `bench 6 1` reads `359,259` by default and `642,336` with
+`-Dselective-core=false`, and the default build reports `Manta 1.1.0`.
+
+1. **Transposition-table replacement seed** (`src/search/tt.zig`). The
+   occupancy scan can see four full ways while a concurrent `Entry.store` has
+   zeroed slot zero's guard in its three-step publish (zero the guard, write
+   the payload, write the guard), so the replacement seed's unwrap dereferenced
+   null: a panic in ReleaseSafe and undefined behaviour, observed as a vanished
+   process, in ReleaseFast. The seed now treats an emptied slot zero as the
+   ideal victim, stores there and returns `filled`, as the loop below it
+   already did. The replacement scan moved unchanged into `Table.replace` so a
+   deterministic test can reach it: a guard zeroed before calling `store` is
+   absorbed by the occupancy scan, so a test through `store` passed on the old
+   code and could not serve as the regression. Tests: the deterministic seed
+   test calls `replace` with slot zero emptied and expects the new key
+   probeable and the other ways intact; the stress test runs six threads of
+   200,000 random stores (odd non-zero keys, depth 1 to 40, random bound) into
+   a one-cluster table, advancing the generation every 4,096 stores, then
+   probes a freshly stored key. Both crashed with `attempt to use null value`
+   at the seed in ReleaseSafe before the fix, and both pass after it in
+   ReleaseFast and ReleaseSafe. The stress test's generation advance is an
+   unsynchronized byte write shared by the six writers, as the ticket
+   specified; production advances the generation only before helpers start.
+2. **Per-depth info lines** (`src/engine/runtime.zig`, `src/uci/session.zig`).
+   One coalescing slot served both root-move and completed-iteration progress,
+   so the next depth's first `currmove` overwrote a finished iteration before
+   the controller drained it, and iteration lines were also offered without
+   waiting. `ProgressSlot` now keeps one coalescing root-move slot and a
+   16-entry iteration ring in arrival order that drops the oldest on overflow;
+   `take` returns iterations first, then the root move, and `offer` reports a
+   wake only on the empty-to-non-empty transition across both kinds. The
+   controller drains until empty, in its loop and in `finishActive`;
+   completed-iteration lines use the blocking `offerLine`, root-move lines stay
+   on `tryOfferInfoLine`, and `last_published_iteration_nodes` still suppresses
+   a duplicate final line. Tests: a `ProgressSlot` unit test for ordering,
+   root-move coalescing, iteration retention across interleaved offers,
+   overflow and the wake rule; and a `13-smp` transcript case in which
+   `go depth 10` at `Threads 4` and at `Threads 1` must produce `info depth 1`
+   through `info depth 10`, each once and in order, before `bestmove`. The
+   `{{ITERATION_INFO}}` placeholder cannot express a depth, and an
+   `allow-info` region would silently skip a wrong one, so the harness gained
+   `{{ITERATION_FIELDS}}` (the fields after a literal `info depth <D> `) and a
+   rule that a completed-iteration line is never skipped while a completed
+   iteration is expected. On the old progress code the case failed with depth
+   3 arriving where depth 2 was expected.
+3. **Bounded shutdown behind a stalled reader** (`src/uci/session.zig`).
+   Required lines block on the 64-slot output queue, and `run` awaited the
+   controller unconditionally after `quit`, so a controller blocked in `putOne`
+   behind an interface that stopped reading kept the process alive. `run` now
+   waits for the controller at most `shutdown_controller_ms` (250 ms, the order
+   of `shutdown_flush_ms`) and cancels it on expiry; its defer still cancels and
+   joins any active job uncancelably, and the exit code stays 0 unless fatal was
+   set. Cancellation in `std.Io` is delivered only at the first cancelation
+   point, and the controller treats a refused line as finished output rather
+   than an error, so a refused offer re-arms cancellation; otherwise the next
+   queued command's required line would block again. Test: a
+   `12-output-backpressure` transcript case blocks stdout, sends forty
+   `bench 1` commands 25 ms apart and `quit`, and requires exit 0 within
+   1,000 ms. Streamed bench rows are used rather than search output because
+   only required lines block, and forty short reports fill both a 64 KB Linux
+   pipe and the 4 KB Windows pipe plus the queue without filling the command
+   mailbox. On the old session code the case timed out waiting for exit.
+4. **Allocation failure on `go`** (`src/uci/session.zig`). An error from
+   `startActive` propagated out of `handleGo` and ended the session with exit
+   code 1. It is now caught: the engine emits `info string failed go: resource
+   allocation failed` and stays idle. The `fail-next` hooks are consumed by the
+   Hash and Threads resize paths and never reach `Runtime.start`, so the
+   coverage is a session unit test: a failing allocator refuses the next
+   allocation, `go` reports the failure with no active job and epoch zero, and
+   the next `go` starts once allocation succeeds.
+
+5. **Standard output handle mode on Windows** (`src/uci/session.zig`), found
+   by the maintainer's reproduction match after the four repairs above. A
+   100-game fastchess match at `Threads 6`, `Hash 16`, `10+0.1`, concurrency
+   2, between the repaired build and the pre-fix `MAN-S36` core arm showed
+   both arms disconnecting at the same rate (seven against five in 22 games),
+   a few tens of milliseconds into a search and directly after a burst of
+   `currmove` output, with nothing on stderr. Replaying the same positions at
+   six threads through synchronous pipes, three engines at once, never
+   reproduced it in either arm, so the cause was in the host's pipes, not in
+   the positions or the thread count. Fastchess creates its engine pipes with
+   overlapped (asynchronous) I/O. Zig 0.16's `File.stdout()` reports the
+   inherited handle as synchronous, and the threaded I/O's synchronous write
+   path treats a `PENDING` completion from `NtWriteFile` as unreachable; a
+   full asynchronous pipe returns exactly that, so the presenter died inside
+   the standard library the first time fastchess fell behind the engine's
+   output. A ReleaseSafe build under fastchess printed `panic: reached
+   unreachable code` into the engine log, which fastchess merges with stdout.
+   The repair generalizes the existing stdin mode query into `streamingFile`
+   and opens stdout through it, so the writer takes the asynchronous path on
+   an asynchronous handle; a query failure is fatal for the session exactly
+   as it is for stdin. Test: a Windows-only unit test creates an overlapped
+   named pipe and an anonymous pipe and checks that the detector reports the
+   first asynchronous and the second synchronous whatever the constructor
+   assumed. Process evidence: the same fastchess match with the repaired
+   ReleaseSafe and ReleaseFast builds, recorded below. One-thread behaviour is
+   untouched; `bench 6 1` still reads `359,259`.
+
+Documents: `docs/UCI.md` now states which search lines may coalesce or drop
+(root-move progress only) and which may not (completed iterations, results and
+`bestmove`), the bounded controller wait at shutdown, the `go` allocation
+diagnostic and the handle-mode rule for both standard streams;
+`ARCHITECTURE.md` and `tests/uci/README.md` follow. The gates in the table
+above were re-run on `13eb275`; on `7cce340` (repair 5) the fast subsets in ReleaseSafe and ReleaseFast, the UCI process suite, lint and both-arm `bench 6 1` were re-run, and the fastchess reproduction match was repeated: 46 games at `Threads 6`, 15 disconnects for the pre-fix arm, none for the repaired ReleaseSafe and ReleaseFast builds, no panic in the merged engine log.
+
+**6.5.15.1 addendum B (2026-09-13): displayed principal variations.** After
+the per-depth info lines became visible, the maintainer's Colosseum view
+showed why many of them carried one move: with the table warm from the previous
+search, shallow iterations resolve entirely from transposition hits (one node
+per ply, `seldepth 0`), and Manta publishes only the line it searched, which
+ends at the hit. 1.0.0 behaved the same and the coalescing slot hid it. The
+maintainer directed the display repair into 1.1.0. The controller now extends
+a completed iteration's variation from the table before formatting it, in
+`extendPrincipalVariation`: replay the searched prefix from the game root on a
+private state stack, then append the stored move of each authenticated
+non-upper-bound entry while it is legal in the position reached, stopping at a
+missing entry, an unusable move, a repeated position or capacity. The same
+extension is applied to the final search line, the retained ponder line and
+the `bestmove` publication, so the ponder move may come from the table. The
+walk reads the table through the workers' lock-free authenticated probe and
+touches no search state, so a live search may run concurrently; the one-thread
+fingerprint is untouched at `359,259`. Tests: extension along a stored line,
+stopping at an illegal stored move, refusing an upper-bound entry, leaving an
+unplayable searched prefix alone, and stopping on a knight-shuffle repetition
+cycle that would otherwise run to capacity. `docs/UCI.md` records the display
+rule and the ponder consequence.
+
+**6.5.15.1 addendum C (2026-09-13): repeated last depth under SMP.** With
+`Threads` above one, a depth-limited search printed its last depth twice.
+Cause: `finishActive` publishes a closing search line when the nodes of the
+last published iteration differ from the result's, but `Runtime.finish` adds
+the helpers' nodes to the result before that comparison, while iteration lines
+count the main worker only; under SMP the counts always differed. Decision
+(maintainer, option B of Fable's framing): decide on the main worker's node
+count captured before aggregation. A depth-limited search never repeats its
+last depth at any thread count; a stopped, timed or node-limited search keeps
+its closing line with the combined nodes, time and `nps`, exactly as at one
+thread, whose output is byte-identical. The iteration lines, `bestmove`, the
+retained ponder line and the variation extension are unchanged. Deciding by
+depth identity alone (option A) was rejected because it would also drop the
+one-thread closing line of every stopped search. Tests: a session unit test
+runs `go depth 6` to completion at `Threads 4` and at `Threads 1` and requires
+exactly one `info depth 6 ` search line (live `currmove` lines excluded)
+followed by `bestmove`; the four-thread case found two such lines on the old
+code. A second test pins a one-thread `go nodes 5000`: the last two search
+depth lines share their depth, the closing one carries `nodes 5000`, and
+`bestmove` follows. Deferred to 1.1.1: the Stockfish-style alternative of
+aggregated nodes in every iteration line, which needs an atomic per-worker node
+counter readable while helpers run. Gates: `zig build test-uci`,
+`zig build test-fast` in ReleaseFast and ReleaseSafe and `zig build lint`
+passed on `d2826d9`; native ReleaseFast `bench 6 1` reads `359,259` by default
+and `642,336` with `-Dselective-core=false`, and the default build reports
+`Manta 1.1.0`.
+
+**Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
+evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
+6.5.15 closeout. Their surviving content is owned by the steps above; their
+mechanisms that entered the core are governed by ADR-0071. The evaluator
+calibration step 6.5.12 was added later the same day.
 
 ### Phase 7 — NNUE runway and data contract
 
@@ -340,7 +2875,9 @@ allocation, branches, 1/2/4/8T scaling and high-thread/NUMA behavior. The Phase-
 evaluator deliberately traded throughput for strength, so behavior-neutral
 evaluation speed remains useful when a current profile identifies a concentrated
 cost. Fingerprint identity plus controlled throughput can accept exact speed
-work; behavior changes require games.
+work; behavior changes require games. This later step owns post-NNUE runtime ISA
+dispatch, vector inference, topology, NUMA and final scaling. It consumes rather
+than repeats the pre-NNUE scalar/search work closed in Phase 6.5.
 
 #### 10.3 — Product completion and releases
 
@@ -370,8 +2907,8 @@ SPRT and complete platform/release evidence only if the result will ship.
 
 ## Manta 1 release gate
 
-1. Version sources, UCI identity, changelog and tag must agree on `1.0.0` /
-   `v1.0.0`.
+1. Version sources, UCI identity, changelog and tag must agree on the release
+   version (`1.0.0` / `v1.0.0`, then `1.1.0` / `v1.1.0`).
 2. The worktree is reviewed for accidental/generated content and licensing.
 3. Format, policy, lint and required Debug/ReleaseSafe/ReleaseFast gates pass.
 4. Pull-request CI passes all five native targets and portable smoke tests.

@@ -12,6 +12,10 @@ const command_capacity = 64;
 const output_capacity = 64;
 const max_output_bytes = 4096;
 const shutdown_flush_ms = 250;
+/// How long shutdown waits for the controller to observe `quit` before
+/// cancelling it. A controller blocked on a full output queue behind an
+/// interface that stopped reading would otherwise never return.
+const shutdown_controller_ms = 250;
 const Runtime = engine.runtime;
 const ControllerState = Runtime.Controller;
 const GameState = Runtime.GameState;
@@ -43,6 +47,7 @@ const Shared = struct {
     output: *std.Io.Queue(OutputEvent),
     controller_wake: std.Io.Semaphore = .{},
     shutdown: *std.Io.Event,
+    controller_done: *std.Io.Event,
     presenter_done: *std.Io.Event,
     active_epoch: std.atomic.Value(u64) = .init(0),
     cancel_epoch: std.atomic.Value(u64) = .init(0),
@@ -65,6 +70,7 @@ pub fn run(
     var command_queue = std.Io.Queue(protocol.Command).init(&command_storage);
     var output_queue = std.Io.Queue(OutputEvent).init(&output_storage);
     var shutdown: std.Io.Event = .unset;
+    var controller_done: std.Io.Event = .unset;
     var presenter_done: std.Io.Event = .unset;
     var shared: Shared = .{
         .io = io,
@@ -74,6 +80,7 @@ pub fn run(
         .commands = &command_queue,
         .output = &output_queue,
         .shutdown = &shutdown,
+        .controller_done = &controller_done,
         .presenter_done = &presenter_done,
     };
     try state.startWorker(io);
@@ -103,7 +110,14 @@ pub fn run(
     _ = input_future.cancel(io) catch |err| switch (err) {
         error.Canceled => {},
     };
-    _ = controller_future.await(io) catch |err| switch (err) {
+    // Mirror the presenter below: the controller gets a bounded interval to
+    // finish, then is cancelled. Its own defer still cancels and joins any
+    // active search uncancelably before it returns.
+    const controller_result = if (waitDone(io, &controller_done, shutdown_controller_ms))
+        controller_future.await(io)
+    else
+        controller_future.cancel(io);
+    _ = controller_result catch |err| switch (err) {
         error.Canceled => {},
         else => shared.fatal.store(true, .release),
     };
@@ -123,7 +137,7 @@ pub fn run(
 
 fn input(shared: *Shared) std.Io.Cancelable!void {
     var read_buffer: [protocol.max_input_bytes + 2]u8 = undefined;
-    var stdin_file = stdinForStreaming() catch return fatalInput(shared);
+    var stdin_file = streamingFile(std.Io.File.stdin()) catch return fatalInput(shared);
     var file_reader = stdin_file.readerStreaming(shared.io, &read_buffer);
     const reader = &file_reader.interface;
 
@@ -170,14 +184,21 @@ fn input(shared: *Shared) std.Io.Cancelable!void {
     }
 }
 
-const StdinModeError = error{StdinModeQueryFailed};
+const StreamModeError = error{StreamModeQueryFailed};
 
-/// Standard input is always consumed as a stream. On Windows, Zig 0.16 cannot
-/// infer whether an inherited handle was opened for synchronous or asynchronous
-/// I/O: `File.stdin()` unconditionally reports synchronous. Match the real file
-/// object mode so the threaded reader selects the compatible `NtReadFile` path.
-fn stdinForStreaming() StdinModeError!std.Io.File {
-    var file = std.Io.File.stdin();
+/// Standard input and output are consumed and produced as streams. On Windows,
+/// Zig 0.16 cannot infer whether an inherited handle was opened for synchronous
+/// or asynchronous I/O: `File.stdin()` and `File.stdout()` unconditionally
+/// report synchronous. Match the real file object mode so the threaded reader
+/// and writer select the compatible `NtReadFile` / `NtWriteFile` path. On the
+/// synchronous path the standard library treats a `PENDING` completion as
+/// unreachable, and a full asynchronous pipe returns exactly that, so a
+/// mismatch is a silent death in ReleaseFast the first time the interface
+/// falls behind the engine's output. Fastchess creates its engine pipes
+/// asynchronous; the transcript harness and most interfaces create synchronous
+/// ones, which is why only some hosts ever saw it.
+fn streamingFile(inherited: std.Io.File) StreamModeError!std.Io.File {
+    var file = inherited;
     if (comptime builtin.os.tag != .windows) return file;
 
     const windows = std.os.windows;
@@ -197,10 +218,10 @@ fn stdinForStreaming() StdinModeError!std.Io.File {
         .SUCCESS => {},
         .PENDING => {
             if (windows.ntdll.NtWaitForSingleObject(file.handle, .FALSE, null) != .SUCCESS)
-                return error.StdinModeQueryFailed;
-            if (io_status.u.Status != .SUCCESS) return error.StdinModeQueryFailed;
+                return error.StreamModeQueryFailed;
+            if (io_status.u.Status != .SUCCESS) return error.StreamModeQueryFailed;
         },
-        else => return error.StdinModeQueryFailed,
+        else => return error.StreamModeQueryFailed,
     }
     file.flags.nonblocking = mode_info.Mode.IO == .ASYNCHRONOUS;
     return file;
@@ -250,6 +271,7 @@ fn queueCommand(shared: *Shared, command: protocol.Command) std.Io.Cancelable!bo
 }
 
 fn controller(shared: *Shared, state: *ControllerState) !void {
+    defer shared.controller_done.set(shared.io);
     defer {
         if (state.active != null) {
             urgentCancel(shared);
@@ -269,14 +291,14 @@ fn controller(shared: *Shared, state: *ControllerState) !void {
         };
 
         if (state.active) |*active| {
-            drainSearchProgress(shared, active);
+            drainSearchProgress(shared, state, active);
             if (active.done.isSet()) {
                 // Completion is published after the last iteration progress.
                 // A first drain can race between those two publications, so
                 // take the now-stable slot once more before final reporting.
-                drainSearchProgress(shared, active);
+                drainSearchProgress(shared, state, active);
                 if (isWaitingPonder(active, shared)) {
-                    publishRetainedPonderInfo(shared, active);
+                    publishRetainedPonderInfo(shared, state, active);
                 } else {
                     finishActive(shared, state, true);
                     continue;
@@ -352,7 +374,7 @@ fn controller(shared: *Shared, state: *ControllerState) !void {
                 state.clearSearchState();
             },
             .position => try handlePosition(shared, state, command.raw.?),
-            .go => try handleGo(shared, state, command.raw.?, command.received_ns),
+            .go => handleGo(shared, state, command.raw.?, command.received_ns),
             .bench => try handleBench(shared, state, command.raw.?),
             .setoption => try handleSetOption(shared, state, command.raw.?),
             .test_fail_hash_allocation => state.fail_next_hash_allocation = true,
@@ -453,7 +475,7 @@ fn preparePosition(allocator: std.mem.Allocator, raw: []const u8) !PreparedPosit
     return .{ .game = .{ .position = position, .states = states, .moves = moves } };
 }
 
-fn handleGo(shared: *Shared, state: *ControllerState, raw: []const u8, received_ns: u64) !void {
+fn handleGo(shared: *Shared, state: *ControllerState, raw: []const u8, received_ns: u64) void {
     const parsed = parseGo(&state.game.position, raw, received_ns, state.ponder_enabled);
     switch (parsed) {
         .invalid => |diagnostic| _ = offerLine(shared, diagnostic),
@@ -462,7 +484,11 @@ fn handleGo(shared: *Shared, state: *ControllerState, raw: []const u8, received_
                 cancelActive(shared, state);
                 finishActive(shared, state, true);
             }
-            try startActive(shared, state, job);
+            // Mid-game, a failed start must not end the session: report it and
+            // stay idle, exactly as `bench` does.
+            startActive(shared, state, job) catch {
+                _ = offerText(shared, "info string failed go: resource allocation failed");
+            };
         },
     }
 }
@@ -492,20 +518,15 @@ fn parseBench(raw: []const u8) ParsedBench {
         return .{ .invalid = lineText("info string invalid bench: depth must be a positive integer") };
     const repeats = parseBenchField(tokens.next(), 1) orelse
         return .{ .invalid = lineText("info string invalid bench: repeats must be a positive integer") };
-    const threads = parseBenchField(tokens.next(), 1) orelse
-        return .{ .invalid = lineText("info string invalid bench: threads must be a positive integer") };
     if (tokens.next() != null)
-        return .{ .invalid = lineText("info string invalid bench: expected at most depth, repeats and threads") };
+        return .{ .invalid = lineText("info string invalid bench: expected at most depth and repeats") };
     if (depth > chess.types.max_ply - 1)
         return .{ .invalid = lineText("info string invalid bench: depth exceeds MAX_PLY - 1") };
     if (repeats > engine.bench.max_repeats)
         return .{ .invalid = lineFmt("info string invalid bench: repeats exceeds {d}", .{engine.bench.max_repeats}) };
-    if (threads != 1)
-        return .{ .invalid = lineText("info string invalid bench: threads must be 1 until Phase 6") };
     return .{ .spec = .{
         .depth = @intCast(depth),
         .repeats = @intCast(repeats),
-        .threads = @intCast(threads),
     } };
 }
 
@@ -1019,15 +1040,55 @@ fn isWaitingPonder(active: *const Runtime.Active, shared: *const Shared) bool {
     return isPonderJob(active.job) and shared.ponderhit_epoch.load(.acquire) != active.epoch;
 }
 
-fn drainSearchProgress(shared: *Shared, active: *Runtime.Active) void {
-    const progress = active.progress.take(shared.io) orelse return;
+/// Emits each completed bench position as soon as the worker reports it.
+/// A long bench is otherwise silent for its whole run, which gives the user no
+/// way to tell a slow corpus from a hung engine.
+fn drainBenchProgress(shared: *Shared, active: *Runtime.Active) void {
+    var entries: [engine.bench.position_count]Runtime.BenchProgress = undefined;
+    const taken = active.bench_progress.take(shared.io, &entries);
+    if (taken == 0) return;
+    // The blank line opens the report and belongs before the first row, not
+    // after the last one; the summary block below knows not to repeat it.
+    if (!active.bench_header_published) {
+        if (!offerText(shared, "")) return;
+        active.bench_header_published = true;
+    }
+    for (entries[0..taken]) |entry| {
+        const ebf = fixedDecimal(engine.bench.positionEbfCenti(entry.record), 2);
+        if (!offerLine(shared, lineFmt(
+            "bench {d}/40  depth {d}  score {d}  nodes {d}  ebf {s}  time {d}ms  nps {d}",
+            .{
+                entry.index + 1,
+                entry.record.completed_depth,
+                entry.record.score,
+                entry.record.nodes,
+                ebf.slice(),
+                entry.record.time_ms,
+                engine.bench.nps(entry.record.nodes, entry.record.time_ms),
+            },
+        ))) return;
+    }
+}
+
+/// Drains everything the worker has queued. The worker posts a wake only when
+/// the progress slot turns non-empty, so leaving anything behind could strand
+/// it until an unrelated wake.
+fn drainSearchProgress(shared: *Shared, state: *ControllerState, active: *Runtime.Active) void {
+    if (active.job == .bench) {
+        drainBenchProgress(shared, active);
+        return;
+    }
     const spec = switch (active.job) {
         .normal => |normal| normal,
-        .perft, .bench => return,
+        .perft, .bench => {
+            discardSearchProgress(shared, active);
+            return;
+        },
     };
-    switch (progress) {
+    while (active.progress.take(shared.io)) |progress| switch (progress) {
+        // A root move is a superseding sample and may be dropped under load.
         .root_move => |root_move| {
-            _ = offerLine(shared, rootMoveInfo(
+            _ = tryOfferInfoLine(shared, rootMoveInfo(
                 root_move.depth,
                 root_move.chess_move,
                 root_move.number,
@@ -1035,21 +1096,30 @@ fn drainSearchProgress(shared: *Shared, active: *Runtime.Active) void {
                 elapsedMilliseconds(spec.received_ns, root_move.observed_ns),
             ));
         },
+        // A completed iteration is the depth's score and principal variation;
+        // it waits for presenter capacity like any required line.
         .iteration => |iteration| {
-            _ = offerLine(shared, completedIterationInfo(
-                iteration.completed,
+            var completed = iteration.completed;
+            extendPrincipalVariation(&completed.pv, &state.game.position, &state.hash.table);
+            if (!offerLine(shared, completedIterationInfo(
+                completed,
                 iteration.tablebase_hits,
                 elapsedMilliseconds(spec.received_ns, iteration.observed_ns),
-            ));
+            ))) return;
             active.last_published_iteration_nodes = iteration.completed.nodes;
         },
-    }
+    };
 }
 
-fn publishRetainedPonderInfo(shared: *Shared, active: *Runtime.Active) void {
+fn discardSearchProgress(shared: *Shared, active: *Runtime.Active) void {
+    while (active.progress.take(shared.io)) |_| {}
+}
+
+fn publishRetainedPonderInfo(shared: *Shared, state: *ControllerState, active: *Runtime.Active) void {
     if (active.ponder_completion_waiting) return;
     const spec = active.job.normal;
-    const result = active.completion.normal;
+    var result = active.completion.normal;
+    extendResultPrincipalVariation(&result, &state.game.position, &state.hash.table);
     publishFinalSearchInfoIfNeeded(shared, active, spec, result);
     active.ponder_completion_waiting = true;
 }
@@ -1057,8 +1127,21 @@ fn publishRetainedPonderInfo(shared: *Shared, active: *Runtime.Active) void {
 fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
     const active = &state.active.?;
     if (!active.done.isSet()) active.done.waitUncancelable(shared.io);
-    if (publish) drainSearchProgress(shared, active) else _ = active.progress.take(shared.io);
+    if (publish) drainSearchProgress(shared, state, active) else discardSearchProgress(shared, active);
     const last_published_iteration_nodes = active.last_published_iteration_nodes;
+    // `finish` adds the helpers' nodes to the result. Published iteration lines
+    // count the main worker only, so whether the search did work after its
+    // last published iteration is decided on the main worker's own count,
+    // captured before aggregation: a depth-limited search then never repeats
+    // its last depth, while a stopped one keeps its closing line with the
+    // combined totals, exactly as at one thread.
+    const main_worker_nodes: ?u64 = switch (active.completion) {
+        .normal => |searched| searched.nodes,
+        .perft, .perft_failed, .bench => null,
+    };
+    // `finish` releases the active job, so anything the presenter still needs
+    // from it is captured first.
+    const bench_header_published = active.bench_header_published;
     const finished = Runtime.finish(state, shared.io);
     switch (finished.job) {
         .bench => {
@@ -1069,10 +1152,15 @@ fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
     }
     if (publish) {
         switch (finished.completion) {
-            .normal => |result| {
+            .normal => |searched| {
                 const spec = finished.job.normal;
+                // The game root and the table outlive the job, so the final
+                // line and the ponder move see the same extended variation
+                // the iteration lines did.
+                var result = searched;
+                extendResultPrincipalVariation(&result, &state.game.position, &state.hash.table);
                 if (last_published_iteration_nodes == null or
-                    last_published_iteration_nodes.? != result.nodes)
+                    last_published_iteration_nodes.? != main_worker_nodes.?)
                 {
                     _ = offerLine(shared, searchInfo(
                         result,
@@ -1085,7 +1173,7 @@ fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
             },
             .perft => |divide| publishPerft(shared, finished.job.perft, divide),
             .perft_failed => _ = offerText(shared, "info string failed go: perft failed"),
-            .bench => |report| publishBench(shared, report),
+            .bench => |report| publishBench(shared, bench_header_published, report),
         }
     }
     shared.active_epoch.store(0, .release);
@@ -1128,7 +1216,7 @@ fn publishFinalSearchInfoIfNeeded(
     active.last_published_iteration_nodes = result.nodes;
 }
 
-fn publishBench(shared: *Shared, report: engine.bench.Report) void {
+fn publishBench(shared: *Shared, header_published: bool, report: engine.bench.Report) void {
     if (report.failed) {
         _ = offerText(shared, "info string bench failed: frozen position could not be prepared");
         return;
@@ -1141,21 +1229,26 @@ fn publishBench(shared: *Shared, report: engine.bench.Report) void {
         return;
     }
 
+    // Every per-position row of a single-pass report was already streamed by
+    // `drainBenchProgress`, along with the blank line that opens it.
+    if (!header_published) {
+        if (!offerText(shared, "")) return;
+    }
     if (report.spec.repeats == 1) {
-        for (report.positions, 0..) |record, index| {
-            const ebf = fixedDecimal(engine.bench.positionEbfMilli(record), 3);
-            if (!offerLine(shared, lineFmt(
-                "info string bench position {d}/40 nodes {d} time_ms {d} nps {d} ebf {s}",
-                .{ index + 1, record.nodes, record.time_ms, engine.bench.nps(record.nodes, record.time_ms), ebf.slice() },
-            ))) return;
-        }
         const run_record = report.runs[0];
         const ebf = fixedDecimal(report.geomean_ebf_milli, 3);
-        const top_share = fixedDecimal(report.top_share_million, 6);
-        _ = offerLine(shared, lineFmt(
-            "info string bench total depth {d} repeats 1 threads {d} nodes {d} time_ms {d} nps {d} ebf {s} median_nodes {d} top_share {s}",
-            .{ report.spec.depth, report.spec.threads, run_record.nodes, run_record.time_ms, engine.bench.nps(run_record.nodes, run_record.time_ms), ebf.slice(), report.median_nodes, top_share.slice() },
-        ));
+        const top_share = fixedDecimal(engine.bench.topShareTenthsPercent(&report), 1);
+        if (!offerText(shared, "")) return;
+        if (!offerText(shared, "=========================")) return;
+        if (!offerLine(shared, lineFmt("Nodes searched  : {d}", .{report.fingerprint_nodes}))) return;
+        if (!offerLine(shared, lineFmt("Geomean EBF     : {s}", .{ebf.slice()}))) return;
+        if (!offerLine(shared, lineFmt("Median nodes    : {d}", .{report.median_nodes}))) return;
+        if (!offerLine(shared, lineFmt(
+            "Top-pos share   : {s}%  ({d} nodes)",
+            .{ top_share.slice(), report.maximum_nodes },
+        ))) return;
+        if (!offerLine(shared, lineFmt("Total time (ms) : {d}", .{run_record.time_ms}))) return;
+        _ = offerLine(shared, lineFmt("Nodes/second    : {d}", .{engine.bench.nps(run_record.nodes, run_record.time_ms)}));
         return;
     }
 
@@ -1163,15 +1256,26 @@ fn publishBench(shared: *Shared, report: engine.bench.Report) void {
     for (report.runs[0..report.completed_runs], 0..) |run_record, index| {
         samples[index] = engine.bench.nps(run_record.nodes, run_record.time_ms);
         if (!offerLine(shared, lineFmt(
-            "info string bench run {d}/{d} depth {d} threads {d} nodes {d} time_ms {d} nps {d}",
-            .{ index + 1, report.spec.repeats, report.spec.depth, report.spec.threads, run_record.nodes, run_record.time_ms, samples[index] },
+            "run {d}/{d}  nodes {d}  time {d}ms  nps {d}",
+            .{ index + 1, report.spec.repeats, run_record.nodes, run_record.time_ms, samples[index] },
         ))) return;
     }
     const ordered = samples[0..report.completed_runs];
     std.mem.sort(u64, ordered, {}, std.sort.asc(u64));
+    const ebf = fixedDecimal(report.geomean_ebf_milli, 3);
+    const top_share = fixedDecimal(engine.bench.topShareTenthsPercent(&report), 1);
+    if (!offerText(shared, "")) return;
+    if (!offerText(shared, "=========================")) return;
+    if (!offerLine(shared, lineFmt("Nodes searched  : {d}", .{report.fingerprint_nodes}))) return;
+    if (!offerLine(shared, lineFmt("Geomean EBF     : {s}", .{ebf.slice()}))) return;
+    if (!offerLine(shared, lineFmt("Median nodes    : {d}", .{report.median_nodes}))) return;
+    if (!offerLine(shared, lineFmt(
+        "Top-pos share   : {s}%  ({d} nodes)",
+        .{ top_share.slice(), report.maximum_nodes },
+    ))) return;
     _ = offerLine(shared, lineFmt(
-        "info string bench summary depth {d} repeats {d} threads {d} fingerprint_nodes {d} best_nps {d} median_nps {d}",
-        .{ report.spec.depth, report.spec.repeats, report.spec.threads, report.fingerprint_nodes, ordered[ordered.len - 1], ordered[ordered.len / 2] },
+        "Nodes/second    : {d}   (best of {d}; median {d}, min {d})",
+        .{ ordered[ordered.len - 1], report.spec.repeats, ordered[ordered.len / 2], ordered[0] },
     ));
 }
 
@@ -1233,6 +1337,53 @@ fn rootMoveInfo(
         "info depth {d} currmove {s} currmovenumber {d} nodes {d} time {d}",
         .{ depth, text.slice(), number, nodes, elapsed_ms },
     );
+}
+
+/// Extends a searched principal variation from the transposition table, for
+/// display only. Selective search may end a principal line at a table hit, so
+/// an iteration that resolved from memory carries one move where the
+/// interface expects the line the score stands on. Each appended move is the
+/// stored move of an authenticated non-upper-bound entry for the position
+/// reached, legal there, and the walk stops at the first missing entry,
+/// unusable move, repeated position or capacity limit. The searched prefix is
+/// never changed, no search decision reads the result, and the table is read
+/// through the same lock-free authenticated probe the workers use, so a live
+/// search may run concurrently.
+fn extendPrincipalVariation(
+    pv: *search.types.PrincipalVariation,
+    root: *const chess.position.Position,
+    table: *const search.tt.Table,
+) void {
+    // SAFETY: `states[ply]` is written by `makeMove` before the walk reads it
+    // through `position.current`, and only the first `ply` entries are used.
+    var states: [chess.types.max_ply]chess.position.PositionState = undefined;
+    var position = root.*;
+    var ply: usize = 0;
+    for (pv.slice()) |chess_move| {
+        if (ply == states.len or !chess.movegen.isLegal(&position, chess_move)) return;
+        chess.transition.makeMove(&position, chess_move, &states[ply]);
+        ply += 1;
+    }
+    while (pv.length < pv.moves.len and ply < states.len) {
+        // A repeated position would loop back through the same entries.
+        if (position.current.repetition != 0) return;
+        const record = table.probe(position.current.key, ply, position.current.rule50) orelse return;
+        if (record.bound == .upper) return;
+        const chess_move = record.chess_move;
+        if (!chess.movegen.isLegal(&position, chess_move)) return;
+        chess.transition.makeMove(&position, chess_move, &states[ply]);
+        ply += 1;
+        pv.moves[pv.length] = chess_move;
+        pv.length += 1;
+    }
+}
+
+fn extendResultPrincipalVariation(
+    result: *Runtime.SearchResult,
+    root: *const chess.position.Position,
+    table: *const search.tt.Table,
+) void {
+    if (result.completed) |*completed| extendPrincipalVariation(&completed.pv, root, table);
 }
 
 fn completedIterationInfo(
@@ -1406,18 +1557,40 @@ fn offerText(shared: *Shared, text: []const u8) bool {
 }
 
 fn offerLine(shared: *Shared, line: Line) bool {
-    const accepted = shared.output.put(shared.io, &.{.{ .line = line }}, 0) catch return false;
-    if (accepted == 1) return true;
-    shared.fatal.store(true, .release);
-    urgentCancel(shared);
-    shared.shutdown.set(shared.io);
+    shared.output.putOne(shared.io, .{ .line = line }) catch |err| return outputRefused(shared, err);
+    return true;
+}
+
+/// A refused offer ends the caller's output. Cancellation is signalled only at
+/// the first cancelation point, and most callers treat a refused line as done
+/// rather than propagating an error, so re-arm it: the controller's next
+/// blocking point must observe the shutdown too instead of waiting again on a
+/// queue nobody drains.
+fn outputRefused(shared: *Shared, err: (std.Io.QueueClosedError || std.Io.Cancelable)) bool {
+    switch (err) {
+        error.Closed => {},
+        error.Canceled => shared.io.recancel(),
+    }
     return false;
+}
+
+/// Live root-move progress is advisory and may be superseded. Never let it fill
+/// the bounded presenter queue at the expense of a required response such as
+/// a completed iteration or `bestmove`; the progress slot will publish a newer
+/// sample.
+fn tryOfferInfoLine(shared: *Shared, line: Line) bool {
+    const accepted = shared.output.put(shared.io, &.{.{ .line = line }}, 0) catch |err|
+        return outputRefused(shared, err);
+    return accepted == 1;
 }
 
 fn presenter(shared: *Shared) std.Io.Cancelable!void {
     defer shared.presenter_done.set(shared.io);
     var write_buffer: [max_output_bytes]u8 = undefined;
-    var file_writer = std.Io.File.stdout().writer(shared.io, &write_buffer);
+    // The presenter is the only stdout writer, so an unknown handle mode is
+    // an initialization failure of the whole session, exactly like stdin.
+    var stdout_file = streamingFile(std.Io.File.stdout()) catch return presenterFatal(shared);
+    var file_writer = stdout_file.writer(shared.io, &write_buffer);
     const writer = &file_writer.interface;
     while (true) {
         const event = shared.output.getOne(shared.io) catch |err| switch (err) {
@@ -1443,6 +1616,10 @@ fn presenterFailed(shared: *Shared, file_writer: *std.Io.File.Writer) std.Io.Can
         error.Canceled => return error.Canceled,
         else => {},
     };
+    return presenterFatal(shared);
+}
+
+fn presenterFatal(shared: *Shared) std.Io.Cancelable!void {
     shared.fatal.store(true, .release);
     urgentCancel(shared);
     shared.shutdown.set(shared.io);
@@ -1455,6 +1632,13 @@ fn drainCommands(shared: *Shared) void {
         if (count == 0) return;
         if (buffer[0].raw) |raw| shared.allocator.free(raw);
     }
+}
+
+/// True when the event is set within the bound. A cancelled wait counts as
+/// expired, so the caller proceeds to its bounded cancellation path.
+fn waitDone(io: std.Io, event: *std.Io.Event, milliseconds: i64) bool {
+    event.waitTimeout(io, timeoutMs(milliseconds)) catch return false;
+    return true;
 }
 
 fn timeoutMs(milliseconds: i64) std.Io.Timeout {
@@ -1507,11 +1691,10 @@ test "bench parsing freezes defaults, semantic caps, and one-thread scope" {
     try std.testing.expectEqual(engine.bench.default_depth, defaults.depth);
     try std.testing.expectEqual(@as(u16, 1), defaults.repeats);
     try std.testing.expectEqual(@as(u16, 1), defaults.threads);
-    try std.testing.expectEqual(@as(u16, 5), parseBench("bench 5 2 1").spec.depth);
+    try std.testing.expectEqual(@as(u16, 5), parseBench("bench 5 2").spec.depth);
     try std.testing.expect(parseBench("bench 0") == .invalid);
     try std.testing.expect(parseBench("bench 1 17") == .invalid);
-    try std.testing.expect(parseBench("bench 1 1 2") == .invalid);
-    try std.testing.expect(parseBench("bench 1 1 1 extra") == .invalid);
+    try std.testing.expect(parseBench("bench 1 1 1") == .invalid);
 }
 
 test "setoption registry normalizes names and enforces active ranges" {
@@ -1619,4 +1802,325 @@ comptime {
     std.debug.assert(command_capacity > 0);
     std.debug.assert(output_capacity > 32);
     std.debug.assert(max_output_bytes >= protocol.max_diagnostic_bytes);
+}
+
+test "go that cannot allocate its search reports it and leaves the engine idle" {
+    const io = std.testing.io;
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var state = try ControllerState.init(failing.allocator());
+    defer state.deinit();
+    try state.startWorker(io);
+
+    var command_storage: [command_capacity]protocol.Command = undefined;
+    var output_storage: [output_capacity]OutputEvent = undefined;
+    var command_queue = std.Io.Queue(protocol.Command).init(&command_storage);
+    var output_queue = std.Io.Queue(OutputEvent).init(&output_storage);
+    var shutdown: std.Io.Event = .unset;
+    var controller_done: std.Io.Event = .unset;
+    var presenter_done: std.Io.Event = .unset;
+    var shared: Shared = .{
+        .io = io,
+        .allocator = failing.allocator(),
+        .version = "test",
+        .transcript_hooks = false,
+        .commands = &command_queue,
+        .output = &output_queue,
+        .shutdown = &shutdown,
+        .controller_done = &controller_done,
+        .presenter_done = &presenter_done,
+    };
+
+    failing.fail_index = failing.alloc_index;
+    handleGo(&shared, &state, "go depth 1", 0);
+    try std.testing.expect(state.active == null);
+    try std.testing.expectEqual(@as(u64, 0), shared.active_epoch.load(.acquire));
+    const event = try output_queue.getOne(io);
+    try std.testing.expectEqualStrings("info string failed go: resource allocation failed", event.line.slice());
+
+    // The same session accepts the next search once allocation succeeds.
+    failing.fail_index = std.math.maxInt(usize);
+    handleGo(&shared, &state, "go depth 1", 0);
+    try std.testing.expect(state.active != null);
+    finishActive(&shared, &state, false);
+    try std.testing.expect(state.active == null);
+}
+
+/// Runs one search to completion on a fresh controller and returns every line
+/// the session would present for it, in order.
+fn testSearchOutput(threads: u16, go: []const u8, lines: []Line) !usize {
+    const io = std.testing.io;
+    var state = try ControllerState.init(std.testing.allocator);
+    defer state.deinit();
+    try state.startWorker(io);
+    try state.resizeThreads(threads);
+
+    var command_storage: [command_capacity]protocol.Command = undefined;
+    var output_storage: [output_capacity]OutputEvent = undefined;
+    var command_queue = std.Io.Queue(protocol.Command).init(&command_storage);
+    var output_queue = std.Io.Queue(OutputEvent).init(&output_storage);
+    var shutdown: std.Io.Event = .unset;
+    var controller_done: std.Io.Event = .unset;
+    var presenter_done: std.Io.Event = .unset;
+    var shared: Shared = .{
+        .io = io,
+        .allocator = std.testing.allocator,
+        .version = "test",
+        .transcript_hooks = false,
+        .commands = &command_queue,
+        .output = &output_queue,
+        .shutdown = &shutdown,
+        .controller_done = &controller_done,
+        .presenter_done = &presenter_done,
+    };
+
+    handleGo(&shared, &state, go, 0);
+    try std.testing.expect(state.active != null);
+    finishActive(&shared, &state, true);
+    try std.testing.expect(state.active == null);
+
+    var count: usize = 0;
+    var buffer: [1]OutputEvent = undefined;
+    while (try output_queue.get(io, &buffer, 0) == 1) {
+        if (count == lines.len) return error.TooManyLines;
+        lines[count] = buffer[0].line;
+        count += 1;
+    }
+    return count;
+}
+
+fn isSearchDepthLine(line: []const u8) bool {
+    return std.mem.startsWith(u8, line, "info depth ") and std.mem.indexOf(u8, line, " currmove ") == null;
+}
+
+test "a depth-limited search publishes its last depth once at any thread count" {
+    // Helpers add their nodes to the result only when the job finishes, so the
+    // closing-line decision compares the main worker's own count; a search
+    // that reached its depth limit has nothing left to report.
+    for ([_]u16{ 4, 1 }) |threads| {
+        var lines: [output_capacity]Line = undefined;
+        const count = try testSearchOutput(threads, "go depth 6", &lines);
+        var depth_six: usize = 0;
+        var last_depth_six: usize = 0;
+        for (lines[0..count], 0..) |*line, index| {
+            if (isSearchDepthLine(line.slice()) and std.mem.startsWith(u8, line.slice(), "info depth 6 ")) {
+                depth_six += 1;
+                last_depth_six = index;
+            }
+        }
+        try std.testing.expectEqual(@as(usize, 1), depth_six);
+        try std.testing.expect(count != 0);
+        try std.testing.expect(last_depth_six < count - 1);
+        try std.testing.expect(std.mem.startsWith(u8, lines[count - 1].slice(), "bestmove "));
+    }
+}
+
+test "a stopped one-thread search keeps its closing line with the final totals" {
+    // A node-limited search ends inside an iteration: after the last completed
+    // depth, the closing line repeats that depth with the nodes actually
+    // searched, and `bestmove` follows. Live root-move lines may interleave.
+    var lines: [output_capacity]Line = undefined;
+    const count = try testSearchOutput(1, "go nodes 5000", &lines);
+    try std.testing.expect(count != 0);
+    try std.testing.expect(std.mem.startsWith(u8, lines[count - 1].slice(), "bestmove "));
+    var depth_lines: [2][]const u8 = undefined;
+    var found: usize = 0;
+    var index = count - 1;
+    while (index != 0 and found < depth_lines.len) {
+        index -= 1;
+        const line = lines[index].slice();
+        if (isSearchDepthLine(line)) {
+            depth_lines[found] = line;
+            found += 1;
+        }
+    }
+    try std.testing.expectEqual(depth_lines.len, found);
+    const closing = depth_lines[0];
+    const iteration = depth_lines[1];
+    const depth_end = std.mem.indexOfScalarPos(u8, iteration, "info depth ".len, ' ').?;
+    try std.testing.expect(std.mem.startsWith(u8, closing, iteration[0 .. depth_end + 1]));
+    try std.testing.expect(std.mem.indexOf(u8, closing, " nodes 5000 ") != null);
+    try std.testing.expect(std.mem.indexOf(u8, iteration, " nodes 5000 ") == null);
+}
+
+test "streaming files follow the inherited handle's I/O mode" {
+    // Issue #2 follow-up: fastchess hands the engine asynchronous pipes, and a
+    // writer that believes such a pipe is synchronous dies inside the standard
+    // library the first time a write cannot complete immediately. The detector
+    // must report the asynchronous pipe as nonblocking and a plain anonymous
+    // pipe as blocking, whatever the constructor assumed.
+    if (comptime builtin.os.tag != .windows) return error.SkipZigTest;
+    const windows = std.os.windows;
+    const kernel32 = struct {
+        extern "kernel32" fn CreateNamedPipeW(
+            name: [*:0]const u16,
+            open_mode: u32,
+            pipe_mode: u32,
+            max_instances: u32,
+            out_buffer_size: u32,
+            in_buffer_size: u32,
+            default_timeout: u32,
+            security_attributes: ?*anyopaque,
+        ) callconv(.winapi) windows.HANDLE;
+        extern "kernel32" fn CreateFileW(
+            name: [*:0]const u16,
+            desired_access: u32,
+            share_mode: u32,
+            security_attributes: ?*anyopaque,
+            creation_disposition: u32,
+            flags_and_attributes: u32,
+            template: ?windows.HANDLE,
+        ) callconv(.winapi) windows.HANDLE;
+        extern "kernel32" fn CreatePipe(
+            read_pipe: *windows.HANDLE,
+            write_pipe: *windows.HANDLE,
+            pipe_attributes: ?*anyopaque,
+            size: u32,
+        ) callconv(.winapi) windows.BOOL;
+    };
+    const pipe_access_duplex: u32 = 0x0000_0003;
+    const file_flag_overlapped: u32 = 0x4000_0000;
+    const pipe_type_byte: u32 = 0;
+    const generic_read: u32 = 0x8000_0000;
+    const generic_write: u32 = 0x4000_0000;
+    const open_existing: u32 = 3;
+
+    var name_utf8: [96]u8 = undefined;
+    const name_text = try std.fmt.bufPrint(
+        &name_utf8,
+        "\\\\.\\pipe\\manta-stream-mode-{d}",
+        .{windows.GetCurrentProcessId()},
+    );
+    var name_utf16: [96:0]u16 = undefined;
+    const name_len = try std.unicode.utf8ToUtf16Le(&name_utf16, name_text);
+    name_utf16[name_len] = 0;
+
+    const server = kernel32.CreateNamedPipeW(
+        &name_utf16,
+        pipe_access_duplex | file_flag_overlapped,
+        pipe_type_byte,
+        1,
+        4096,
+        4096,
+        0,
+        null,
+    );
+    try std.testing.expect(server != windows.INVALID_HANDLE_VALUE);
+    defer windows.CloseHandle(server);
+    const client = kernel32.CreateFileW(
+        &name_utf16,
+        generic_read | generic_write,
+        0,
+        null,
+        open_existing,
+        file_flag_overlapped,
+        null,
+    );
+    try std.testing.expect(client != windows.INVALID_HANDLE_VALUE);
+    defer windows.CloseHandle(client);
+
+    // Both ends of the asynchronous pipe report asynchronous, even though the
+    // constructor assumed synchronous.
+    const asynchronous_client = try streamingFile(.{ .handle = client, .flags = .{ .nonblocking = false } });
+    try std.testing.expect(asynchronous_client.flags.nonblocking);
+    const asynchronous_server = try streamingFile(.{ .handle = server, .flags = .{ .nonblocking = false } });
+    try std.testing.expect(asynchronous_server.flags.nonblocking);
+
+    // An anonymous pipe is synchronous, and a wrong assumption the other way
+    // is corrected too.
+    var read_end: windows.HANDLE = undefined;
+    var write_end: windows.HANDLE = undefined;
+    try std.testing.expect(kernel32.CreatePipe(&read_end, &write_end, null, 4096) != .FALSE);
+    defer windows.CloseHandle(read_end);
+    defer windows.CloseHandle(write_end);
+    const synchronous_write = try streamingFile(.{ .handle = write_end, .flags = .{ .nonblocking = true } });
+    try std.testing.expect(!synchronous_write.flags.nonblocking);
+}
+
+fn storeTableMove(
+    table: *search.tt.Table,
+    position: *const chess.position.Position,
+    chess_move: chess.move.Move,
+    bound: search.types.Bound,
+) void {
+    _ = table.store(
+        position.current.key,
+        chess_move,
+        score.Score.zero,
+        null,
+        4,
+        bound,
+        .full_search,
+        0,
+    );
+}
+
+test "a principal variation ending in a table hit is extended by legal stored moves only" {
+    var storage: [64]search.tt.Cluster = undefined;
+    var table = search.tt.Table.init(&storage);
+    var root_state: chess.position.PositionState = .{};
+    const root = try chess.fen.parseStart(&root_state);
+
+    // Walk the intended line once to store an entry for each position on it:
+    // startpos -> e2e4 (searched) -> e7e5 -> g1f3 -> then an illegal move.
+    var states: [4]chess.position.PositionState = undefined;
+    var cursor = root;
+    const e2e4 = chess.move.Move.normal(.e2, .e4);
+    const e7e5 = chess.move.Move.normal(.e7, .e5);
+    const g1f3 = chess.move.Move.normal(.g1, .f3);
+    chess.transition.makeMove(&cursor, e2e4, &states[0]);
+    storeTableMove(&table, &cursor, e7e5, .exact);
+    chess.transition.makeMove(&cursor, e7e5, &states[1]);
+    storeTableMove(&table, &cursor, g1f3, .lower);
+    chess.transition.makeMove(&cursor, g1f3, &states[2]);
+    // A stored move the position cannot play ends the walk without being shown.
+    storeTableMove(&table, &cursor, chess.move.Move.normal(.e1, .e8), .exact);
+
+    var pv = search.types.PrincipalVariation.init();
+    pv.moves[0] = e2e4;
+    pv.length = 1;
+    extendPrincipalVariation(&pv, &root, &table);
+    try std.testing.expectEqual(@as(u16, 3), pv.length);
+    try std.testing.expectEqual(e2e4, pv.moves[0]);
+    try std.testing.expectEqual(e7e5, pv.moves[1]);
+    try std.testing.expectEqual(g1f3, pv.moves[2]);
+
+    // An upper bound carries no trustworthy move and ends the walk.
+    var upper_pv = search.types.PrincipalVariation.init();
+    storeTableMove(&table, &root, g1f3, .upper);
+    extendPrincipalVariation(&upper_pv, &root, &table);
+    try std.testing.expectEqual(@as(u16, 0), upper_pv.length);
+
+    // A searched prefix the root cannot play is left alone rather than walked.
+    var illegal_pv = search.types.PrincipalVariation.init();
+    illegal_pv.moves[0] = chess.move.Move.normal(.e1, .e8);
+    illegal_pv.length = 1;
+    extendPrincipalVariation(&illegal_pv, &root, &table);
+    try std.testing.expectEqual(@as(u16, 1), illegal_pv.length);
+}
+
+test "principal variation extension stops at a repeated position" {
+    var storage: [64]search.tt.Cluster = undefined;
+    var table = search.tt.Table.init(&storage);
+    var root_state: chess.position.PositionState = .{};
+    const root = try chess.fen.parseStart(&root_state);
+
+    // Knights out and back: every position on the cycle stores the next move,
+    // so without a repetition stop the walk would run to capacity.
+    const cycle = [_]chess.move.Move{
+        chess.move.Move.normal(.g1, .f3),
+        chess.move.Move.normal(.g8, .f6),
+        chess.move.Move.normal(.f3, .g1),
+        chess.move.Move.normal(.f6, .g8),
+    };
+    var states: [4]chess.position.PositionState = undefined;
+    var cursor = root;
+    for (cycle, 0..) |chess_move, index| {
+        storeTableMove(&table, &cursor, chess_move, .exact);
+        chess.transition.makeMove(&cursor, chess_move, &states[index]);
+    }
+
+    var pv = search.types.PrincipalVariation.init();
+    extendPrincipalVariation(&pv, &root, &table);
+    try std.testing.expectEqual(@as(u16, cycle.len), pv.length);
+    for (cycle, pv.slice()) |expected, actual| try std.testing.expectEqual(expected, actual);
 }

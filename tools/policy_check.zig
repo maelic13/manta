@@ -2,7 +2,7 @@ const std = @import("std");
 
 const max_file_size = 2 * 1024 * 1024;
 // Includes the Markdown header row plus every stable requirement-ID row.
-const expected_requirement_count = 112;
+const expected_requirement_count = 117;
 
 const required_paths = [_][]const u8{
     ".github/workflows/ci.yml",
@@ -70,6 +70,7 @@ const required_paths = [_][]const u8{
     "tools/ci/install-zig.ps1",
     "tools/ci/install-zig.sh",
     "tools/ci/release_smoke.py",
+    "tools/compare_board_see.ps1",
     "tools/datagen.ps1",
     "tools/texel/score.py",
     "tools/zlint/build.zig",
@@ -91,6 +92,8 @@ const allowed_reference_files = [_][]const u8{
     "config/phase-5.1.1-reference.json",
     "config/eval-reference.json",
     "docs/adr/0020-uci-search-and-clock-baseline.md",
+    "docs/adr/0021-search-benchmark-and-qualification.md",
+    "docs/adr/0071-coordinated-selective-search-core.md",
     "docs/adr/0023-late-move-reduction-candidate.md",
     "docs/adr/0024-search-reference-observation.md",
     "docs/adr/0033-lmr-reply-feedback-candidate.md",
@@ -102,7 +105,9 @@ const allowed_reference_files = [_][]const u8{
     "docs/adr/0042-extension-depth-authority-candidate.md",
     "docs/FASTCHESS_BRIDGE.md",
     "docs/SEARCH_REFERENCE.md",
+    "docs/SEARCH_ATTRIBUTION.md",
     "tools/build_test.ps1",
+    "tools/compare_board_see.ps1",
     "tools/datagen.ps1",
     "tools/harness_common.ps1",
     "tools/setup_tools.ps1",

@@ -8,7 +8,7 @@
     to the CONSOLE only the meaningful lines: the periodic report / parameter
     blocks, errors, and any anomalous game finishes (time loss / disconnect /
     illegal / crash / forfeit). The per-game 'Started game …', normal
-    'Finished game … {Draw / wins by adjudication}', and running 'Score of …'
+    'Finished game … {Draw by threefold repetition}', and running 'Score of …'
     lines are dropped from the console so you can actually scroll back through
     how the result / the parameters progressed.
 

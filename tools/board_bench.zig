@@ -134,6 +134,7 @@ const ProfileKind = enum { cross, legacy_a, legacy_b };
 const Options = struct {
     profile: ProfileKind = .cross,
     preflight_only: bool = false,
+    see_signature: bool = false,
 };
 
 const BoardSlot = struct {
@@ -184,14 +185,18 @@ pub fn main(init: std.process.Init) !u8 {
         return 2;
     };
     const profile = selectProfile(options.profile);
-    run(init.io, profile, options.preflight_only) catch |err| {
+    if (options.see_signature and options.profile != .cross) {
+        std.debug.print("board benchmark: --see-signature requires cross-engine-board-v1\n", .{});
+        return 2;
+    }
+    run(init.io, profile, options.preflight_only, options.see_signature) catch |err| {
         std.debug.print("board benchmark: FAIL ({s})\n", .{@errorName(err)});
         return 1;
     };
     return 0;
 }
 
-fn run(io: std.Io, profile: Profile, preflight_only: bool) !void {
+fn run(io: std.Io, profile: Profile, preflight_only: bool, see_signature: bool) !void {
     var suite: Suite = undefined;
     try suite.init(profile.fens);
     try preflight(&suite, profile);
@@ -206,6 +211,7 @@ fn run(io: std.Io, profile: Profile, preflight_only: bool) !void {
         .best_of_three => std.debug.print("samples: 3 fixed-work samples (best throughput)\n", .{}),
     }
     std.debug.print("preflight: PASS\n", .{});
+    if (see_signature) try writeSeeSignature(&suite);
     if (preflight_only) return;
 
     var results: [6]Result = undefined;
@@ -231,6 +237,27 @@ fn run(io: std.Io, profile: Profile, preflight_only: bool) !void {
             },
         );
     }
+}
+
+/// Emits the pruning-hot threshold-SEE decisions over the exact frozen capture
+/// population. The comparison tool sorts by position/move, so generation order
+/// remains a separately tested Manta contract rather than a cross-engine target.
+fn writeSeeSignature(suite: *Suite) !void {
+    var count: usize = 0;
+    for (&suite.slots, 0..) |*slot, position_index| {
+        chess.movegen.generate(.captures, &slot.position, &suite.scratch);
+        for (suite.scratch.slice()) |chess_move| {
+            const text = try chess.notation.format(chess_move);
+            const decision = chess.see.atLeast(&slot.position, chess_move, 0, see_values);
+            std.debug.print(
+                "SEE-CONTRACT-V1 position={d} move={s} result={s}\n",
+                .{ position_index, text.slice(), if (decision) "true" else "false" },
+            );
+            count += 1;
+        }
+    }
+    if (count != expected_a[3]) return error.WorkMismatch;
+    std.debug.print("SEE-CONTRACT-V1 count={d}\n", .{count});
 }
 
 fn preflight(suite: *Suite, profile: Profile) !void {
@@ -492,6 +519,8 @@ fn parseOptions(args: []const []const u8) !Options {
     while (index < args.len) : (index += 1) {
         if (std.mem.eql(u8, args[index], "--preflight-only")) {
             result.preflight_only = true;
+        } else if (std.mem.eql(u8, args[index], "--see-signature")) {
+            result.see_signature = true;
         } else if (std.mem.eql(u8, args[index], "--profile")) {
             index += 1;
             if (index == args.len) return error.MissingProfile;
@@ -522,7 +551,7 @@ fn printUsage() void {
     std.debug.print(
         "usage: zig build board-bench [-Doptimize=Debug|ReleaseFast] -- " ++
             "[--profile cross-engine-board-v1|legacy-board-a-v1|legacy-board-b-v1] " ++
-            "[--preflight-only]\n",
+            "[--preflight-only] [--see-signature]\n",
         .{},
     );
 }
@@ -543,9 +572,11 @@ test "board benchmark options are explicit" {
         "--profile",
         "legacy-board-b-v1",
         "--preflight-only",
+        "--see-signature",
     });
     try std.testing.expectEqual(.legacy_b, legacy.profile);
     try std.testing.expect(legacy.preflight_only);
+    try std.testing.expect(legacy.see_signature);
     try std.testing.expectError(error.InvalidProfile, parseOptions(&.{
         "tool",
         "--profile",

@@ -16,9 +16,9 @@
          Windows).
 
     Ported from Rarog's tools/spsa.ps1. Same schedule mathematics and
-    weather-factory patch set, with 3+0.03 / Hash 64 / UHO conditions. New
-    tunes use natural game termination so clock demand is not truncated by
-    draw or resignation adjudication.
+    weather-factory patch set, with 3+0.03 / Hash 64 / UHO conditions. Games
+    end only by the rules of chess, as everywhere else in Manta, so clock
+    demand is never truncated by draw or resignation adjudication.
 
     PREREQUISITE — TUNABLE UCI OPTIONS. SPSA tunes whatever config.json names,
     and it can only reach a parameter the engine advertises as a UCI spin

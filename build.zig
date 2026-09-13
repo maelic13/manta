@@ -46,6 +46,71 @@ pub fn build(b: *std.Build) void {
         "stability-aspiration",
         "Enable the Step-6.0.3 stability-gated aspiration candidate in this build",
     ) orelse false;
+    const live_history_staging = b.option(
+        bool,
+        "live-history-staging",
+        "Enable the accepted Step-6.5.1b live-history staged move picker",
+    ) orelse true;
+    const nonroot_check_extension = b.option(
+        bool,
+        "nonroot-check-extension",
+        "Retain blanket non-root check extension (false selects Step-6.5.3 MAN-S31)",
+    ) orelse true;
+    const mate_windows = b.option(
+        bool,
+        "mate-windows",
+        "Keep accepted Step-6.5.10.1 mate windows (false reconstructs the superseded MAN-S32 tree)",
+    ) orelse true;
+    const selective_core = b.option(
+        bool,
+        "selective-core",
+        "Keep the accepted Step-6.5.10 MAN-S36 selective-search core (false reconstructs MAN-S35)",
+    ) orelse true;
+    const core_history = b.option(
+        bool,
+        "core-history",
+        "Ablation only: keep the core's linear history bonus and malus (needs -Dselective-core)",
+    ) orelse true;
+    const core_lmr = b.option(
+        bool,
+        "core-lmr",
+        "Ablation only: keep the core's log-log reduction surface (needs -Dselective-core)",
+    ) orelse true;
+    const core_move_pruning = b.option(
+        bool,
+        "core-move-pruning",
+        "Ablation only: keep the core's prospective-depth move omission (needs -Dselective-core)",
+    ) orelse true;
+    const core_node_pruning = b.option(
+        bool,
+        "core-node-pruning",
+        "Ablation only: keep the core's node-level forward proofs (needs -Dselective-core)",
+    ) orelse true;
+    const core_aspiration = b.option(
+        bool,
+        "core-aspiration",
+        "Ablation only: keep the core's root aspiration window (needs -Dselective-core)",
+    ) orelse true;
+    const core_qs_checks = b.option(
+        bool,
+        "core-qs-checks",
+        "Ablation only: keep the core's first-ply quiescence checks (needs -Dselective-core)",
+    ) orelse true;
+    const singular_exclusion_horizon = b.option(
+        bool,
+        "singular-exclusion-horizon",
+        "Enable the Step-6.5.5 singular-exclusion-horizon candidate in this build",
+    ) orelse false;
+    const qsearch_tactical_generation = b.option(
+        bool,
+        "qsearch-tactical-generation",
+        "Enable the accepted Step-6.5.7 tactical-only non-check qsearch path",
+    ) orelse true;
+    const search_evidence_observation = b.option(
+        bool,
+        "search-evidence-observation",
+        "Compile the behavior-neutral Step-6.5.9 search-evidence observer",
+    ) orelse false;
     if (b.option([]const u8, "target", "Cross-compilation is not supported") != null or
         b.option([]const u8, "cpu", "Use -Dprofile instead of raw CPU features") != null)
     {
@@ -90,6 +155,19 @@ pub fn build(b: *std.Build) void {
     search_build_options.addOption(bool, "root_confidence_time", root_confidence_time);
     search_build_options.addOption(bool, "integrated_time", integrated_time);
     search_build_options.addOption(bool, "stability_aspiration", stability_aspiration);
+    search_build_options.addOption(bool, "live_history_staging", live_history_staging);
+    search_build_options.addOption(bool, "nonroot_check_extension", nonroot_check_extension);
+    search_build_options.addOption(bool, "mate_windows", mate_windows);
+    search_build_options.addOption(bool, "singular_exclusion_horizon", singular_exclusion_horizon);
+    search_build_options.addOption(bool, "qsearch_tactical_generation", qsearch_tactical_generation);
+    search_build_options.addOption(bool, "selective_core", selective_core);
+    search_build_options.addOption(bool, "core_history", core_history);
+    search_build_options.addOption(bool, "core_lmr", core_lmr);
+    search_build_options.addOption(bool, "core_move_pruning", core_move_pruning);
+    search_build_options.addOption(bool, "core_node_pruning", core_node_pruning);
+    search_build_options.addOption(bool, "core_aspiration", core_aspiration);
+    search_build_options.addOption(bool, "core_qs_checks", core_qs_checks);
+    search_build_options.addOption(bool, "search_evidence_observation", search_evidence_observation);
     const search_build_options_module = search_build_options.createModule();
     const omit_frame_pointer: ?bool = if (optimize == .ReleaseFast and
         target.result.cpu.arch == .x86_64) true else null;
@@ -243,6 +321,19 @@ pub fn build(b: *std.Build) void {
     transcript_search_build_options.addOption(bool, "root_confidence_time", root_confidence_time);
     transcript_search_build_options.addOption(bool, "integrated_time", integrated_time);
     transcript_search_build_options.addOption(bool, "stability_aspiration", stability_aspiration);
+    transcript_search_build_options.addOption(bool, "live_history_staging", live_history_staging);
+    transcript_search_build_options.addOption(bool, "nonroot_check_extension", nonroot_check_extension);
+    transcript_search_build_options.addOption(bool, "mate_windows", mate_windows);
+    transcript_search_build_options.addOption(bool, "singular_exclusion_horizon", singular_exclusion_horizon);
+    transcript_search_build_options.addOption(bool, "qsearch_tactical_generation", qsearch_tactical_generation);
+    transcript_search_build_options.addOption(bool, "selective_core", selective_core);
+    transcript_search_build_options.addOption(bool, "core_history", core_history);
+    transcript_search_build_options.addOption(bool, "core_lmr", core_lmr);
+    transcript_search_build_options.addOption(bool, "core_move_pruning", core_move_pruning);
+    transcript_search_build_options.addOption(bool, "core_node_pruning", core_node_pruning);
+    transcript_search_build_options.addOption(bool, "core_aspiration", core_aspiration);
+    transcript_search_build_options.addOption(bool, "core_qs_checks", core_qs_checks);
+    transcript_search_build_options.addOption(bool, "search_evidence_observation", search_evidence_observation);
     const transcript_manta = b.addModule("manta-transcript", .{
         .root_source_file = b.path("src/manta.zig"),
         .target = target,
@@ -366,6 +457,12 @@ pub fn build(b: *std.Build) void {
         "Run the versioned board-operation benchmark",
     );
     board_bench_step.dependOn(&run_board_bench.step);
+    const install_board_bench = b.addInstallArtifact(board_bench, .{});
+    const board_bench_binary_step = b.step(
+        "board-bench-bin",
+        "Build and install the board benchmark without running it",
+    );
+    board_bench_binary_step.dependOn(&install_board_bench.step);
 
     const board_bench_tests = b.addTest(.{
         .name = "board-benchmark-tests",
@@ -457,6 +554,43 @@ pub fn build(b: *std.Build) void {
     );
     eval_residual_step.dependOn(&run_eval_residual.step);
 
+    // Step-6.5.2 whole-tree attribution sweep. It shares the observer with
+    // `search-observe` but sweeps depth and table size instead of freezing
+    // them, so it is a separate artifact rather than a mode of the fixed suite.
+    const search_attribution = b.addExecutable(.{
+        .name = "manta-search-attribution",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/search_attribution.zig"),
+            .target = target,
+            .optimize = optimize,
+            .omit_frame_pointer = omit_frame_pointer,
+            .imports = &.{
+                .{ .name = "manta", .module = manta },
+                .{ .name = "search_build_options", .module = search_build_options_module },
+            },
+        }),
+    });
+    const run_search_attribution = b.addRunArtifact(search_attribution);
+    if (b.args) |forwarded| run_search_attribution.addArgs(forwarded);
+    const search_attribution_step = b.step(
+        "search-attribution",
+        "Sweep the bench corpus and report whole-tree search attribution",
+    );
+    search_attribution_step.dependOn(&run_search_attribution.step);
+
+    const search_attribution_tests = b.addTest(.{
+        .name = "search-attribution-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/search_attribution.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "manta", .module = manta },
+                .{ .name = "search_build_options", .module = search_build_options_module },
+            },
+        }),
+    });
+
     const eval_residual_tests = b.addTest(.{
         .name = "evaluation-residual-tests",
         .root_module = b.createModule(.{
@@ -534,6 +668,8 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&eval_bench_tests.step);
     check_step.dependOn(&search_observe.step);
     check_step.dependOn(&search_observe_tests.step);
+    check_step.dependOn(&search_attribution.step);
+    check_step.dependOn(&search_attribution_tests.step);
     check_step.dependOn(&eval_residual.step);
     check_step.dependOn(&eval_residual_tests.step);
     check_step.dependOn(&hce_fit.step);
@@ -559,6 +695,7 @@ pub fn build(b: *std.Build) void {
         board_bench_tests,
         eval_bench_tests,
         search_observe_tests,
+        search_attribution_tests,
         eval_residual_tests,
         hce_fit_tests,
     };

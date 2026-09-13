@@ -123,8 +123,8 @@ if ($resolvedHashes.candidate -eq $resolvedHashes.baseline) {
 # Use the exact checked local topology helpers before dispatch so the launcher
 # itself demonstrates the intended 14-core layout without starting a game.
 . $commonScript
-$strengthProfile = Get-StrengthTestProfile
-$resignArgs = @(Get-StrengthTestResignArgs)
+$gameEndProfile = Get-GameEndProfile
+$gameEndArgs = @(Get-GameEndArgs)
 $placement = Resolve-HarnessConcurrency -Requested 14 -ThreadsPerGame 1
 $affinityCpus = Get-HarnessAffinityCpuList -Concurrency $placement.Concurrency -ThreadsPerGame 1
 $affinityArgs = if ($DiagnosticNoAffinity) { @() } else { @("-use-affinity", $affinityCpus) }
@@ -201,7 +201,8 @@ $summary = [ordered]@{
         affinity_cpus = if ($DiagnosticNoAffinity) { "disabled for diagnostic isolation" } else { $affinityCpus }
         authoritative_placement = (-not $DiagnosticNoAffinity)
         ponder = $false
-        adjudication = "$($strengthProfile.Name): draw 40/8/10; $(if ($strengthProfile.ResignTwoSided) { 'two-sided' } else { 'one-sided' }) resign 3/600"
+        adjudication = "none"
+        game_end = "$($gameEndProfile.Name): $($gameEndProfile.Description)"
         sprt = if ($Job -eq "calibrate") { $null } else { [ordered]@{
             elo0 = $SprtElo0
             elo1 = $SprtElo1
@@ -226,7 +227,7 @@ $summary = [ordered]@{
     limitations = @(
         "Temporary bridge; Colosseum remains the strategic runner.",
         "fastchess has no pair-atomic checkpoint/resume contract in this launcher.",
-        "Pilot is a bounded workflow/fault check, not a strength verdict.",
+        $(if ($Job -eq "pilot") { "Pilot is a bounded workflow/fault check, not a strength verdict." } else { "This is the registered final SPRT; no candidate-specific pilot is required." }),
         $(if ($DiagnosticNoAffinity) { "DiagnosticNoAffinity disables required placement; its output cannot support calibration or strength claims." } else { "Required one-core-per-game affinity is enabled." })
     )
 }
@@ -272,9 +273,7 @@ $fastchessArguments = @(
 ) + $affinityArgs + @(
     "-srand", "$seed",
     "-ratinginterval", "20"
-) + $sprtArguments + @(
-    "-draw", "movenumber=40", "movecount=8", "score=10"
-) + $resignArgs + @(
+) + $sprtArguments + $gameEndArgs + @(
     "-pgnout", "file=$pgnPath", "append=false",
     "-log", "file=$engineLog", "level=$engineLogLevel", "engine=$engineCommunication", "append=false", "realtime=true",
     "-output", "format=fastchess"

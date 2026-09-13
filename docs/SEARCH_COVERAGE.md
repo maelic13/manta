@@ -1,171 +1,209 @@
 # Search coverage against the pinned modern reference
 
-Manta's one-thread search compared mechanism by mechanism with Stockfish
-`229f6339` (2026-08-19), checked out locally for this audit. PLAN 5.4.0 requires
-a *current* reference here: the pinned pre-NNUE snapshots are the right study
-input for a classical evaluator and the wrong one for asking whether a modern
-search is complete.
+Current interpretation: 2026-09-09, superseding the earlier causal claims and
+open-step assignments. Modern Stockfish search at
+`edb0d9db6731067ec50ce619ff372b463bc4dd5d` is the structural reference
+(inspected local `src/search.cpp`); earlier audits used `229f6339`.
+Do not silently change that pin. Classical evaluator coverage continues to use
+its separate pre-NNUE pin.
 
-Same contract as [`HCE_COVERAGE.md`](HCE_COVERAGE.md). This is a **coverage map,
-not a parity target**. Manta implements every adopted mechanism as original Zig;
-reference code, formulas and constants are not copied. Status values are
-`present`, `rejected` with its own `MAN-S` evidence, `parked`, and `missing`.
+Manta may reimplement modern search structure, features and their relationships
+as original Zig. Coverage maturity is a design objective; copied constants,
+NNUE-dependent confidence scales and trace convergence are not objectives.
+Every changed producer and consumer must have a Manta-native chess rationale.
+Reference presence suggests a hypothesis, not a promotion verdict.
 
-## The finding this audit exists for
+## Current production and missing consumers
 
-**Manta is missing no mechanism family.** Production enables null move,
-ProbCut, dynamic LMR, IIR, check and provenance-checked singular extension,
-reverse/quiet futility, late-move and SEE pruning, qsearch SEE/delta pruning,
-and continuation history at distances two, four and six. Multi-cut, double
-extension, dynamic-null scaling, ProbCut-TT, history pruning and capture
-futility exist behind the rejected default-off MAN-S20/MAN-S21 umbrellas; they
-are covered implementations, not production consumers.
+Production is MAN-E19 HCE, MAN-S29 fitted search, MAN-T05 clock, MAN-S30
+live-history staging, accepted MAN-S34 exact qsearch generation and accepted
+MAN-S35 complete mate windows and the MAN-S36 coordinated selective-search
+core, deterministic depth-six fingerprint `359,259`.
+A disabled implementation is not an active feature. A rejected formulation is
+not a proof that its entire concept can never help, nor permission to retry.
 
-At the Step-5.4.0 audit, branching over depths four to twelve was `2.412`
-against the reference's `1.633`. The gap was therefore in **how hard the
-existing mechanisms cut**, not in which mechanisms existed. MAN-S28 then fit
-ten active continuous consumers jointly and its MAN-S29 bake accepted H1; that
-vector is production. The historical branching measurement is not restated as
-MAN-S29 behavior without a new prospective measurement.
+**Superseding note, 2026-09-12.** [ADR-0071](adr/0071-coordinated-selective-search-core.md)
+replaces the separately gated owners in the table below for reduction,
+move pruning, node-level proofs, IIR, quiet history and aspiration with one
+coordinated Step-6.5.10 package, and makes the pinned final pre-NNUE
+Stockfish the search-shape reference for branching comparisons. The table's
+owner column is historical where it names 6.5.10.2 to 6.5.12 sub-steps.
 
-## Move ordering is not the constraint
+| Mechanism | Current Manta status | Reworked owner / interaction |
+|---|---|---|
+| Iterative deepening, PVS, completed root authority | Present | Preserve through 6.5.8–6.5.10; root time/UCI consumes only final completed iterations |
+| Adaptive aspiration with a window-aware search consumer | Missing in production; isolated MAN-R02 ended at cap | 6.5.10 only with explicit root/current window evidence and retry authority |
+| Mate-distance window pruning | `SCORE-033` production complete non-root window clip (MAN-S35); MAN-S32's crossing-only arm removed | Accepted in 6.5.10.1 on a neutral gate by documented maintainer exception; the corpus saving is concentrated in the two mate positions and is not ordinary-position strength |
+| Upcoming-repetition bound pruning | Missing; current draw handling recognizes an already reached repetition | 6.5.11 derives a legal move/history witness for main/qsearch; possible draw is not an exact universal TT score |
+| TT authenticated score/depth/bound and raw-eval reuse | Present; richer confidence consumption is partial | 6.5.8–6.5.10 own provenance/depth consumers; 6.5.13 owns measured storage/cache cost |
+| Internal iterative reduction | Present; contextual extension of its policy is partial/off | Shared depth contract in 6.5.10 and proof review in 6.5.11 |
+| Live staged TT/tactical/quiet ordering | MAN-S30 accepted | Retain delayed live ranking; board/qsearch work in 6.5.5–6.5.7, shared evidence in 6.5.9–6.5.10 |
+| Main, reply and continuation history | Present, including distances 2/4/6 | Reliable outcome learning and common ordering/reduction scales in 6.5.9–6.5.10 |
+| Capture history | MAN-S16 rejected/off | Reopen only for a distinct populated relation and coupled consumers, not the archived table alone |
+| Low-ply/countermove/static-eval ordering feedback | Missing or unproven beyond existing evidence | Conditional 6.5.9 review; add only non-redundant information with bounded memory |
+| Contextual LMR across node/move classes | Narrow production eligibility; MAN-S18 contextual vote layer rejected/off | 6.5.10 replaces one shared depth policy, not independent aggressive switches |
+| LMP, reverse/quiet futility and SEE pruning | Present; prospective-depth and richer evidence coupling partial | 6.5.10 consumes the same move-depth decision as LMR and extensions |
+| History pruning / capture futility / ProbCut-TT | Implemented under rejected MAN-S20, off | Derive distinct consumers in 6.5.10–6.5.11 only after changed evidence; no umbrella activation |
+| Null move with mandatory verification | Present, fixed two-ply reduction | 6.5.11 derives reduction and verification together, respecting zugzwang and real-move verification |
+| ProbCut | Present | 6.5.11 coordinates tactical ordering, qsearch and typed TT proof reuse |
+| Check extension and singular extension | Present | 6.5.10 shared forcing-depth budget; 6.5.11 singular proof review on accepted context |
+| Richer singular/multi-cut/depth authority | MAN-S21 unresolved at cap, off | No blanket revival; individual relations require 6.5.8 contract and new evidence |
+| Half-depth singular exclusion | MAN-S33 stopped inconclusive, off | No same-head retry; changed-context review only in 6.5.11 |
+| Verified razoring | Parked implementation | 6.5.11 conditional qsearch-verified shallow proof, with tactical/draw safeguards |
+| Qsearch SEE/delta and complete evasions | Present; MAN-S34 accepted exact tactical-only non-check generation plus complete terminal witness | 6.5.7 closed; later consumers preserve its ordering, legality and stand-pat authority |
+| Correction history | MAN-S25 rejected/off, not an unimplemented Phase-5 task | 6.5.12 conditional reliable HCE-error producer and coherent search consumers |
+| Syzygy, SMP, time/UCI | Present and qualified in prior phases | Preserve authority; no new SMP/NNUE/clock optimization inferred from this phase |
 
-Branching in alpha-beta is a joint product of move-ordering quality and pruning
-aggression, so a wide tree does not by itself accuse pruning. If ordering were
-weak, cutting harder would be actively harmful — the engine would be discarding
-moves it had failed to sort. That had to be measured before any further pruning
-work, and Manta already instruments it as `fail_high_by_index`.
+This is not a claim that every listed absent family should be enabled. The
+deliverable is a compatible, efficient search that meets PLAN's elapsed and
+strength gates, not a count of enabled features.
 
-Over the `manta-search-observation` corpus, 87,730 cutoffs:
+## Verified implementation differences and implications
 
-| cutoff on move | share |
-|---|---:|
-| first | `86.45%` |
-| second | `8.96%` |
-| third | `2.36%` |
-| fourth to eighth | `1.86%` |
-| later | `0.37%` |
+### Step 6.5.8 design closure
 
-First three moves account for `97.77%`. The deepest case in the corpus, a
-depth-ten opening search carrying 78,187 of those cutoffs, sits at `87.3%`
-alone, so the aggregate is not an artifact of shallow cases.
+[ADR-0070](adr/0070-shared-search-evidence-and-depth.md) freezes Manta's fact
+interfaces, shared depth pipeline, eligibility/authority matrix, edge cases
+and candidate membership. Step 6.5.9 is behavior-neutral; changing consumers
+starts only in separately approved 6.5.10 tickets. Complete mate windows are
+independent; the initial depth core couples existing pruning and reduction
+without new ranking/feedback. Window-aware aspiration is a later paired
+producer/consumer candidate, not a repeat of isolated MAN-R02.
 
-Converting the distribution to expected moves searched per cut node gives
-`1.270`. A reference ordering at `90%`, `92%` or `95%` first-move cutoffs would
-give `1.216`, `1.173` and `1.108`, so Manta does between `4.5%` and `14.7%` more
-work per cut node. **The measured branching gap is `49.7%` per ply.** Ordering
-can account for a fraction of it and not the bulk, so it is not the binding
-constraint and the pruning and reduction hypothesis survives the test that could
-have killed it.
+The modern reference was rechecked at the pin above; `src/search.cpp` SHA-256
+is `A934524DD2F386EC38CDF95B7B2E41CECDC85C9B17E12C0668621E6AE16BE28A`.
+The following are source relationships, not copied policy or numerical targets:
 
-Two limits on this. The reference figures are literature values rather than
-measurements, because first-move cutoff rate is internal and cannot be read over
-UCI. And the corpus is twelve cases, most at depth four; only one is deep. The
-conclusion is robust to the range of plausible reference values but the corpus
-deserves widening before ordering is dismissed permanently.
-
-## Finding 1 — the reduction surface saturates
-
-`lateMoveReduction` computes `extra = min(depth_band, move_band)` where
-`depth_band = (depth - 3) / 3` and `move_band = log2(move_index + 1) - 2`. The
-reference derives its reduction from the **product** of a depth term and a move
-term, each logarithmic in its argument, where Manta takes the **minimum** of a
-linear depth term and a logarithmic move term. Only the shape is recorded here;
-the reference's coefficients are deliberately not transcribed, and the table
-below reports observed reduction depth rather than any copied expression.
-
-A minimum is bounded by its smaller argument. `move_band` reaches `3` at sixty
-moves and never exceeds it, so `extra` is capped at `3` and the whole reduction
-surface saturates at four plies no matter how deep the search goes:
-
-| depth / move | Manta | reference, improving | reference, not improving |
-|---|---:|---:|---:|
-| d8 m16 | `2` | `3` | `4` |
-| d12 m20 | `3` | `3` | `5` |
-| d16 m20 | `3` | `4` | `6` |
-| d20 m40 | `4` | `5` | `7` |
-| d28 m30 | `3` | `5` | `8` |
-| **maximum over d4-40, m3-60** | **`4`** | **`7`** | **`10`** |
-
-At depth twenty-eight and move thirty Manta reduces three plies where the
-reference reduces five or eight. This is the leading hypothesis for the
-branching gap and it is a structural property of the formula, not a constant
-that tuning can reach.
-
-## Finding 2 — `improving` is consumed in the opposite direction
-
-The reference increases its reduction by roughly a third when the position is
-**not** improving. Deteriorating positions get searched *less*, and the signal
-is used to cut harder rather than to protect.
-
-`MAN-S18` gave `improving` a vote in Manta's synchronized LMR and was rejected.
-Its own observation records `141` shallower against `2,171` deeper adjustments
-and node count rising from `755,581` to `772,203`, so in practice the cluster
-mostly *protected* moves from reduction and grew the tree by `2.2%`. `MAN-S20`
-did the same: another selectivity cluster that raised nodes, from `744,899` to
-`761,703`, and lost.
-
-**Two consecutive selectivity clusters made the tree bigger.** Neither had a
-branching measurement to check against, because none existed until 5.4.0. The
-direction of travel was toward more careful, more protective search when the
-measurement says the tree is already `1.48x` too wide per ply.
-
-`MAN-S18` is therefore **not refuted as a concept**. What was refuted is one
-bundle in which the dominant effect ran opposite to the reference's use of the
-same signal. Re-registering an `improving`-aware reduction that only *deepens*
-is a different hypothesis and needs its own gate.
-
-## Finding 3 — aspiration and reduction scaling are one mechanism
-
-The reference reduces less when the current window is wide relative to the
-window the root is currently searching, and that root window is re-established
-on every aspiration iteration. Without aspiration windows the root window is
-simply the full window, the ratio is constant, and window-proportional reduction
-scaling cannot exist at all.
-
-`MAN-S02` parked root aspiration as inert on a `0.82%` node reduction. That
-verdict was correct *for aspiration alone*, and it is the clearest case in this
-ledger of a mechanism judged in isolation whose value is mostly as an input to a
-consumer Manta had not built. Aspiration and delta-proportional reduction are
-one dependency-complete cluster and should be registered together or not at all.
-
-## Mechanism inventory
-
-| Mechanism | Manta |
+| Pinned source area | Relationship adopted or deliberately constrained |
 |---|---|
-| Iterative deepening, PVS, TT with bounds and provenance | present |
-| Null move, verified, dynamic reduction | present |
-| ProbCut, with TT-informed probe | present |
-| LMR, dynamic | present — but see Finding 1 |
-| Singular extension, TT provenance, multi-cut, double extension | present |
-| Internal iterative reduction, cut-expectation aware | present |
-| Check extension, depth authority | present |
-| Reverse futility, quiet futility, late move pruning, SEE pruning | present |
-| History pruning, capture futility | present, default-off under rejected `MAN-S20` |
-| Continuation history at distances 2, 4, 6; contextual history | present |
-| Qsearch SEE and delta pruning | present |
-| Syzygy | present |
-| Root aspiration | **parked** `MAN-S02` — reopen only with Finding 3's consumer |
-| `improving`-aware reduction | **rejected** `MAN-S18` — see Finding 2 |
-| Capture history | rejected `MAN-S16` |
-| LMR reply feedback | rejected `MAN-S14` |
-| Balanced history gravity | rejected `MAN-S06` |
-| Main selectivity synchronization | rejected `MAN-S20` |
-| Depth-authority synchronization | parked `MAN-S21`, unresolved budget stop |
-| Razoring | parked — changed the WAC.001 forcing line |
-| Correction history | **missing** — owned by 5.4.1 |
-| Multi-threaded search | missing — owned by Phase 6 |
+| Main search, lines 737–810 | Upcoming repetition is distinct from reached draw; mate windows precede ordinary continuation. Manta requires explicit history-local authority. |
+| Main search, lines 974–1119 | Static facts, null verification, IIR and ProbCut have ordered dependencies. Manta keeps separate producer/horizon certificates and packages. |
+| Move loop, lines 1140–1426 | Prospective reduction participates in shallow pruning; singular and checking depth affect subsequent dispatch. Manta uses one finalized plan and mandatory fixed planned verification, not the reference's adaptive verification horizon. |
+| Outcome/store and qsearch, lines 1554–1874 | Feedback follows searched outcomes; qsearch has distinct terminal/static/tactical authority. Preserve accepted MAN-S34 generation rather than port a picker. |
 
-## How to read the rejections
+Current Manta source audit adds three implementation cautions: the move-loop
+`searched_move_count` includes moves later omitted; TT records have no independent
+PV-origin bit; and continuation distances 2/4/6 share one table. Therefore 9 must
+not silently change the legacy ordinal, invent PV confidence from exact bounds,
+or interpret three lookups as independent support. Paired outcome/support stays
+disabled until a distinct consumer is qualified. Neither this design nor the
+positive MAN-S34 strength result closes the board or depth-13 performance target.
 
-A large share of this list is rejected **with evidence**, which is maturity
-rather than a gap, and reopening a settled question needs a reason beyond the
-reference having the mechanism. But `MAN-E05` and `MAN-E07` were reopened by the
-5.3 fit on exactly such a reason: the original refutation had tested one
-formulation, not the concept.
+### Step 6.5.9 implementation map — accepted
 
-The same applies here. `MAN-S18` and `MAN-S20` were tested without any branching
-instrument, in a direction the instrument now says was wrong. `MAN-S02` was
-tested without its consumer. Those are arguments about the *experiment*, not
-verdicts overturned by preference, and each still needs its own registered gate
-before anything changes.
+The behavior-neutral substrate is implemented, reviewed and closed. Its
+default and observation-enabled builds reproduce fingerprint `775451`; neither
+configuration changes a search consumer. Actual ownership is:
+
+| Interface | Producer / storage | Current consumer |
+|---|---|---|
+| `StaticFacts` | `baseline.zig:shallowEvidence` plus uninterrupted stack context | Enabled diagnostic snapshot/count only; existing pruning still reads `ShallowEvidence` |
+| `TtFacts` | `baseline.zig:probeTable`, retaining stored producer, generation/freshness and unknown PV origin | Enabled diagnostic snapshot/count only; existing TT predicates are unchanged |
+| `WindowFacts` | Every main/qsearch invocation; root reference width is frozen from the first finite aspiration attempt | Enabled diagnostic snapshot/count only; MAN-R02 remains off |
+| `MoveFacts` | Made legal main/qsearch candidate, including EP victim, promoted result, check/evasion and both ordinals | Enabled diagnostic snapshot/count only |
+| `HistoryFacts` | Live worker-local main/reply/shared-continuation values and exact keys, captured at an explicit `ranking` point when a quiet stage is ranked and again at each selected move's `depth` decision, with optional paired shadows | Enabled diagnostic snapshot/count only; no ranking consumer |
+| `NodeDepthPlan` / `MoveDepthPlan` | Existing check/IIR and current shallow/LMR/PVS/qsearch dispatch decisions | Enabled diagnostic snapshot/count only; no shared-depth consumer yet |
+| `SearchOutcome` | Completed main/qsearch return with route, restrictive scope, actually searched horizon, verification, established producer, omitted-sibling and probe-only-sibling facts. The returned bound selects the winner's certificate for exact/cutoff results and the aggregate for fail-lows; scope and omission stay aggregated | Enabled diagnostic snapshot/count only; ordinary publication remains unchanged |
+| `OutcomeSupportCell` | Completed non-root ordinary quiet exact/cutoff update packet under existing main/reply/shared-continuation keys; winner and alternatives each require an ordinary main entry route and a non-reduced, unrestricted, fully searched certificate | Bounded shadow table only; no ordering, pruning, LMR, TT or feedback consumer |
+
+The selector `-Dsearch-evidence-observation=true` compiles bounded worker-local
+observation storage; false is the default and leaves a zero-byte state. Hash
+collisions are reported as dropped samples after bounded probing and never
+merged. Value/support clear together at the start of their owning search run;
+support is lifetime admitted-update count for that run, not confidence or
+recency. The first GPT-6 Astra High review found scope, horizon, admission and
+missing-adapter defects. The second review found five remaining ones: shadow
+admission still accepted unchecked and reduced-probe evidence, restrictive
+scope and `history_local` draw scope were lost on return, reduced-only and
+null-verification results reported nominal rather than actual horizon, qsearch
+outcomes hid SEE/delta omissions and the stored TT producer, and ranking-time
+history was never observed. The third review accepted the authority and
+lifetime boundaries with no evidence leak and blocked closure on certificate
+labeling plus one implicit decision, now recorded in ADR-0070 together with its
+measured admission profile: an exact or cutoff result is certified by its
+winning move, a fail-low by the conservative aggregate, and a probe-only sibling
+is reported as its own fact rather than by shortening the winner's horizon. That
+correction does not make the paired relation depth-stratified; the accepted
+producer rule is the dominant admission gate, so 6.5.10 must not expect a
+depth-balanced sample. All three bounded repairs pass their functional and
+deterministic parity gates, and the fourth Astra review accepted the authority
+and lifetime boundaries, so 6.5.9 is closed. A 6.5.10 consumer still needs its
+own approval, and inherits the frozen contract and this admission profile
+rather than any permission from 6.5.9.
+
+### Reduction and pruning are a coordinated depth decision
+
+Manta `src/search/baseline.zig:lateMoveEligible` currently limits ordinary LMR
+to depth >= 4, move index >= 3, quiet moves, non-check nodes and non-checking
+moves. The base derives `min(depth_band, move_band)`, then applies the accepted
+MAN-S29 extra scale (116), rounding and a remaining-depth cap. Its behavior
+must be derived with active parameters, not an old unscaled table.
+A move-band cap at a fixed ordinal is not a universal four-ply maximum.
+
+The pinned reference derives prospective reduction before shallow move pruning
+and later adjusts/selects actual probe and re-search depth using move/node
+evidence. Manta should adopt a coherent evidence/depth structure, not its
+numerical reduction surface or NNUE-calibrated margins. Checking moves and
+evasions require distinct legality and forcing safeguards: broader reduction
+eligibility is not permission to prune all evasions.
+
+The observed 3.3% reduced-move share and 0.71% re-search rate identify a narrow
+active population. They do not measure false-negative tactical omissions or
+prove a safe amount of extra reduction. Sampling is conditional on previous
+pruning, depth, node and move eligibility; report those denominators.
+
+### Ordering is not exonerated by first-move cutoffs
+
+The earlier observation reported 86.45% first-move cutoffs; the later depth-ten
+attribution reported 92.5% in its population. These are useful conditional
+cut-node statistics, not a complete ordering-quality measure. They omit
+fail-low nodes, PV competition, unsearched/pruned moves, generation cost and
+the quality of shared history evidence. Preserve the successful MAN-S30
+staging while assessing how ordering supports the new depth consumers.
+
+### Null verification is not a repeated null search
+
+Production `main_selectivity_sync=false` selects fixed reduction two.
+The probe searches after a null move at `depth - 1 - reduction`; verification
+searches the restored original position at `depth - reduction` with null
+disabled at that node. These are different searches. A future null-disabled
+region requires an explicit lifetime/recursion contract.
+
+The 37,085 verifications and 34 disagreements do not prove useless checking;
+rare cases may prevent zugzwang errors. The reported 1.1% inclusive node cost
+is workload-specific and is not measured CPU time. A new deeper reduction and
+verification policy must be judged together, with real-move/zugzwang oracles.
+
+### Extension horizon changes alter chess coverage
+
+MAN-S31's removal of non-root check extensions changed nominal-depth coverage;
+it did not demonstrate an exact optimization. Its judgment rejection at
+`-3.08 +/- 7.63` nElo neither proves a loss nor establishes a cause.
+The former explanation that removing all checking privileges would fix it is
+withdrawn. A new forcing-line policy must be derived and tested.
+
+MAN-S33 changed which alternatives were searched to establish singularity.
+Its 9.13% depth-ten saving and similar extension conversion do not establish
+the same useful singular decisions. The maintainer stopped it inconclusive
+at a supplied `+1.24 +/- 8.36` nElo snapshot. No automatic retry.
+
+### Cost measurements are not counterfactual savings
+
+Inclusive attribution categories overlap; their percentages cannot be summed
+into a unique-work share. Extension frequency does not bound descendant work
+removed by an ablation. The 16/64/256-MiB sweep weakens the capacity-pressure
+hypothesis on that workload, not all TT layout/replacement or game-history
+hypotheses. The two mate-heavy positions must be reported separately as well
+as retained in the whole corpus.
+
+## Implementation use
+
+Follow PLAN 6.5.4–6.5.15 and ADR-0068. Freeze Manta's node/move evidence pipeline
+before implementing consumers. Every smaller-model ticket names its inputs,
+outputs, legal exceptions, score/bound authority, expected cost and refutation
+gate. Added mechanisms must consume and improve the shared accepted model,
+not duplicate a second ordering, evaluation or depth policy.
+
+Do not relabel archived experiments as the new step numbers. Their original
+registrations remain historical evidence; new hypotheses require prospective
+registration after implementation and correctness freeze, without harness pilots.

@@ -69,41 +69,122 @@ pub const SearchSpec = struct {
 };
 pub const SearchResult = search.types.Result;
 
-pub const SearchProgress = union(enum) {
-    root_move: struct {
-        depth: u16,
-        chess_move: chess.move.Move,
-        number: u16,
-        nodes: u64,
-        observed_ns: u64,
-    },
-    iteration: struct {
-        completed: search.types.CompletedIteration,
-        tablebase_hits: u64,
-        observed_ns: u64,
-    },
+pub const RootMoveProgress = struct {
+    depth: u16,
+    chess_move: chess.move.Move,
+    number: u16,
+    nodes: u64,
+    observed_ns: u64,
 };
 
-/// One bounded coalescible worker-to-controller information slot. Search
-/// completion has its separate non-droppable event and is never stored here.
-pub const ProgressSlot = struct {
-    mutex: std.Io.Mutex = .init,
-    value: ?SearchProgress = null,
+pub const IterationProgress = struct {
+    completed: search.types.CompletedIteration,
+    tablebase_hits: u64,
+    observed_ns: u64,
+};
 
-    pub fn offer(self: *ProgressSlot, io: std.Io, progress: SearchProgress) bool {
+pub const SearchProgress = union(enum) {
+    root_move: RootMoveProgress,
+    iteration: IterationProgress,
+};
+
+/// One completed bench position, on its way from the worker to the presenter.
+pub const BenchProgress = struct {
+    index: u16 = 0,
+    record: bench.PositionRecord = .{},
+};
+
+/// Bounded worker-to-controller bench progress. Unlike `ProgressSlot` this one
+/// never coalesces: a bench line is a running report of distinct positions
+/// rather than a superseding sample of one search, so dropping an entry would
+/// lose a row of the report. The corpus is a fixed size and one pass fills the
+/// queue at most once, so `offer` cannot fail in practice; it still reports
+/// failure rather than overwriting.
+pub const BenchProgressQueue = struct {
+    mutex: std.Io.Mutex = .init,
+    entries: [bench.position_count]BenchProgress = @splat(.{}),
+    count: usize = 0,
+
+    pub fn offer(self: *BenchProgressQueue, io: std.Io, entry: BenchProgress) bool {
         self.mutex.lockUncancelable(io);
         defer self.mutex.unlock(io);
-        const needs_wake = self.value == null;
-        self.value = progress;
+        if (self.count == self.entries.len) return false;
+        const needs_wake = self.count == 0;
+        self.entries[self.count] = entry;
+        self.count += 1;
         return needs_wake;
     }
 
+    /// Moves every queued entry to the caller and empties the queue.
+    pub fn take(self: *BenchProgressQueue, io: std.Io, out: []BenchProgress) usize {
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
+        const taken = @min(out.len, self.count);
+        @memcpy(out[0..taken], self.entries[0..taken]);
+        const remaining = self.count - taken;
+        if (remaining != 0)
+            std.mem.copyForwards(BenchProgress, self.entries[0..remaining], self.entries[taken..self.count]);
+        self.count = remaining;
+        return taken;
+    }
+};
+
+/// Bounded worker-to-controller search information. Search completion has its
+/// separate non-droppable event and is never stored here.
+///
+/// The two kinds are kept apart because they have different lifetimes. A root
+/// move is a superseding sample: one slot, last writer wins. A completed
+/// iteration carries the depth's score and principal variation, and a later
+/// root move must never overwrite it before the controller drains it, so
+/// iterations queue in arrival order. Several shallow depths can finish between
+/// two controller wakes; if more than the ring holds arrive, the oldest is
+/// dropped so the newest result always survives.
+pub const ProgressSlot = struct {
+    pub const iteration_capacity = 16;
+
+    mutex: std.Io.Mutex = .init,
+    root_move: ?RootMoveProgress = null,
+    // SAFETY: only the `iteration_count` ring positions starting at
+    // `iteration_head` are read, and `offer` writes each before it is counted.
+    iterations: [iteration_capacity]IterationProgress = undefined,
+    iteration_head: usize = 0,
+    iteration_count: usize = 0,
+
+    /// Returns true only on the empty-to-non-empty transition across both
+    /// kinds, so one wake permit covers everything queued until the next
+    /// complete drain.
+    pub fn offer(self: *ProgressSlot, io: std.Io, progress: SearchProgress) bool {
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
+        const needs_wake = self.root_move == null and self.iteration_count == 0;
+        switch (progress) {
+            .root_move => |root_move| self.root_move = root_move,
+            .iteration => |iteration| {
+                if (self.iteration_count == iteration_capacity) {
+                    self.iteration_head = (self.iteration_head + 1) % iteration_capacity;
+                    self.iteration_count -= 1;
+                }
+                self.iterations[(self.iteration_head + self.iteration_count) % iteration_capacity] = iteration;
+                self.iteration_count += 1;
+            },
+        }
+        return needs_wake;
+    }
+
+    /// Completed iterations first, oldest first, then the latest root move.
+    /// A caller drains until this returns null.
     pub fn take(self: *ProgressSlot, io: std.Io) ?SearchProgress {
         self.mutex.lockUncancelable(io);
         defer self.mutex.unlock(io);
-        const value = self.value;
-        self.value = null;
-        return value;
+        if (self.iteration_count != 0) {
+            const iteration = self.iterations[self.iteration_head];
+            self.iteration_head = (self.iteration_head + 1) % iteration_capacity;
+            self.iteration_count -= 1;
+            return .{ .iteration = iteration };
+        }
+        const root_move = self.root_move orelse return null;
+        self.root_move = null;
+        return .{ .root_move = root_move };
     }
 };
 
@@ -173,6 +254,10 @@ pub const Active = struct {
     aggregate_nodes: std.atomic.Value(u64) = .init(0),
     controller_wake: *std.Io.Semaphore,
     progress: ProgressSlot = .{},
+    bench_progress: BenchProgressQueue = .{},
+    /// Set once the presenter has emitted the blank line that opens a streamed
+    /// bench report, so the summary block does not repeat it.
+    bench_header_published: bool = false,
     last_published_iteration_nodes: ?u64 = null,
     ponder_completion_waiting: bool = false,
     /// Controller-owned storage keeps this event alive until every persistent
@@ -693,6 +778,19 @@ fn executeSearch(
     const features: search.types.Features = .{
         .correction_history = search_build_options.correction_history,
         .aspiration = search_build_options.stability_aspiration,
+        .live_history_staging = search_build_options.live_history_staging,
+        .nonroot_check_extension = search_build_options.nonroot_check_extension,
+        .mate_windows = search_build_options.mate_windows,
+        .selective_core = search_build_options.selective_core,
+        .core_history = search_build_options.core_history,
+        .core_lmr = search_build_options.core_lmr,
+        .core_move_pruning = search_build_options.core_move_pruning,
+        .core_node_pruning = search_build_options.core_node_pruning,
+        .core_aspiration = search_build_options.core_aspiration,
+        .core_qs_checks = search_build_options.core_qs_checks,
+        .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
+        .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
+        .search_evidence_observation = search_build_options.search_evidence_observation,
     };
     if (execution) |worker_execution| return search.baseline.runRestrictedWorkerWithTablebaseAndParams(
         features,
@@ -906,14 +1004,32 @@ fn runBench(active: *Active, spec: bench.Spec) void {
     const Control = struct {
         cancel_epoch: *const std.atomic.Value(u64),
         epoch: u64,
+        active: *Active,
+        stream: bool,
 
         pub fn shouldStop(self: *@This()) bool {
             return self.cancel_epoch.load(.acquire) == self.epoch;
         }
+
+        /// Per-position feedback while the corpus runs. Only the single-pass
+        /// report has per-position lines, so a repeats run streams nothing and
+        /// its output is unchanged.
+        pub fn benchPosition(self: *@This(), index: usize, record: bench.PositionRecord) void {
+            if (!self.stream) return;
+            if (self.active.bench_progress.offer(self.active.io, .{
+                .index = @intCast(index),
+                .record = record,
+            })) self.active.controller_wake.post(self.active.io);
+        }
     };
 
     var clock = Clock{ .io = active.io };
-    var control = Control{ .cancel_epoch = active.cancel_epoch, .epoch = active.epoch };
+    var control = Control{
+        .cancel_epoch = active.cancel_epoch,
+        .epoch = active.epoch,
+        .active = active,
+        .stream = spec.repeats == 1,
+    };
     active.completion = .{ .bench = bench.run(
         spec,
         &clock,
@@ -934,4 +1050,75 @@ fn monotonicNs(io: std.Io) u64 {
     const value = std.Io.Clock.awake.now(io).nanoseconds;
     if (value <= 0) return 0;
     return @intCast(@min(value, std.math.maxInt(u64)));
+}
+
+fn testIteration(depth: u16) IterationProgress {
+    return .{
+        .completed = .{
+            .depth = depth,
+            .selective_depth = depth,
+            .nodes = depth,
+            .evidence = .{ .value = @import("../score.zig").Score.zero, .bound = .exact, .provenance = .full_search },
+            .pv = search.types.PrincipalVariation.init(),
+            .root_confidence = .{},
+        },
+        .tablebase_hits = 0,
+        .observed_ns = depth,
+    };
+}
+
+fn testRootMove(depth: u16, number: u16) SearchProgress {
+    return .{ .root_move = .{
+        .depth = depth,
+        .chess_move = chess.move.Move.normal(.e2, .e4),
+        .number = number,
+        .nodes = number,
+        .observed_ns = number,
+    } };
+}
+
+test "search progress keeps every completed iteration apart from coalescing root moves" {
+    const io = std.testing.io;
+    var slot: ProgressSlot = .{};
+    try std.testing.expect(slot.take(io) == null);
+
+    // Wake only on the empty-to-non-empty transition across both kinds.
+    try std.testing.expect(slot.offer(io, testRootMove(1, 1)));
+    try std.testing.expect(!slot.offer(io, .{ .iteration = testIteration(1) }));
+    // A later root move replaces the pending one, but never the iteration.
+    try std.testing.expect(!slot.offer(io, testRootMove(2, 1)));
+    try std.testing.expect(!slot.offer(io, .{ .iteration = testIteration(2) }));
+    try std.testing.expect(!slot.offer(io, testRootMove(3, 4)));
+
+    // Iterations first, in arrival order, then only the latest root move.
+    try std.testing.expectEqual(@as(u16, 1), slot.take(io).?.iteration.completed.depth);
+    try std.testing.expectEqual(@as(u16, 2), slot.take(io).?.iteration.completed.depth);
+    const root_move = slot.take(io).?.root_move;
+    try std.testing.expectEqual(@as(u16, 3), root_move.depth);
+    try std.testing.expectEqual(@as(u16, 4), root_move.number);
+    try std.testing.expect(slot.take(io) == null);
+
+    // Draining re-arms the wake: the next offer of either kind posts one.
+    try std.testing.expect(slot.offer(io, .{ .iteration = testIteration(3) }));
+    try std.testing.expectEqual(@as(u16, 3), slot.take(io).?.iteration.completed.depth);
+    try std.testing.expect(slot.offer(io, testRootMove(4, 1)));
+    // A partial drain leaves the slot non-empty, so no new wake is due.
+    try std.testing.expect(!slot.offer(io, .{ .iteration = testIteration(4) }));
+    try std.testing.expectEqual(@as(u16, 4), slot.take(io).?.iteration.completed.depth);
+    try std.testing.expect(!slot.offer(io, .{ .iteration = testIteration(5) }));
+    try std.testing.expectEqual(@as(u16, 5), slot.take(io).?.iteration.completed.depth);
+    try std.testing.expectEqual(@as(u16, 4), slot.take(io).?.root_move.depth);
+    try std.testing.expect(slot.take(io) == null);
+
+    // Overflow drops the oldest iterations and always keeps the newest.
+    const offered = ProgressSlot.iteration_capacity + 3;
+    for (0..offered) |index| {
+        _ = slot.offer(io, .{ .iteration = testIteration(@intCast(index + 1)) });
+        if (index == 5) _ = slot.offer(io, testRootMove(6, 9));
+    }
+    for (offered - ProgressSlot.iteration_capacity + 1..offered + 1) |depth| {
+        try std.testing.expectEqual(@as(u16, @intCast(depth)), slot.take(io).?.iteration.completed.depth);
+    }
+    try std.testing.expectEqual(@as(u16, 9), slot.take(io).?.root_move.number);
+    try std.testing.expect(slot.take(io) == null);
 }

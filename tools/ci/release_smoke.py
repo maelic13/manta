@@ -73,10 +73,11 @@ def main() -> int:
 
         process.stdin.write("bench 6\n")
         process.stdin.flush()
-        match = wait_for(re.compile(r"info string bench total .*\bnodes (?P<nodes>[0-9]+)\b"), 180)
+        match = wait_for(re.compile(r"^Nodes searched\s*:\s*(?P<nodes>[0-9]+)$"), 180)
         nodes = int(match.group("nodes"))
         if nodes <= 0:
             raise RuntimeError("bench reported no work")
+        wait_for(re.compile(r"^Nodes/second\s*:\s*[0-9]+$"), 15)
 
         # Release verification compares files produced by Windows and Unix.
         # Bytes avoid Python's platform-specific text newline translation.

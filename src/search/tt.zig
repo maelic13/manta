@@ -6,6 +6,17 @@ const types = @import("types.zig");
 
 pub const ways = 4;
 
+/// Exact partition of one store. `retained` is a declined write against an
+/// authenticated same-key entry; the two eviction cases separate ordinary
+/// ageing from genuine current-generation pressure. Purely diagnostic.
+pub const StoreOutcome = enum {
+    refreshed,
+    retained,
+    filled,
+    evicted_stale,
+    evicted_current,
+};
+
 pub const Record = struct {
     chess_move: chess.move.Move,
     value: score.Score,
@@ -89,6 +100,10 @@ pub const Table = struct {
         return null;
     }
 
+    /// Returns which replacement path the write took. The outcome is
+    /// diagnostic only: it names the branch that was already taken and can
+    /// change no stored value, so an observer may read table pressure without
+    /// the table gaining a dependency on one.
     pub fn store(
         self: *Table,
         key: chess.types.Key,
@@ -99,7 +114,7 @@ pub const Table = struct {
         bound: types.Bound,
         producer: types.Provenance,
         ply: usize,
-    ) void {
+    ) StoreOutcome {
         var record = Record{
             .chess_move = chess_move,
             .value = value,
@@ -117,20 +132,36 @@ pub const Table = struct {
                 // terminal path. Preserve an earlier exact raw evaluation of
                 // the same authenticated position rather than erasing it.
                 if (record.static_eval == null) record.static_eval = old.static_eval;
-                if (depth >= old.depth or bound == .exact or old.generation != self.generation)
+                if (depth >= old.depth or bound == .exact or old.generation != self.generation) {
                     entry.store(key, record, ply);
-                return;
+                    return .refreshed;
+                }
+                return .retained;
             }
         }
         for (&cluster.entries) |*entry| {
             if (entry.snapshot() == null) {
                 entry.store(key, record, ply);
-                return;
+                return .filled;
             }
         }
+        return self.replace(cluster, key, record, ply);
+    }
 
+    /// The replacement scan of `store`, entered once the occupancy scan found
+    /// every way full. Concurrent writers can empty a way again before this
+    /// scan observes it.
+    fn replace(self: *const Table, cluster: *Cluster, key: chess.types.Key, record: Record, ply: usize) StoreOutcome {
         var victim: usize = 0;
-        var victim_record = cluster.entries[0].snapshot().?;
+        // `Entry.store` publishes in three steps -- zero the guard, write the
+        // payload, write the new guard -- so a concurrent writer can leave
+        // slot zero looking empty after the occupancy scan saw it full. An
+        // empty way is the ideal victim, exactly as in the loop below; the
+        // seed must not assume the earlier observation still holds.
+        var victim_record = cluster.entries[0].snapshot() orelse {
+            cluster.entries[0].store(key, record, ply);
+            return .filled;
+        };
         for (cluster.entries[1..], 1..) |*entry, slot| {
             const candidate = entry.snapshot() orelse {
                 victim = slot;
@@ -142,6 +173,7 @@ pub const Table = struct {
             }
         }
         cluster.entries[victim].store(key, record, ply);
+        return if (victim_record.generation == self.generation) .evicted_current else .evicted_stale;
     }
 
     fn index(self: *const Table, key: chess.types.Key) usize {
@@ -285,7 +317,7 @@ test "atomic payload validation turns mixed observations into misses" {
     var storage: [1]Cluster = undefined;
     var table = Table.init(&storage);
     const key: u64 = 0x1234_5678_9abc_def0;
-    table.store(key, chess.move.Move.normal(.e2, .e4), score.Score.fromOrdinary(42).?, score.Score.fromOrdinary(-17), 6, .exact, .full_search, 3);
+    _ = table.store(key, chess.move.Move.normal(.e2, .e4), score.Score.fromOrdinary(42).?, score.Score.fromOrdinary(-17), 6, .exact, .full_search, 3);
     try std.testing.expectEqual(@as(i32, -17), table.probe(key, 3, 0).?.static_eval.?.raw());
     storage[0].entries[0].payload.store(0xfeed_face, .monotonic);
     try std.testing.expect(table.probe(key, 3, 0) == null);
@@ -297,8 +329,14 @@ test "same-position store preserves an unavailable raw evaluation" {
     var storage: [1]Cluster = undefined;
     var table = Table.init(&storage);
     const key: u64 = 0x8765_4321;
-    table.store(key, .none, score.Score.fromOrdinary(12).?, score.Score.fromOrdinary(31), 2, .upper, .full_search, 0);
-    table.store(key, .none, score.Score.fromOrdinary(40).?, null, 3, .exact, .full_search, 0);
+    try std.testing.expectEqual(
+        StoreOutcome.filled,
+        table.store(key, .none, score.Score.fromOrdinary(12).?, score.Score.fromOrdinary(31), 2, .upper, .full_search, 0),
+    );
+    try std.testing.expectEqual(
+        StoreOutcome.refreshed,
+        table.store(key, .none, score.Score.fromOrdinary(40).?, null, 3, .exact, .full_search, 0),
+    );
     const record = table.probe(key, 0, 0).?;
     try std.testing.expectEqual(@as(i32, 40), record.value.raw());
     try std.testing.expectEqual(@as(i32, 31), record.static_eval.?.raw());
@@ -310,13 +348,86 @@ test "replacement is deterministic and prefers oldest then shallowest" {
     var table = Table.init(&storage);
     table.nextGeneration();
     for (0..ways) |slot| {
-        table.store(slot + 1, chess.move.Move.normal(.a2, .a3), score.Score.zero, null, @intCast(slot + 1), .upper, .full_search, 0);
+        _ = table.store(slot + 1, chess.move.Move.normal(.a2, .a3), score.Score.zero, null, @intCast(slot + 1), .upper, .full_search, 0);
     }
     table.nextGeneration();
-    table.store(99, chess.move.Move.normal(.b2, .b3), score.Score.zero, null, 1, .lower, .full_search, 0);
+    // The reported outcome must name the branch actually taken: every way is
+    // full and the victim belongs to the previous generation.
+    try std.testing.expectEqual(
+        StoreOutcome.evicted_stale,
+        table.store(99, chess.move.Move.normal(.b2, .b3), score.Score.zero, null, 1, .lower, .full_search, 0),
+    );
     try std.testing.expect(table.probe(99, 0, 0) != null);
     try std.testing.expect(table.probe(1, 0, 0) == null);
     try std.testing.expect(table.probe(4, 0, 0) != null);
+}
+
+test "replacement seed tolerates an entry emptied by a concurrent writer" {
+    // SAFE-009: `Entry.store` publishes in three steps, so another thread can
+    // leave slot zero's guard at zero after the occupancy scan saw it full.
+    // Zeroing the guard before entering the replacement scan directly stands
+    // in for that writer; through `store` the occupancy scan would absorb it.
+    var storage: [1]Cluster = undefined;
+    var table = Table.init(&storage);
+    for (0..ways) |slot| {
+        _ = table.store(slot + 1, chess.move.Move.normal(.a2, .a3), score.Score.zero, null, @intCast(slot + 1), .upper, .full_search, 0);
+    }
+    storage[0].entries[0].guard.store(0, .release);
+    const record = Record{
+        .chess_move = chess.move.Move.normal(.b2, .b3),
+        .value = score.Score.zero,
+        .static_eval = null,
+        .depth = 1,
+        .bound = .lower,
+        .generation = table.generation,
+        .producer = .full_search,
+    };
+    try std.testing.expectEqual(StoreOutcome.filled, table.replace(&storage[0], 99, record, 0));
+    try std.testing.expect(table.probe(99, 0, 0) != null);
+    for (2..ways + 1) |key| try std.testing.expect(table.probe(key, 0, 0) != null);
+}
+
+test "concurrent stores into one full cluster never trust an emptied way" {
+    // SAFE-009: six writers contend for four ways, so the replacement scan
+    // regularly observes a way inside another writer's publish window.
+    const workers = 6;
+    const iterations = 200_000;
+    const generation_period = 4_096;
+    const Worker = struct {
+        fn run(table: *Table, seed: u64, advances_generation: bool) void {
+            var prng = std.Random.DefaultPrng.init(seed);
+            const random = prng.random();
+            for (0..iterations) |iteration| {
+                const bounds = [_]types.Bound{ .upper, .lower, .exact };
+                _ = table.store(
+                    random.int(u64) | 1,
+                    chess.move.Move.normal(.e2, .e4),
+                    score.Score.fromOrdinary(random.intRangeAtMost(i32, -255, 255)).?,
+                    null,
+                    random.intRangeAtMost(u8, 1, 40),
+                    bounds[random.uintLessThan(usize, bounds.len)],
+                    .full_search,
+                    0,
+                );
+                // Production advances the generation from one thread before the
+                // helpers start; one writer here keeps the same rule so the
+                // stress is on the entries, not on an unsynchronized byte.
+                if (advances_generation and iteration % generation_period == generation_period - 1)
+                    table.nextGeneration();
+            }
+        }
+    };
+    var storage: [1]Cluster = undefined;
+    var table = Table.init(&storage);
+    var threads: [workers]std.Thread = undefined;
+    for (&threads, 0..) |*thread, index| {
+        thread.* = try std.Thread.spawn(.{}, Worker.run, .{ &table, 0x9e37_79b9_7f4a_7c15 +% index, index == 0 });
+    }
+    for (threads) |thread| thread.join();
+
+    const key: u64 = 0xabcd_ef01;
+    _ = table.store(key, chess.move.Move.normal(.d2, .d4), score.Score.zero, null, 99, .exact, .full_search, 0);
+    try std.testing.expect(table.probe(key, 0, 0) != null);
 }
 
 test "compact static evaluation round-trips exactly without changing cluster layout" {

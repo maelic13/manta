@@ -112,6 +112,10 @@ test "tactical mate and material canaries retain mechanism-level outcomes" {
         expected_capture: ?chess.types.PieceType = null,
         expected_mate_plies: ?i32 = null,
         expect_positive: bool = false,
+        /// ADR-0071: this expectation belongs to the unpruned pre-core tree
+        /// and is not required of the production core, which answers the same
+        /// position at depth 5 (see the dedicated core canary below).
+        off_arm: bool = false,
     }{
         .{
             .fen = "7k/8/5KQ1/8/8/8/8/8 w - - 0 1",
@@ -132,6 +136,7 @@ test "tactical mate and material canaries retain mechanism-level outcomes" {
             .fen = "2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1",
             .depth = 3,
             .expected_move = "g3g6",
+            .off_arm = true,
         },
         .{
             .fen = "7k/8/8/8/8/8/4Q3/4K3 w - - 0 1",
@@ -145,17 +150,22 @@ test "tactical mate and material canaries retain mechanism-level outcomes" {
         },
     };
 
-    for (cases) |case| {
+    inline for (cases) |case| {
         var root_state: chess.position.PositionState = .{};
         var position = try chess.fen.parse(case.fen, &root_state);
         var harness: Harness = .{};
         var control: search.types.NeverStop = .{};
-        const result = search.baseline.run(
+        var observer: search.diagnostics.Disabled = .{};
+        const result = search.baseline.runWithFeatures(
+            if (case.off_arm) .{ .selective_core = false } else .{},
             &position,
             harness.binding(),
             .{ .depth = case.depth },
             &control,
             &harness.thread,
+            null,
+            null,
+            &observer,
         );
         try std.testing.expect(result.best_move != null);
         try std.testing.expect(chess.movegen.isLegal(&position, result.best_move.?));
@@ -196,6 +206,10 @@ test "shallow selectivity family retains tactical and mate canaries" {
         expected_capture: ?chess.types.PieceType = null,
         expected_mate_plies: ?i32 = null,
         expect_positive: bool = false,
+        /// ADR-0071: this expectation belongs to the unpruned pre-core tree
+        /// and is not required of the production core, which answers the same
+        /// position at depth 5 (see the dedicated core canary below).
+        off_arm: bool = false,
     }{
         .{
             .fen = "7k/8/5KQ1/8/8/8/8/8 w - - 0 1",
@@ -211,6 +225,7 @@ test "shallow selectivity family retains tactical and mate canaries" {
             .fen = "2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1",
             .depth = 3,
             .expected_move = "g3g6",
+            .off_arm = true,
         },
         .{
             .fen = "2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1",
@@ -229,7 +244,7 @@ test "shallow selectivity family retains tactical and mate canaries" {
         },
     };
 
-    for (cases) |case| {
+    inline for (cases) |case| {
         var root_state: chess.position.PositionState = .{};
         var position = try chess.fen.parse(case.fen, &root_state);
         var harness: Harness = .{};
@@ -239,7 +254,10 @@ test "shallow selectivity family retains tactical and mate canaries" {
         var ordering: search.ordering.State = .{};
         var observer: search.diagnostics.Disabled = .{};
         const result = search.baseline.runWithFeatures(
-            .{ .shallow_selectivity = true },
+            if (case.off_arm)
+                .{ .shallow_selectivity = true, .selective_core = false }
+            else
+                .{ .shallow_selectivity = true },
             &position,
             harness.binding(),
             .{ .depth = case.depth },
@@ -347,4 +365,44 @@ fn playSmokeGame() !SmokeGame {
         try std.testing.expect(chess.state.isConsistent(&position));
     }
     return game;
+}
+
+test "the coordinated selective core retains the WAC.001 forcing move" {
+    // ADR-0071's canary, required of the full core arm. Depth five is anchored
+    // to the classical reference, which finds `g3g6` exactly there; the off
+    // arm's depth-three answer is a property of the unpruned tree and is not
+    // required here.
+    //
+    // This case is the reason three seeds were amended after the third review:
+    // a zero-depth reduced probe, a late-move-count skip that dropped `Qh7#`
+    // unmade, and a reverse-futility margin below the evaluator's own swing
+    // each hid a mate in two on their own. The mating line is
+    // `g3g6 g7f6 g6h7`.
+    var root_state: chess.position.PositionState = .{};
+    var position = try chess.fen.parse(
+        "2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1",
+        &root_state,
+    );
+    var harness: Harness = .{};
+    var control: search.types.NeverStop = .{};
+    var storage: [8192]search.tt.Cluster = undefined;
+    var table = search.tt.Table.init(&storage);
+    var ordering: search.ordering.State = .{};
+    var observer: search.diagnostics.Disabled = .{};
+    const result = search.baseline.runWithFeatures(
+        .{ .selective_core = true },
+        &position,
+        harness.binding(),
+        .{ .depth = 5 },
+        &control,
+        &harness.thread,
+        &table,
+        &ordering,
+        &observer,
+    );
+    const expected = try chess.notation.parseLegal(&position, "g3g6");
+    try std.testing.expect(result.best_move != null);
+    try std.testing.expectEqual(expected.raw_value, result.best_move.?.raw_value);
+    try std.testing.expectEqual(@as(?i32, 3), result.evidence.value.mateDistance());
+    try std.testing.expect(chess.state.isConsistent(&position));
 }

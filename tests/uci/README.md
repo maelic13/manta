@@ -12,8 +12,9 @@ behavior before the asynchronous process harness exists.
 | `< text` | Send `text` followed by LF to stdin. |
 | `> text` | Require this exact next stdout line. |
 | `! silence D` | Require no stdout for duration `D`, except well-formed search info inside an `allow-info` region. |
+| `! sleep D` | Wait for duration `D` before the next step. |
 | `! send-oversized-line` | Send a line larger than `RES-001` without storing it in the corpus. |
-| `! allow-info begin/end` | Permit well-formed search `info` lines between the markers. |
+| `! allow-info begin/end` | Permit well-formed search `info` lines between the markers. While the next expectation is itself a completed iteration, another completed-iteration line is not skipped: it fails the case as a missing, repeated or out-of-order depth. |
 | `! close-stdin` | Close the process stdin stream. |
 | `! block-stdout` / `! unblock-stdout` | Apply or release presenter backpressure. |
 | `! fail-next K` | Inject the named resource failure at its owning port. |
@@ -31,20 +32,23 @@ The harness substitutes these typed placeholders:
 | `{{VERSION}}` | Exact authoritative build version. |
 | `{{OPTION_DECLARATIONS}}` | Zero or more exact declarations from the active authoritative registry, in canonical order. |
 | `{{U64}}` | One unsigned decimal 64-bit value. |
+| `{{I64}}` | One signed decimal 64-bit value. |
 | `{{POSITIVE_U64}}` | One positive unsigned decimal 64-bit value. |
 | `{{DECIMAL}}` | One finite non-negative decimal value. |
+| `{{EMPTY}}` | One empty output line. |
 | `{{ROOT_MOVE_INFO}}` | One syntactically valid live root-move line with legal UCI move text and bounded numeric fields. |
 | `{{ITERATION_INFO}}` | One completed-iteration score/depth/PV line satisfying the ordinary search-info contract. |
-| `{{SEARCH_INFO}}` | One valid coalescible root-move or completed-iteration line; it does not require both optional forms to survive coalescing. |
+| `{{ITERATION_FIELDS}}` | The fields after `info depth <D> ` in one completed-iteration line, from `seldepth` through the PV. A transcript spells the depth literally, as in `info depth 3 {{ITERATION_FIELDS}}`. |
+| `{{SEARCH_INFO}}` | One valid root-move or completed-iteration line. Root-move lines may coalesce or drop under load; every completed iteration reaches the interface, so the placeholder matches whichever arrives first. |
 | `{{BESTMOVE_LINE}}` | One legal `bestmove`, with an optional legal `ponder` continuation. |
 | `{{PONDER}}` | Either nothing or one ` ponder <legal UCI move>` continuation. |
-| `{{BENCH_POSITION_LINES}}` | Exactly 40 ordered lines of `info string bench position <index>/40 nodes {{U64}} time_ms {{U64}} nps {{U64}} ebf {{DECIMAL}}`, with contiguous indices 1 through 40. |
+| `{{BENCH_POSITION_LINES}}` | Exactly 40 ordered ADR-0021 bench record lines of `bench <index>/40  depth {{U64}}  score {{I64}}  nodes {{U64}}  ebf {{DECIMAL}}  time {{U64}}ms  nps {{U64}}`, with contiguous indices 1 through 40. |
 
 Placeholders never match line endings or arbitrary text. Phase 1.2 owns the
 parser for this notation and must reject unknown directives or placeholders.
 
 The harness validates the complete corpus on every run and executes every case
-at or before active Step 6.3.2. All 23 current process cases are active. A frozen
+at or before active Step 6.3.2. All 26 current process cases are active. A frozen
 command owned by a later phase receives the exact temporary `not available
 yet` diagnostic; its eventual implementation must activate the staged case
 rather than add partial behavior.

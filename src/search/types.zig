@@ -2,6 +2,7 @@
 const std = @import("std");
 const chess = @import("../chess/root.zig");
 const score = @import("../score.zig");
+const search_build_options = @import("search_build_options");
 
 pub const Bound = enum {
     exact,
@@ -28,6 +29,11 @@ pub const Provenance = enum {
     speculative_cutoff,
     exclusion_search,
     tablebase,
+    /// Proved from mate distance alone: the node's window cannot contain any
+    /// reachable score, because a mate cannot be delivered sooner than the next
+    /// ply nor suffered sooner than this one. It carries a true bound and no
+    /// position knowledge, so it never gains ordinary search authority.
+    mate_distance,
 };
 
 pub const Evidence = struct {
@@ -205,12 +211,439 @@ pub const OutcomeAttribution = struct {
     }
 };
 
+/// Locality carried by searched evidence. A numeric bound never widens this
+/// scope when it is returned, negated, or stored.
+pub const EvidenceScope = enum {
+    ordinary,
+    restricted_root,
+    exclusion,
+    null_probe,
+    null_verification,
+    probcut,
+    history_local,
+    quiescence,
+};
+
+pub const EvalTrend = struct {
+    current: i32,
+    previous: i32,
+
+    pub fn improving(self: EvalTrend) bool {
+        return self.current > self.previous;
+    }
+};
+
+/// Behavior-neutral view of values which existing static consumers currently
+/// derive independently. Missing evidence remains optional rather than zero.
+pub const StaticFacts = struct {
+    raw_hce: ?i32 = null,
+    raw_hce_cached: bool = false,
+    ordinary_tt_refinement: ?i32 = null,
+    corrected: ?i32 = null,
+    own_trend: ?EvalTrend = null,
+    opponent_trend: ?EvalTrend = null,
+};
+
+/// Authenticated TT facts retain the stored producer. The present TT format
+/// has no independent PV-origin bit, so `pv_origin` is deliberately unknown.
+pub const TtFacts = struct {
+    authenticated: bool = false,
+    chess_move: ?chess.move.Move = null,
+    value: ?score.Score = null,
+    static_eval: ?score.Score = null,
+    bound: ?Bound = null,
+    producer: ?Provenance = null,
+    stored_depth: ?u8 = null,
+    generation: ?u8 = null,
+    current_generation: ?u8 = null,
+    fresh: ?bool = null,
+    scope_compatible: bool = false,
+    cutoff_authorized: bool = false,
+    pv_origin: ?bool = null,
+};
+
+pub const WindowFacts = struct {
+    alpha: i32,
+    beta: i32,
+    width: u32,
+    root_reference_width: ?u32,
+    expectation: NodeExpectation,
+
+    pub fn init(alpha: i32, beta: i32, root_reference_width: ?u32, expectation: NodeExpectation) WindowFacts {
+        std.debug.assert(alpha < beta);
+        return .{
+            .alpha = alpha,
+            .beta = beta,
+            .width = @intCast(@as(i64, beta) - alpha),
+            .root_reference_width = root_reference_width,
+            .expectation = expectation,
+        };
+    }
+};
+
+pub const MoveFacts = struct {
+    chess_move: chess.move.Move,
+    resulting_piece: chess.types.PieceType,
+    victim: chess.types.PieceType,
+    tactical: bool,
+    tt_move: bool,
+    evasion: bool,
+    gives_check: bool,
+    selected_ordinal: u16,
+    searched_before: u16,
+};
+
+/// One live ordering relation and its optional observation-only outcome cell.
+/// The key names the exact production table cell; missing context remains null.
+pub const HistoryRelation = struct {
+    key: u64,
+    value: i16,
+    shadow: ?OutcomeSupportCell = null,
+};
+
+pub const HistoryObservationPoint = enum { ranking, depth };
+
+/// One history snapshot from either the instant a quiet is ranked or the
+/// later per-move depth decision. Continuation slots retain their shared-table
+/// aliases; the explicit point prevents the two lifetimes being conflated.
+pub const HistoryFacts = struct {
+    point: HistoryObservationPoint,
+    main: HistoryRelation,
+    reply: ?HistoryRelation = null,
+    continuations: [3]?HistoryRelation = @splat(null),
+};
+
+pub const NodeDepthPlan = struct {
+    requested: DepthIntent,
+    active: DepthIntent,
+    admitted_check_extension: u16,
+    admitted_iir_reduction: u16,
+    ply_capacity: u16,
+    scope: EvidenceScope = .ordinary,
+};
+
+/// Observes the horizons selected by the accepted search. It does not yet
+/// replace any depth, pruning, or dispatch formula.
+pub const MoveDepthPlan = struct {
+    full: DepthIntent,
+    probe: DepthIntent,
+    prune_depth: u16,
+    selected_ordinal: u16,
+    searched_before: u16,
+    singular_extension: u16,
+    child_check_extension: u16 = 0,
+    proposed_reduction: u16,
+    shallow_omitted: bool,
+};
+
+pub const Verification = enum { not_required, reduced_only, completed };
+
+pub const SearchOutcome = struct {
+    attribution: ?OutcomeAttribution,
+    scope: EvidenceScope,
+    requested_horizon: u16,
+    searched_horizon: u16,
+    verification: Verification,
+    omitted_siblings: bool,
+    complete: bool,
+    original_producer: ?Provenance = null,
+    /// Some searched sibling was only a reduced probe. This is distinct from
+    /// `omitted_siblings`, which means a legal sibling was never searched, and
+    /// from `verification`, which describes how this result itself was
+    /// established. An exact or cutoff result keeps its winner's horizon and
+    /// reports probe-only siblings here rather than shortening that horizon.
+    reduced_siblings: bool = false,
+};
+
+/// Shadow admission is counted per node depth so the admitted/refused profile
+/// of the paired relation stays measurable without a temporary probe. Depths
+/// at or above the last bucket saturate into it.
+pub const shadow_depth_buckets = 17;
+
+/// Signed outcome and support are updated as one diagnostic sample. Support is
+/// a saturated admitted-update count, not a probability or recency estimate.
+pub const OutcomeSupportCell = struct {
+    value: i16 = 0,
+    support: u8 = 0,
+
+    pub const limit: i32 = 16 * 1024;
+
+    pub fn apply(self: *OutcomeSupportCell, bonus_unbounded: i32) void {
+        const bonus = std.math.clamp(bonus_unbounded, -limit, limit);
+        const magnitude: i32 = @intCast(@abs(bonus));
+        const current: i32 = self.value;
+        const next = current + bonus - @divTrunc(current * magnitude, limit);
+        std.debug.assert(next >= -limit and next <= limit);
+        self.value = @intCast(next);
+        self.support +|= 1;
+    }
+};
+
+pub const search_evidence_observation_compiled = search_build_options.search_evidence_observation;
+const observation_slot_count = 4096;
+
+fn observationIndex(key: u64) u64 {
+    // Mix every encoded relation component before taking the bounded-table
+    // index. Linear probing still drops after eight occupied, unequal keys;
+    // it never merges their samples.
+    var mixed = key;
+    mixed ^= mixed >> 30;
+    mixed *%= 0xbf58476d1ce4e5b9;
+    mixed ^= mixed >> 27;
+    mixed *%= 0x94d049bb133111eb;
+    mixed ^= mixed >> 31;
+    return mixed & (observation_slot_count - 1);
+}
+
+const ObservationStorage = if (search_evidence_observation_compiled) struct {
+    const Entry = struct {
+        key: u64 = 0,
+        sample: OutcomeSupportCell = .{},
+    };
+
+    entries: [observation_slot_count]Entry = @splat(.{}),
+    static_facts: u64 = 0,
+    tt_facts: u64 = 0,
+    windows: u64 = 0,
+    node_plans: u64 = 0,
+    move_plans: u64 = 0,
+    history_facts: u64 = 0,
+    ranking_history_facts: u64 = 0,
+    depth_history_facts: u64 = 0,
+    outcomes: u64 = 0,
+    qsearch_outcomes_with_omissions: u64 = 0,
+    reduced_only_outcomes: u64 = 0,
+    reduced_sibling_outcomes: u64 = 0,
+    shadow_admitted: u64 = 0,
+    shadow_refused: u64 = 0,
+    shadow_admitted_by_depth: [shadow_depth_buckets]u64 = @splat(0),
+    shadow_refused_by_depth: [shadow_depth_buckets]u64 = @splat(0),
+    updates: u64 = 0,
+    dropped: u64 = 0,
+    last_static: ?StaticFacts = null,
+    last_tt: ?TtFacts = null,
+    last_window: ?WindowFacts = null,
+    last_node_plan: ?NodeDepthPlan = null,
+    last_move_facts: ?MoveFacts = null,
+    last_move_plan: ?MoveDepthPlan = null,
+    last_history: ?HistoryFacts = null,
+    last_ranking_history: ?HistoryFacts = null,
+    last_depth_history: ?HistoryFacts = null,
+    last_outcome: ?SearchOutcome = null,
+} else struct {};
+
+pub const SearchEvidenceSummary = struct {
+    static_facts: u64 = 0,
+    tt_facts: u64 = 0,
+    windows: u64 = 0,
+    node_plans: u64 = 0,
+    move_plans: u64 = 0,
+    history_facts: u64 = 0,
+    ranking_history_facts: u64 = 0,
+    depth_history_facts: u64 = 0,
+    outcomes: u64 = 0,
+    qsearch_outcomes_with_omissions: u64 = 0,
+    reduced_only_outcomes: u64 = 0,
+    reduced_sibling_outcomes: u64 = 0,
+    shadow_admitted: u64 = 0,
+    shadow_refused: u64 = 0,
+    shadow_admitted_by_depth: [shadow_depth_buckets]u64 = @splat(0),
+    shadow_refused_by_depth: [shadow_depth_buckets]u64 = @splat(0),
+    updates: u64 = 0,
+    dropped: u64 = 0,
+};
+
+pub const SearchEvidenceSnapshot = struct {
+    static_facts: ?StaticFacts = null,
+    tt_facts: ?TtFacts = null,
+    window: ?WindowFacts = null,
+    node_plan: ?NodeDepthPlan = null,
+    move_facts: ?MoveFacts = null,
+    move_plan: ?MoveDepthPlan = null,
+    history: ?HistoryFacts = null,
+    ranking_history: ?HistoryFacts = null,
+    depth_history: ?HistoryFacts = null,
+    outcome: ?SearchOutcome = null,
+};
+
+/// Build-time-erased worker-local Step-6.5.9 observation state. Keys are
+/// produced by ordering from already validated chess/context facts.
+pub const SearchEvidenceObservation = struct {
+    storage: ObservationStorage = .{},
+
+    pub fn reset(self: *SearchEvidenceObservation) void {
+        self.* = .{};
+    }
+
+    pub fn observeStatic(self: *SearchEvidenceObservation, facts: StaticFacts) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.static_facts += 1;
+            self.storage.last_static = facts;
+        }
+    }
+
+    pub fn observeTt(self: *SearchEvidenceObservation, facts: TtFacts) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.tt_facts += 1;
+            self.storage.last_tt = facts;
+        }
+    }
+
+    pub fn observeWindow(self: *SearchEvidenceObservation, facts: WindowFacts) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.windows += 1;
+            self.storage.last_window = facts;
+        }
+    }
+
+    pub fn observeNodePlan(self: *SearchEvidenceObservation, plan: NodeDepthPlan) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.node_plans += 1;
+            self.storage.last_node_plan = plan;
+        }
+    }
+
+    pub fn observeMovePlan(self: *SearchEvidenceObservation, facts: MoveFacts, plan: MoveDepthPlan) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.move_plans += 1;
+            self.storage.last_move_facts = facts;
+            self.storage.last_move_plan = plan;
+        }
+    }
+
+    pub fn observeHistory(self: *SearchEvidenceObservation, facts: HistoryFacts) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.history_facts += 1;
+            self.storage.last_history = facts;
+            switch (facts.point) {
+                .ranking => {
+                    self.storage.ranking_history_facts += 1;
+                    self.storage.last_ranking_history = facts;
+                },
+                .depth => {
+                    self.storage.depth_history_facts += 1;
+                    self.storage.last_depth_history = facts;
+                },
+            }
+        }
+    }
+
+    pub fn observeOutcome(self: *SearchEvidenceObservation, outcome: SearchOutcome) void {
+        if (comptime search_evidence_observation_compiled) {
+            self.storage.outcomes += 1;
+            self.storage.last_outcome = outcome;
+            if (outcome.attribution != null and outcome.attribution.?.route == .quiescence and
+                outcome.omitted_siblings)
+                self.storage.qsearch_outcomes_with_omissions += 1;
+            if (outcome.verification == .reduced_only)
+                self.storage.reduced_only_outcomes += 1;
+            if (outcome.reduced_siblings)
+                self.storage.reduced_sibling_outcomes += 1;
+        }
+    }
+
+    /// Records whether one completed quiet outcome reached the shadow relation,
+    /// keyed by the node depth that produced it.
+    pub fn observeShadowAdmission(
+        self: *SearchEvidenceObservation,
+        depth: u16,
+        admitted: bool,
+    ) void {
+        if (comptime search_evidence_observation_compiled) {
+            const bucket = @min(@as(usize, depth), shadow_depth_buckets - 1);
+            if (admitted) {
+                self.storage.shadow_admitted += 1;
+                self.storage.shadow_admitted_by_depth[bucket] += 1;
+            } else {
+                self.storage.shadow_refused += 1;
+                self.storage.shadow_refused_by_depth[bucket] += 1;
+            }
+        }
+    }
+
+    pub fn record(self: *SearchEvidenceObservation, key: u64, bonus: i32) void {
+        if (comptime search_evidence_observation_compiled) {
+            std.debug.assert(key != 0);
+            const start: usize = @intCast(observationIndex(key));
+            for (0..8) |offset| {
+                const entry = &self.storage.entries[(start + offset) & (observation_slot_count - 1)];
+                if (entry.key == 0) entry.key = key;
+                if (entry.key == key) {
+                    entry.sample.apply(bonus);
+                    self.storage.updates += 1;
+                    return;
+                }
+            }
+            self.storage.dropped += 1;
+        }
+    }
+
+    pub fn sample(self: *const SearchEvidenceObservation, key: u64) ?OutcomeSupportCell {
+        if (comptime search_evidence_observation_compiled) {
+            if (key == 0) return null;
+            const start: usize = @intCast(observationIndex(key));
+            for (0..8) |offset| {
+                const entry = self.storage.entries[(start + offset) & (observation_slot_count - 1)];
+                if (entry.key == key) return entry.sample;
+                if (entry.key == 0) return null;
+            }
+        }
+        return null;
+    }
+
+    pub fn summary(self: *const SearchEvidenceObservation) SearchEvidenceSummary {
+        if (comptime search_evidence_observation_compiled) return .{
+            .static_facts = self.storage.static_facts,
+            .tt_facts = self.storage.tt_facts,
+            .windows = self.storage.windows,
+            .node_plans = self.storage.node_plans,
+            .move_plans = self.storage.move_plans,
+            .history_facts = self.storage.history_facts,
+            .ranking_history_facts = self.storage.ranking_history_facts,
+            .depth_history_facts = self.storage.depth_history_facts,
+            .outcomes = self.storage.outcomes,
+            .qsearch_outcomes_with_omissions = self.storage.qsearch_outcomes_with_omissions,
+            .reduced_only_outcomes = self.storage.reduced_only_outcomes,
+            .reduced_sibling_outcomes = self.storage.reduced_sibling_outcomes,
+            .shadow_admitted = self.storage.shadow_admitted,
+            .shadow_refused = self.storage.shadow_refused,
+            .shadow_admitted_by_depth = self.storage.shadow_admitted_by_depth,
+            .shadow_refused_by_depth = self.storage.shadow_refused_by_depth,
+            .updates = self.storage.updates,
+            .dropped = self.storage.dropped,
+        };
+        return .{};
+    }
+
+    pub fn snapshot(self: *const SearchEvidenceObservation) SearchEvidenceSnapshot {
+        if (comptime search_evidence_observation_compiled) return .{
+            .static_facts = self.storage.last_static,
+            .tt_facts = self.storage.last_tt,
+            .window = self.storage.last_window,
+            .node_plan = self.storage.last_node_plan,
+            .move_facts = self.storage.last_move_facts,
+            .move_plan = self.storage.last_move_plan,
+            .history = self.storage.last_history,
+            .ranking_history = self.storage.last_ranking_history,
+            .depth_history = self.storage.last_depth_history,
+            .outcome = self.storage.last_outcome,
+        };
+        return .{};
+    }
+};
+
 /// Compile-time switches keep each playing mechanism independently ablatable
 /// without adding policy branches to recursive search.
 pub const Features = struct {
     search_context: bool = true,
+    /// Step-6.5.9 compile-time-only observation. It has no policy consumer and
+    /// defaults off in both the feature ledger and the build configuration.
+    search_evidence_observation: bool = false,
     depth_authority: bool = true,
     check_extension: bool = true,
+    /// MAN-S31 disables only the non-root blanket increment. Root check
+    /// extension and the existing whole-producer ablation remain independent.
+    nonroot_check_extension: bool = true,
     internal_iterative_reduction: bool = true,
     singular_extension: bool = true,
     /// Step-6.0.3 stability-gated root aspiration candidate. It consumes only
@@ -251,6 +684,31 @@ pub const Features = struct {
     continuation_distance_2: bool = true,
     continuation_distance_4: bool = true,
     continuation_distance_6: bool = true,
+    /// Accepted Step-6.5.10.1 `MAN-S35` production policy. Every non-root
+    /// main-search node clips its own window to the band the rules of chess
+    /// still allow at that ply, `[matedIn(ply), mateIn(ply + 1)]`. A window
+    /// that no longer holds a reachable score returns the proven bound;
+    /// otherwise the clipped window is the one the table probe, forward
+    /// proofs, move loop and bound classification read. This supersedes
+    /// `MAN-S32`, whose crossing-only path tightened nothing in an open
+    /// window. Switching it off reconstructs that superseded tree at
+    /// fingerprint `775,451` for archived diagnostics.
+    mate_windows: bool = true,
+    /// Step-6.5.5 singular-exclusion-horizon candidate. The same-position
+    /// search still excludes exactly the legal ordinary TT move and alone
+    /// decides whether that move extends; this switch only replaces the
+    /// historical depth-minus-two horizon with a bounded half-depth horizon.
+    singular_exclusion_horizon: bool = false,
+    /// Accepted Step-6.5.1b playing head. Ordinary non-check interior nodes
+    /// emit TT and good tactical moves before generating non-tactical quiets.
+    /// The delayed quiet rank observes descendant-completed worker-local
+    /// history; legality, score, bound, pruning and thread ownership remain
+    /// unchanged. Disabling it reconstructs the archived MAN-S29 picker.
+    live_history_staging: bool = true,
+    /// Accepted Step-6.5.7 exact-cost path. Non-check qsearch generates only the
+    /// tactical partition; when it is empty, the disjoint quiet partition is
+    /// generated only as a legal-move witness and is not ranked or searched.
+    qsearch_tactical_generation: bool = true,
     /// Archived rejected MAN-S14 switch, default off. Only an authoritative
     /// full-depth fail-low after an LMR false positive may add one negative
     /// reply-history update; history still has no reduction authority.
@@ -323,6 +781,53 @@ pub const Features = struct {
     /// authority. Its changed qsearch values may still change the later tree,
     /// as any evaluation change can.
     correction_history: bool = false,
+    /// Accepted Step-6.5.10 `MAN-S36` coordinated selective-search core
+    /// (ADR-0071), production since its registered 1T gate accepted H1. The
+    /// umbrella owns the whole package; the component switches below exist
+    /// for ablation diagnosis only and were never gated separately. Each is
+    /// effective only through its accessor, so switching the umbrella off
+    /// reconstructs the superseded MAN-S35 tree exactly, at fingerprint
+    /// `642,336`, whatever the components say.
+    selective_core: bool = true,
+    /// One bounded linear history bonus and equal malus, ADR-0071 A.
+    core_history: bool = true,
+    /// Compile-time log-log reduction surface, ADR-0071 B.
+    core_lmr: bool = true,
+    /// Prospective-depth move omission, ADR-0071 C.
+    core_move_pruning: bool = true,
+    /// Node-level forward proofs, ADR-0071 D.
+    core_node_pruning: bool = true,
+    /// Root aspiration, ADR-0071 E.
+    core_aspiration: bool = true,
+    /// Direct quiet checks in the first quiescence ply, ADR-0071 F.
+    core_qs_checks: bool = true,
+
+    /// The component switches are meaningless without the umbrella, so every
+    /// consumer asks through these accessors rather than reading the field.
+    /// A component left on in an umbrella-off build must not change one node.
+    pub fn coreHistory(self: Features) bool {
+        return self.selective_core and self.core_history;
+    }
+
+    pub fn coreLmr(self: Features) bool {
+        return self.selective_core and self.core_lmr;
+    }
+
+    pub fn coreMovePruning(self: Features) bool {
+        return self.selective_core and self.core_move_pruning;
+    }
+
+    pub fn coreNodePruning(self: Features) bool {
+        return self.selective_core and self.core_node_pruning;
+    }
+
+    pub fn coreAspiration(self: Features) bool {
+        return self.selective_core and self.core_aspiration;
+    }
+
+    pub fn coreQsChecks(self: Features) bool {
+        return self.selective_core and self.core_qs_checks;
+    }
 };
 
 test "production feature ledger freezes the MAN-S19 search policy" {
@@ -333,8 +838,10 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     const features: Features = .{};
 
     try std.testing.expect(features.search_context);
+    try std.testing.expect(!features.search_evidence_observation);
     try std.testing.expect(features.depth_authority);
     try std.testing.expect(features.check_extension);
+    try std.testing.expect(features.nonroot_check_extension);
     try std.testing.expect(features.internal_iterative_reduction);
     try std.testing.expect(features.singular_extension);
     try std.testing.expect(features.null_move);
@@ -351,6 +858,14 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     try std.testing.expect(features.tt_static_eval);
     try std.testing.expect(features.tt_eval_refinement);
     try std.testing.expect(features.qsearch_delta);
+    // Step 6.5.1b is the first accepted default that changes the searched tree
+    // since MAN-S22 froze this ledger, so its promotion is asserted here.
+    try std.testing.expect(features.live_history_staging);
+    try std.testing.expect(features.qsearch_tactical_generation);
+    // Step 6.5.10.1 is the accepted head's second tree-changing default. It was
+    // promoted on a neutral registered gate by explicit maintainer exception,
+    // so its default-on state is asserted rather than inferred.
+    try std.testing.expect(features.mate_windows);
     try std.testing.expect(features.shallow_selectivity);
     try std.testing.expect(features.reverse_futility);
     try std.testing.expect(features.quiet_futility);
@@ -367,9 +882,34 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     try std.testing.expect(!features.balanced_history);
     try std.testing.expect(!features.history_lmr);
     try std.testing.expect(!features.lmr_reply_feedback);
+    try std.testing.expect(!features.singular_exclusion_horizon);
     try std.testing.expect(!features.main_selectivity_sync);
     try std.testing.expect(!features.depth_authority_sync);
     try std.testing.expect(!features.razoring);
+
+    // MAN-S36 accepted H1, so ADR-0071's umbrella is production and the
+    // whole package is live by default: every component accessor is on.
+    try std.testing.expect(features.selective_core);
+    try std.testing.expect(features.coreHistory());
+    try std.testing.expect(features.coreLmr());
+    try std.testing.expect(features.coreMovePruning());
+    try std.testing.expect(features.coreNodePruning());
+    try std.testing.expect(features.coreAspiration());
+    try std.testing.expect(features.coreQsChecks());
+
+    // Switching the umbrella off must silence every component regardless of
+    // its own field, because that is what reconstructs MAN-S35 exactly.
+    const superseded: Features = .{ .selective_core = false };
+    try std.testing.expect(!superseded.coreHistory());
+    try std.testing.expect(!superseded.coreLmr());
+    try std.testing.expect(!superseded.coreMovePruning());
+    try std.testing.expect(!superseded.coreNodePruning());
+    try std.testing.expect(!superseded.coreAspiration());
+    try std.testing.expect(!superseded.coreQsChecks());
+
+    const ablated: Features = .{ .selective_core = true, .core_lmr = false };
+    try std.testing.expect(ablated.coreHistory());
+    try std.testing.expect(!ablated.coreLmr());
 }
 
 pub const PrincipalVariation = struct {
@@ -666,6 +1206,7 @@ pub const ThreadState = struct {
     selective_depth: u16,
     abort_reason: ?Termination,
     root_confidence: RootConfidence,
+    search_evidence: SearchEvidenceObservation,
 
     pub fn init() ThreadState {
         // SAFETY: search initializes a state slot before makeMove consumes it,
@@ -681,6 +1222,7 @@ pub const ThreadState = struct {
             .selective_depth = 0,
             .abort_reason = null,
             .root_confidence = RootConfidence.init(),
+            .search_evidence = .{},
         };
     }
 
@@ -692,6 +1234,7 @@ pub const ThreadState = struct {
         self.selective_depth = 0;
         self.abort_reason = null;
         self.root_confidence.reset();
+        self.search_evidence.reset();
     }
 };
 
@@ -701,6 +1244,57 @@ test "depth intent composes extensions and reductions without underflow" {
     try std.testing.expectEqual(@as(u16, 3), DepthIntent.reduced(5, 2).searched());
     try std.testing.expectEqual(@as(u16, 6), DepthIntent.extended(5, 1).searched());
     try std.testing.expectEqual(@as(u16, 0), DepthIntent.reduced(1, 2).searched());
+}
+
+test "search evidence values preserve unknown authority and bounded arithmetic" {
+    // Step 6.5.9: missing PV/trend evidence remains optional, depth components
+    // stay distinct, and paired support saturates without escaping its domain.
+    const tt_facts: TtFacts = .{ .authenticated = true };
+    try std.testing.expectEqual(@as(?bool, null), tt_facts.pv_origin);
+    const window = WindowFacts.init(-10, 21, null, .principal);
+    try std.testing.expectEqual(@as(u32, 31), window.width);
+
+    var cell: OutcomeSupportCell = .{};
+    cell.apply(OutcomeSupportCell.limit);
+    try std.testing.expectEqual(@as(i16, 16 * 1024), cell.value);
+    for (0..300) |_| cell.apply(-OutcomeSupportCell.limit);
+    try std.testing.expectEqual(@as(i16, -16 * 1024), cell.value);
+    try std.testing.expectEqual(std.math.maxInt(u8), cell.support);
+}
+
+test "disabled search evidence storage has zero worker footprint" {
+    // The production build must not allocate the diagnostic shadow table.
+    if (comptime !search_evidence_observation_compiled)
+        try std.testing.expectEqual(@as(usize, 0), @sizeOf(SearchEvidenceObservation));
+}
+
+test "enabled search evidence storage is explicitly bounded" {
+    // The diagnostic remains worker-local and small beside the existing
+    // ordering state; growth requires an intentional allocation review.
+    if (comptime search_evidence_observation_compiled)
+        try std.testing.expect(@sizeOf(SearchEvidenceObservation) <= 128 * 1024);
+}
+
+test "search evidence collisions drop rather than merge samples" {
+    if (comptime !search_evidence_observation_compiled) return error.SkipZigTest;
+    var colliding: [9]u64 = undefined;
+    var count: usize = 0;
+    var candidate: u64 = 1;
+    const target = observationIndex(candidate);
+    while (count < colliding.len) : (candidate += 1) {
+        if (observationIndex(candidate) != target) continue;
+        colliding[count] = candidate;
+        count += 1;
+    }
+    var observation: SearchEvidenceObservation = .{};
+    for (colliding) |key| observation.record(key, 7);
+    for (colliding[0..8]) |key| {
+        const sample_value = observation.sample(key).?;
+        try std.testing.expectEqual(@as(u8, 1), sample_value.support);
+        try std.testing.expectEqual(@as(i16, 7), sample_value.value);
+    }
+    try std.testing.expectEqual(@as(?OutcomeSupportCell, null), observation.sample(colliding[8]));
+    try std.testing.expectEqual(@as(u64, 1), observation.summary().dropped);
 }
 
 test "ply context preserves special-move identity without chess authority" {

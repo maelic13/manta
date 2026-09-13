@@ -12,15 +12,51 @@ const types = @import("types.zig");
 
 const Abort = error{Stopped};
 
+const NodeObservationAuthority = if (types.search_evidence_observation_compiled) struct {
+    producer: ?types.Provenance = null,
+    searched_horizon: u16 = 0,
+    scope: types.EvidenceScope = .ordinary,
+    verification: types.Verification = .not_required,
+    omitted_siblings: bool = false,
+} else struct {};
+
+const NodeAggregateAuthority = if (types.search_evidence_observation_compiled) struct {
+    scope: types.EvidenceScope = .ordinary,
+    searched_horizon: u16 = std.math.maxInt(u16),
+    verification: types.Verification = .not_required,
+    omitted_siblings: bool = false,
+    original_producer: ?types.Provenance = null,
+    /// Node-local: some searched sibling was only a reduced probe. It is not
+    /// inherited from a child certificate, because a subtree-wide accumulation
+    /// would be true almost everywhere and carry no information.
+    reduced_siblings: bool = false,
+} else struct {};
+
 const NodeValue = struct {
     raw: i32,
     bound: types.Bound,
     provenance: types.Provenance,
+    observation: NodeObservationAuthority = .{},
+};
+
+/// The window an invocation searched, after any mate clip tightened the one
+/// its caller asked for. Observation records this rather than the requested
+/// window, so a diagnostic width is the width the node's consumers actually
+/// read.
+const SearchedWindow = struct {
+    alpha: i32,
+    beta: i32,
 };
 
 const NodeResolution = struct {
     value: NodeValue,
     depth: types.DepthIntent,
+    omitted_siblings: bool = false,
+    searched_horizon: ?u16 = null,
+    original_producer: ?types.Provenance = null,
+    verification: types.Verification = .not_required,
+    scope_override: ?types.EvidenceScope = null,
+    reduced_siblings: bool = false,
 };
 
 fn Context(comptime Observer: type, comptime Prober: type) type {
@@ -30,6 +66,7 @@ fn Context(comptime Observer: type, comptime Prober: type) type {
         table: ?*tt.Table,
         heuristics: ?*ordering.State,
         root_moves: ?[]const chess.move.Move,
+        root_reference_width: ?u32,
         root_iteration: *types.RootIterationEvidence,
         params: params.Values,
         observer: *Observer,
@@ -305,6 +342,18 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
     search_params: params.Values,
     execution: WorkerExecution,
 ) types.Result {
+    if (comptime features.search_evidence_observation and
+        !types.search_evidence_observation_compiled)
+    {
+        @compileError("search evidence observation requires -Dsearch-evidence-observation=true");
+    }
+    if (comptime features.search_evidence_observation and !features.search_context)
+        @compileError("search evidence observation requires search context");
+    // ADR-0071 reads the live picker's own ranking value as the core's
+    // per-move quiet evidence and skips the remaining quiets through it. The
+    // eager picker has neither, so the combination has no defined behavior.
+    if (comptime features.selective_core and !features.live_history_staging)
+        @compileError("the selective-search core requires live_history_staging");
     thread.reset();
     observer.reset();
     if (execution.advance_table_generation) if (table) |active| active.nextGeneration();
@@ -386,6 +435,7 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
         .table = table,
         .heuristics = heuristics,
         .root_moves = effective_root_restriction,
+        .root_reference_width = null,
         .root_iteration = &root_iteration,
         .params = search_params,
         .observer = observer,
@@ -396,14 +446,25 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
 
     var depth: u16 = @max(execution.start_depth, 1);
     while (depth <= normalized_depth) : (depth += 1) {
-        var window = AspirationWindow.full();
-        if (comptime features.aspiration) {
+        const Window = comptime if (features.coreAspiration())
+            CoreAspirationWindow
+        else
+            AspirationWindow;
+        var window = Window.full();
+        if (comptime features.coreAspiration()) {
+            if (result.completed) |previous| {
+                if (coreAspirationCenter(depth, previous.evidence)) |center| {
+                    window = Window.around(center);
+                }
+            }
+        } else if (comptime features.aspiration) {
             if (result.completed) |previous| {
                 if (aspirationCenter(previous.evidence, previous.root_confidence)) |center| {
-                    window = AspirationWindow.around(center);
+                    window = Window.around(center);
                 }
             }
         }
+        context.root_reference_width = if (window.isFull()) null else window.width();
         const iteration = while (true) {
             root_iteration.reset();
             observer.rootSearch(!window.isFull());
@@ -420,16 +481,20 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
                 window.beta,
                 .principal,
                 .root,
+                .ordinary,
             ) catch {
                 result.termination = thread.abort_reason orelse .stopped;
                 result.nodes = thread.nodes;
                 result.selective_depth = thread.selective_depth;
                 return result;
             };
+            // Only an exact attempt commits the iteration. A bounded attempt
+            // publishes nothing: `result` is untouched until the loop breaks,
+            // and the root evidence is reset at the top of every attempt.
             if (attempt.bound == .exact) break attempt;
             std.debug.assert(!window.isFull());
             observer.aspirationFailure(attempt.bound);
-            window.widen();
+            window.widen(attempt.bound);
         };
 
         var completed = types.CompletedIteration{
@@ -495,7 +560,15 @@ const AspirationWindow = struct {
         return self.alpha == -score.infinity_raw and self.beta == score.infinity_raw;
     }
 
-    fn widen(self: *AspirationWindow) void {
+    fn width(self: AspirationWindow) u32 {
+        std.debug.assert(self.alpha < self.beta);
+        return @intCast(@as(i64, self.beta) - self.alpha);
+    }
+
+    fn widen(self: *AspirationWindow, bound: types.Bound) void {
+        // The archived window doubles symmetrically and ignores which side
+        // failed; the parameter exists so both windows share one call site.
+        _ = bound;
         const next_radius = self.radius * 2;
         self.* = if (next_radius >= score.infinity_raw)
             full()
@@ -514,6 +587,103 @@ const AspirationWindow = struct {
         };
     }
 };
+
+/// ADR-0071 E. The core's root window.
+///
+/// It differs from the archived MAN-R02 window in the two ways that matter: it
+/// needs only an exact ordinary previous score rather than two stable
+/// iterations, and it widens the side that actually failed instead of doubling
+/// symmetrically. A fail-low says the score is below the window, which is no
+/// evidence at all about the upper edge, so re-searching with a wider beta
+/// spends nodes proving something nobody doubted.
+///
+/// `delta = 20 + |s| / 32` starts at a fifth of a pawn near equality and grows
+/// with the score, because a position already won by several pawns is also one
+/// whose score moves in larger steps. Growth is `delta + delta / 2 + 5`, so a
+/// side that keeps failing reaches the full bound in a few attempts, and four
+/// failures on one side open it outright. Termination is therefore bounded
+/// whatever the search returns.
+const CoreAspirationWindow = struct {
+    alpha: i32,
+    beta: i32,
+    delta: i32,
+    low_failures: u8 = 0,
+    high_failures: u8 = 0,
+
+    /// Opening one side after this many failures bounds the attempt count even
+    /// if the growth below were much slower.
+    const failure_limit: u8 = 4;
+
+    fn full() CoreAspirationWindow {
+        return .{
+            .alpha = -score.infinity_raw,
+            .beta = score.infinity_raw,
+            .delta = score.infinity_raw,
+        };
+    }
+
+    fn around(center: i32) CoreAspirationWindow {
+        const delta = 20 + @divTrunc(@as(i32, @intCast(@abs(center))), 32);
+        return .{
+            .alpha = clampToBand(@as(i64, center) - delta),
+            .beta = clampToBand(@as(i64, center) + delta),
+            .delta = delta,
+        };
+    }
+
+    fn isFull(self: CoreAspirationWindow) bool {
+        return self.alpha == -score.infinity_raw and self.beta == score.infinity_raw;
+    }
+
+    fn width(self: CoreAspirationWindow) u32 {
+        std.debug.assert(self.alpha < self.beta);
+        return @intCast(@as(i64, self.beta) - self.alpha);
+    }
+
+    /// Widens the failed side only. An upper bound is a fail-low, a lower
+    /// bound a fail-high; an exact result never reaches here.
+    fn widen(self: *CoreAspirationWindow, bound: types.Bound) void {
+        std.debug.assert(bound != .exact);
+        switch (bound) {
+            .upper => {
+                self.low_failures += 1;
+                self.alpha = if (self.low_failures >= failure_limit)
+                    -score.infinity_raw
+                else
+                    clampToBand(@as(i64, self.alpha) - self.delta);
+            },
+            .lower => {
+                self.high_failures += 1;
+                self.beta = if (self.high_failures >= failure_limit)
+                    score.infinity_raw
+                else
+                    clampToBand(@as(i64, self.beta) + self.delta);
+            },
+            .exact => unreachable,
+        }
+        self.delta = @min(
+            score.infinity_raw,
+            self.delta + @divTrunc(self.delta, 2) + 5,
+        );
+    }
+
+    fn clampToBand(value: i64) i32 {
+        return @intCast(std.math.clamp(
+            value,
+            -@as(i64, score.infinity_raw),
+            @as(i64, score.infinity_raw),
+        ));
+    }
+};
+
+/// ADR-0071 E's entry rule: an exact ordinary completed score and nothing
+/// else. A mate or tablebase score uses the full window, because these
+/// centipawn deltas say nothing about a distance-to-mate scale.
+fn coreAspirationCenter(depth: u16, previous: types.Evidence) ?i32 {
+    if (depth < 4) return null;
+    if (previous.bound != .exact or !previous.value.isOrdinary()) return null;
+    return previous.value.raw();
+}
 
 /// A narrow window is useful only after two honest root populations agree on
 /// the best move and their latest exact scores remain within one pawn. The
@@ -535,6 +705,92 @@ fn aspirationCenter(
     return previous.value.raw();
 }
 
+test "the core root window widens only the side that failed" {
+    // ADR-0071 E. A fail-low is evidence about alpha and about nothing else,
+    // so beta must not move; a fail-high is the mirror. The oracle is that
+    // asymmetry, which the archived MAN-R02 window deliberately does not have.
+    var low = CoreAspirationWindow.around(0);
+    const opening_beta = low.beta;
+    try std.testing.expectEqual(@as(i32, -20), low.alpha);
+    try std.testing.expectEqual(@as(i32, 20), low.beta);
+    low.widen(.upper);
+    try std.testing.expect(low.alpha < -20);
+    try std.testing.expectEqual(opening_beta, low.beta);
+
+    var high = CoreAspirationWindow.around(0);
+    const opening_alpha = high.alpha;
+    high.widen(.lower);
+    try std.testing.expect(high.beta > 20);
+    try std.testing.expectEqual(opening_alpha, high.alpha);
+
+    // Delta scales with the score: a position won by several pawns moves in
+    // bigger steps than one near equality.
+    const wide = CoreAspirationWindow.around(640);
+    try std.testing.expectEqual(@as(i32, 40), wide.delta);
+    try std.testing.expect(wide.width() > CoreAspirationWindow.around(0).width());
+}
+
+test "the core root window always reaches the full band" {
+    // Termination, as a property over every failure sequence of a bounded
+    // length rather than one scripted path: whatever order the two bounds
+    // arrive in, the window must end up full, and it must never leave the
+    // representable band on the way. An unbounded retry loop at the root
+    // would stall a real search against its clock.
+    const sequences = [_][8]types.Bound{
+        .{ .upper, .upper, .upper, .upper, .upper, .upper, .upper, .upper },
+        .{ .lower, .lower, .lower, .lower, .lower, .lower, .lower, .lower },
+        .{ .upper, .lower, .upper, .lower, .upper, .lower, .upper, .lower },
+        .{ .lower, .upper, .upper, .lower, .lower, .upper, .lower, .upper },
+    };
+    for ([_]i32{ 0, -25, 25, -640, 640, score.ordinary_max_raw, -score.ordinary_max_raw }) |center| {
+        for (sequences) |sequence| {
+            var window = CoreAspirationWindow.around(center);
+            var attempts: usize = 0;
+            for (sequence) |bound| {
+                if (window.isFull()) break;
+                window.widen(bound);
+                attempts += 1;
+                try std.testing.expect(window.alpha >= -score.infinity_raw);
+                try std.testing.expect(window.beta <= score.infinity_raw);
+                try std.testing.expect(window.alpha < window.beta);
+            }
+            // Four failures open a side outright, so a one-sided sequence is
+            // full within four attempts and any sequence within eight.
+            try std.testing.expect(attempts <= 8);
+        }
+    }
+    // A one-sided run opens that side by the failure limit exactly.
+    var one_sided = CoreAspirationWindow.around(0);
+    for (0..CoreAspirationWindow.failure_limit) |_| one_sided.widen(.upper);
+    try std.testing.expectEqual(-score.infinity_raw, one_sided.alpha);
+}
+
+test "the core root window refuses every score it cannot reason about" {
+    // ADR-0071 E's entry rule. A bounded attempt is not a score, a mate or
+    // tablebase value is not on the centipawn scale these deltas assume, and
+    // the first three iterations have no settled score to narrow around.
+    const ordinary = evidence(120, .exact, .full_search);
+    try std.testing.expectEqual(@as(?i32, 120), coreAspirationCenter(4, ordinary));
+    try std.testing.expectEqual(@as(?i32, null), coreAspirationCenter(3, ordinary));
+    try std.testing.expectEqual(
+        @as(?i32, null),
+        coreAspirationCenter(8, evidence(120, .lower, .full_search)),
+    );
+    try std.testing.expectEqual(
+        @as(?i32, null),
+        coreAspirationCenter(8, evidence(120, .upper, .full_search)),
+    );
+    const mate = score.Score.mateIn(6).?.raw();
+    try std.testing.expectEqual(
+        @as(?i32, null),
+        coreAspirationCenter(8, evidence(mate, .exact, .full_search)),
+    );
+    try std.testing.expectEqual(
+        @as(?i32, null),
+        coreAspirationCenter(8, evidence(-mate, .exact, .full_search)),
+    );
+}
+
 test "aspiration windows use the search scale and widen to full bounds" {
     // SCORE-008/PERF-010: the candidate begins with one evaluator pawn of
     // uncertainty and must terminate in an ordinary full-window search.
@@ -543,7 +799,7 @@ test "aspiration windows use the search scale and widen to full bounds" {
     try std.testing.expectEqual(score.ordinary_max_raw + score.units_per_pawn, window.beta);
     var widenings: u8 = 0;
     while (!window.isFull()) {
-        window.widen();
+        window.widen(.upper);
         widenings += 1;
         try std.testing.expect(widenings < 16);
     }
@@ -593,15 +849,23 @@ fn negamax(
     beta: i32,
     expectation: types.NodeExpectation,
     route: types.EntryRoute,
+    inherited_scope: types.EvidenceScope,
 ) Abort!NodeValue {
+    const node_scope = evidenceScope(inherited_scope, route, ply, context.root_moves != null);
     var active_depth = depth_intent;
     if (comptime features.search_context and features.depth_authority and features.check_extension) {
-        if (checkExtensionEligible(value.current.checkers != 0, depth_intent, ply)) {
+        if ((features.nonroot_check_extension or ply == 0) and
+            checkExtensionEligible(value.current.checkers != 0, depth_intent, ply))
+        {
             active_depth.extension +|= 1;
             context.observer.extension(.check);
         }
     }
-    const result = try negamaxNode(
+    // A node that reaches its mate clip searches a window narrower than the one
+    // requested here. It reports that window back so the observation below
+    // describes the width its own consumers read, not the width asked for.
+    var searched_window = SearchedWindow{ .alpha = alpha_initial, .beta = beta };
+    const result = negamaxNode(
         features,
         allow_null,
         context,
@@ -614,7 +878,53 @@ fn negamax(
         beta,
         expectation,
         route,
-    );
+        node_scope,
+        &searched_window,
+    ) catch |err| {
+        if (comptime features.search_evidence_observation)
+            observeIncompleteOutcome(
+                context,
+                node_scope,
+                active_depth,
+            );
+        return err;
+    };
+    if (comptime features.search_evidence_observation) {
+        const admitted_check = result.depth.extension -| depth_intent.extension;
+        const admitted_iir = result.depth.reduction -| depth_intent.reduction;
+        context.thread.search_evidence.observeWindow(types.WindowFacts.init(
+            searched_window.alpha,
+            searched_window.beta,
+            context.root_reference_width,
+            expectation,
+        ));
+        context.thread.search_evidence.observeNodePlan(.{
+            .requested = depth_intent,
+            .active = result.depth,
+            .admitted_check_extension = admitted_check,
+            .admitted_iir_reduction = admitted_iir,
+            .ply_capacity = @intCast(chess.types.max_ply - 1 - @min(ply, chess.types.max_ply - 1)),
+            .scope = node_scope,
+        });
+        const attribution = types.OutcomeAttribution.init(
+            route,
+            result.depth,
+            expectation,
+            evidence(result.value.raw, result.value.bound, result.value.provenance),
+        );
+        const verification_status = routeVerification(route, result.verification);
+        context.thread.search_evidence.observeOutcome(.{
+            .attribution = attribution,
+            .scope = result.scope_override orelse node_scope,
+            .requested_horizon = depth_intent.searched(),
+            .searched_horizon = result.searched_horizon orelse result.depth.searched(),
+            .verification = verification_status,
+            .omitted_siblings = result.omitted_siblings,
+            .complete = true,
+            .original_producer = result.original_producer orelse result.value.provenance,
+            .reduced_siblings = result.reduced_siblings,
+        });
+    }
     if (comptime features.search_context)
         context.observer.nodeOutcome(types.OutcomeAttribution.init(
             route,
@@ -622,7 +932,17 @@ fn negamax(
             expectation,
             evidence(result.value.raw, result.value.bound, result.value.provenance),
         ));
-    return result.value;
+    var returned = result.value;
+    if (comptime types.search_evidence_observation_compiled) {
+        returned.observation = .{
+            .producer = result.original_producer orelse result.value.provenance,
+            .searched_horizon = result.searched_horizon orelse result.depth.searched(),
+            .scope = result.scope_override orelse node_scope,
+            .verification = routeVerification(route, result.verification),
+            .omitted_siblings = result.omitted_siblings,
+        };
+    }
+    return returned;
 }
 
 fn negamaxNode(
@@ -634,13 +954,15 @@ fn negamaxNode(
     control: anytype,
     depth_intent: types.DepthIntent,
     ply: usize,
-    alpha_initial: i32,
-    beta: i32,
+    alpha_requested: i32,
+    beta_requested: i32,
     expectation: types.NodeExpectation,
     route: types.EntryRoute,
+    node_scope: types.EvidenceScope,
+    searched_window: *SearchedWindow,
 ) Abort!NodeResolution {
     const pv_node = expectation.isPrincipal();
-    std.debug.assert(pv_node or beta == alpha_initial + 1);
+    std.debug.assert(pv_node or beta_requested == alpha_requested + 1);
     var active_depth = depth_intent;
     var depth = active_depth.searched();
     const excluded_move = if (comptime features.search_context and features.depth_authority and features.singular_extension)
@@ -652,6 +974,7 @@ fn negamaxNode(
     if (comptime features.search_context)
         context.observer.nodeContext(
             .main,
+            ply,
             context.thread.ply_contexts[ply],
             route,
             active_depth,
@@ -660,17 +983,50 @@ fn negamaxNode(
     context.thread.pv_lengths[ply] = 0;
 
     if (ply != 0 and chess.draw.isSearchDraw(value, @intCast(ply)))
-        return resolved(.{ .raw = 0, .bound = .exact, .provenance = .terminal }, active_depth);
+        return resolvedWithAuthority(
+            .{ .raw = 0, .bound = .exact, .provenance = .terminal },
+            active_depth,
+            0,
+            .terminal,
+            .not_required,
+            restrictiveScope(node_scope, .history_local),
+            false,
+        );
     if (ply >= chess.types.max_ply - 1)
         return resolved(
             .{ .raw = binding.evaluate(value).raw(), .bound = .exact, .provenance = .static_eval },
             active_depth,
         );
 
-    const table_evidence = if (exclusion_node)
+    // The rules of chess bound what this ply can still produce, so the node
+    // searches the requested window intersected with that band. Everything
+    // below -- the table probe, the forward proofs, the move loop, the PVS
+    // test and the final bound classification -- reads the clipped window.
+    var alpha_initial = alpha_requested;
+    var beta = beta_requested;
+    if (comptime features.mate_windows) {
+        if (ply != 0) {
+            switch (mateWindow(ply, alpha_initial, beta)) {
+                .proven => |proof| return resolved(proof, active_depth),
+                .searchable => |window| {
+                    alpha_initial = window.alpha;
+                    beta = window.beta;
+                    searched_window.* = window;
+                },
+            }
+        }
+    }
+
+    var table_evidence = if (exclusion_node)
         TableEvidence{}
     else
         probeTable(context, value, depth, ply, alpha_initial, beta);
+    if (comptime features.tt_rule_fifty_guard) {
+        if (value.current.rule50 >= tt_rule_fifty_guard_clock)
+            table_evidence.facts.cutoff_authorized = false;
+    }
+    if (comptime features.search_evidence_observation)
+        context.thread.search_evidence.observeTt(table_evidence.facts);
     if (table_evidence.cutoff) |cutoff| {
         // A transposition value was proven under whatever halfmove clock the
         // storing visit had, and the key records no clock. Close to the
@@ -678,9 +1034,25 @@ fn negamaxNode(
         // verdict is refused and the node is searched for real.
         if (comptime features.tt_rule_fifty_guard) {
             if (value.current.rule50 < tt_rule_fifty_guard_clock)
-                return resolved(cutoff, active_depth);
+                return resolvedWithAuthority(
+                    cutoff,
+                    active_depth,
+                    @intCast(table_evidence.record.?.depth),
+                    table_evidence.record.?.producer,
+                    .not_required,
+                    storedProducerScope(node_scope, table_evidence.record.?.producer),
+                    false,
+                );
         } else {
-            return resolved(cutoff, active_depth);
+            return resolvedWithAuthority(
+                cutoff,
+                active_depth,
+                @intCast(table_evidence.record.?.depth),
+                table_evidence.record.?.producer,
+                .not_required,
+                storedProducerScope(node_scope, table_evidence.record.?.producer),
+                false,
+            );
         }
     }
 
@@ -755,7 +1127,7 @@ fn negamaxNode(
         }
     }
     if (depth == 0)
-        return resolved(try quiescence(
+        return resolvedFromObserved(try quiescence(
             features,
             context,
             value,
@@ -765,6 +1137,8 @@ fn negamaxNode(
             alpha_initial,
             beta,
             expectation,
+            node_scope,
+            0,
         ), active_depth);
 
     const shallow: ShallowEvidence = if (comptime features.shallow_selectivity or features.probcut or
@@ -772,14 +1146,59 @@ fn negamaxNode(
         shallowEvidence(features, false, context, value, binding, ply, value.current.checkers != 0, exclusion_node, table_evidence.record)
     else
         .{};
+    if (comptime features.search_evidence_observation)
+        context.thread.search_evidence.observeStatic(staticFacts(context.thread, ply, shallow, node_scope));
     // Shared zugzwang guard: a position with no non-pawn material for the
     // side to move can reverse under a single tempo, so no shallow-
     // selectivity consumer below may treat a quiet move as safely futile.
-    const shallow_has_non_pawn_material = if (comptime features.shallow_selectivity or features.probcut)
+    const shallow_has_non_pawn_material = if (comptime features.shallow_selectivity or
+        features.probcut or features.selective_core)
         hasNonPawnMaterial(value)
     else
         false;
-    if (comptime features.shallow_selectivity and features.reverse_futility) {
+    if (comptime features.coreNodePruning()) {
+        if (coreNodeProofGate(
+            shallow.known,
+            pv_node,
+            value.current.checkers != 0,
+            exclusion_node,
+            shallow_has_non_pawn_material,
+            beta,
+        )) {
+            if (depth <= 8 and shallow.pruning_eval -
+                coreReverseFutilityMargin(depth, shallow.improving) >= beta)
+            {
+                context.observer.reverseFutility(true);
+                context.observer.prune(.reverse_futility);
+                return resolved(
+                    .{ .raw = beta, .bound = .lower, .provenance = .speculative_cutoff },
+                    active_depth,
+                );
+            }
+            if (depth == 1 and (score.Score{ .raw_value = alpha_initial }).isOrdinary() and
+                shallow.pruning_eval + core_razoring_margin <= alpha_initial)
+            {
+                context.observer.razoring(true);
+                context.observer.prune(.razoring);
+                return resolvedFromObserved(try quiescence(
+                    features,
+                    context,
+                    value,
+                    binding,
+                    control,
+                    ply,
+                    alpha_initial,
+                    beta,
+                    expectation,
+                    node_scope,
+                    0,
+                ), active_depth);
+            }
+        }
+    }
+    if (comptime features.shallow_selectivity and features.reverse_futility and
+        !features.coreNodePruning())
+    {
         if (shallow.known and reverseFutilityEligible(
             features,
             depth,
@@ -800,7 +1219,9 @@ fn negamaxNode(
             }
         }
     }
-    if (comptime features.shallow_selectivity and features.razoring) {
+    if (comptime features.shallow_selectivity and features.razoring and
+        !features.coreNodePruning())
+    {
         if (shallow.known and razoringEligible(
             features,
             depth,
@@ -813,7 +1234,7 @@ fn negamaxNode(
             context.observer.razoring(triggered);
             if (triggered) {
                 context.observer.prune(.razoring);
-                return resolved(try quiescence(
+                return resolvedFromObserved(try quiescence(
                     features,
                     context,
                     value,
@@ -823,6 +1244,8 @@ fn negamaxNode(
                     alpha_initial,
                     beta,
                     expectation,
+                    node_scope,
+                    0,
                 ), active_depth);
             }
         }
@@ -835,18 +1258,33 @@ fn negamaxNode(
             if (shallow.known) shallow.pruning_eval else binding.evaluate(value).raw()
         else
             binding.evaluate(value).raw();
-        const null_reduction: u16 = if (comptime features.main_selectivity_sync and
-            features.dynamic_null_move)
+        const null_reduction: u16 = if (comptime features.coreNodePruning())
+            coreNullReduction(depth, null_eval, beta)
+        else if (comptime features.main_selectivity_sync and features.dynamic_null_move)
             if (depth >= null_move_min_depth)
                 dynamicNullMoveReduction(depth, null_eval, beta)
             else
                 fixed_null_move_reduction
         else
             fixed_null_move_reduction;
-        if (!pv_node and beta == alpha_initial + 1 and depth > null_reduction + 1 and
-            value.current.checkers == 0 and !after_null and beta_score.isOrdinary() and
-            hasNonPawnMaterial(value) and null_eval >= beta)
-        {
+        // ADR-0071 D. The core drops the accepted zero-window and
+        // depth-versus-reduction guards: the probe depth saturates to a
+        // quiescence probe instead, and the window terms move into the shared
+        // node-proof gate. Every legality condition is unchanged.
+        const null_eligible = if (comptime features.coreNodePruning())
+            coreNodeProofGate(
+                shallow.known,
+                pv_node,
+                value.current.checkers != 0,
+                exclusion_node,
+                hasNonPawnMaterial(value),
+                beta,
+            ) and depth >= 3 and !after_null and null_eval >= beta
+        else
+            !pv_node and beta == alpha_initial + 1 and depth > null_reduction + 1 and
+                value.current.checkers == 0 and !after_null and beta_score.isOrdinary() and
+                hasNonPawnMaterial(value) and null_eval >= beta;
+        if (null_eligible) {
             context.observer.nullMoveAttempt();
             if (comptime features.main_selectivity_sync and features.dynamic_null_move)
                 context.observer.nullMoveReduction(null_reduction);
@@ -868,15 +1306,45 @@ fn negamaxNode(
                 -beta + 1,
                 .all,
                 .null_probe,
+                node_scope,
             ) catch |err| {
                 unmakeNull(value, binding);
                 return err;
             };
-            const null_value = negated(child);
+            const raw_null = negated(child);
+            // ADR-0071 D. A mate score out of a null search proves nothing
+            // about a real line, so it is worth beta and no more. The clamp is
+            // one-sided on purpose: capping a mate AGAINST the side to move
+            // would turn "passing here loses immediately" into a fail-high.
+            const null_value = if (raw_null.raw > beta and
+                (score.Score{ .raw_value = raw_null.raw }).isMate())
+                NodeValue{ .raw = beta, .bound = raw_null.bound, .provenance = raw_null.provenance }
+            else
+                raw_null;
             unmakeNull(value, binding);
             if ((null_value.bound == .lower or null_value.bound == .exact) and null_value.raw >= beta) {
                 context.observer.nullMoveFailHigh();
-                const verification = try negamax(
+                if (comptime features.coreNodePruning()) {
+                    if (depth < core_null_verification_depth) {
+                        context.observer.nullMoveCutoff();
+                        context.observer.prune(.null_move);
+                        // ADR-0071 D as amended by the first review: this
+                        // cutoff stores nothing. Its whole evidence is one
+                        // reduced null probe at `depth - 1 - R`, and a stored
+                        // nominal-depth lower bound would be read back as a
+                        // full-depth cutoff at any later visit, including
+                        // principal nodes and nodes where the null move is
+                        // disallowed. ADR-0070's rule stands: only a completed
+                        // real-move verification carries searched authority.
+                        // The verified path from depth 10 keeps its storage.
+                        return resolved(
+                            .{ .raw = beta, .bound = .lower, .provenance = .null_move },
+                            active_depth,
+                        );
+                    }
+                }
+                const saved_static_eval = context.thread.static_evals[ply];
+                const verification = negamax(
                     features,
                     false,
                     context,
@@ -889,7 +1357,12 @@ fn negamaxNode(
                     beta,
                     expectation,
                     .null_verification,
-                );
+                    node_scope,
+                ) catch |err| {
+                    context.thread.static_evals[ply] = saved_static_eval;
+                    return err;
+                };
+                context.thread.static_evals[ply] = saved_static_eval;
                 const verified = (verification.bound == .lower or verification.bound == .exact) and
                     verification.raw >= beta;
                 context.observer.nullMoveVerification(verified);
@@ -898,7 +1371,21 @@ fn negamaxNode(
                     const cutoff = NodeValue{ .raw = beta, .bound = .lower, .provenance = .null_move };
                     if (!exclusion_node)
                         storeTable(context, value.current.key, .none, cutoff, tableStaticEval(features, shallow), depth, ply);
-                    return resolved(cutoff, active_depth);
+                    return resolvedWithAuthority(
+                        cutoff,
+                        active_depth,
+                        if (comptime types.search_evidence_observation_compiled)
+                            verification.observation.searched_horizon
+                        else
+                            types.DepthIntent.reduced(depth, null_reduction).searched(),
+                        .null_move,
+                        .completed,
+                        restrictiveScope(node_scope, .null_verification),
+                        if (comptime types.search_evidence_observation_compiled)
+                            verification.observation.omitted_siblings
+                        else
+                            false,
+                    );
                 }
             }
         }
@@ -920,15 +1407,64 @@ fn negamaxNode(
             shallow,
             shallow_has_non_pawn_material,
             table_evidence,
-        )) |cutoff| return resolved(cutoff, active_depth);
+            node_scope,
+        )) |cutoff| {
+            const original_producer = if (comptime features.main_selectivity_sync and features.probcut_tt)
+                if (probCutTableDecision(table_evidence.record, depth, probCutThreshold(context.params, beta).?) == .cutoff)
+                    table_evidence.record.?.producer
+                else
+                    types.Provenance.probcut
+            else
+                types.Provenance.probcut;
+            return resolvedWithAuthority(
+                cutoff,
+                active_depth,
+                if (comptime types.search_evidence_observation_compiled)
+                    cutoff.observation.searched_horizon
+                else
+                    probCutStoreDepth(depth),
+                if (comptime types.search_evidence_observation_compiled)
+                    cutoff.observation.producer orelse original_producer
+                else
+                    original_producer,
+                if (comptime types.search_evidence_observation_compiled)
+                    cutoff.observation.verification
+                else
+                    .completed,
+                restrictiveScope(node_scope, .probcut),
+                if (comptime types.search_evidence_observation_compiled)
+                    cutoff.observation.omitted_siblings
+                else
+                    false,
+            );
+        }
     }
 
     var moves = chess.position.MoveList.init();
+    var delay_non_tactical_quiets = if (comptime features.live_history_staging)
+        ply != 0 and value.current.checkers == 0 and !exclusion_node and
+            context.heuristics != null
+    else
+        false;
     if (ply == 0) {
         if (context.root_moves) |restricted| {
             for (restricted) |chess_move| moves.append(chess_move);
         } else {
             chess.movegen.generate(.all, value, &moves);
+        }
+    } else if (delay_non_tactical_quiets) {
+        chess.movegen.generate(.tacticals, value, &moves);
+        context.observer.liveHistoryTacticals(moves.count);
+        if (table_evidence.chess_move) |tt_move| {
+            if (!chess.movegen.isTactical(value, tt_move)) moves.append(tt_move);
+        }
+        // With no legal TT/tactical move, the quiet subset is required now to
+        // distinguish an ordinary quiet node from stalemate. No descendant
+        // can update history before that proof, so delaying it adds no value.
+        if (moves.count == 0) {
+            chess.movegen.generateAppend(.non_tactical_quiets, value, &moves);
+            context.observer.liveHistoryQuiets(moves.count);
+            delay_non_tactical_quiets = false;
         }
     } else {
         chess.movegen.generate(.all, value, &moves);
@@ -959,8 +1495,14 @@ fn negamaxNode(
             const record = table_evidence.record.?;
             const threshold = singularThreshold(record.value);
             const saved_context = context.thread.ply_contexts[ply];
+            const saved_static_eval = context.thread.static_evals[ply];
             context.thread.ply_contexts[ply] = saved_context.withExcluded(tt_move);
             context.observer.singularAttempt();
+            // The exclusion search re-enters this ply, so the observer's
+            // per-ply path facts are saved and restored around it exactly like
+            // the ply context itself.
+            context.observer.exclusionEnter(ply);
+            const exclusion_depth = singularExclusionDepth(features, depth);
             const alternatives = negamax(
                 features,
                 false,
@@ -968,18 +1510,23 @@ fn negamaxNode(
                 value,
                 binding,
                 control,
-                types.DepthIntent.reduced(depth, 2),
+                types.DepthIntent.reduced(depth, depth - exclusion_depth),
                 ply,
                 threshold - 1,
                 threshold,
                 .all,
                 .singular_probe,
+                node_scope,
             ) catch |err| {
+                context.observer.exclusionExit(ply);
                 context.thread.ply_contexts[ply] = saved_context;
+                context.thread.static_evals[ply] = saved_static_eval;
                 context.thread.pv_lengths[ply] = 0;
                 return err;
             };
+            context.observer.exclusionExit(ply);
             context.thread.ply_contexts[ply] = saved_context;
+            context.thread.static_evals[ply] = saved_static_eval;
             context.thread.pv_lengths[ply] = 0;
             singular_extension_plies = singularExtensionPlies(
                 features,
@@ -1013,7 +1560,9 @@ fn negamaxNode(
                     if (record.value.raw() >= beta) {
                         const verification_depth = @max(@as(u16, 1), (depth + 1) / 2);
                         context.thread.ply_contexts[ply] = saved_context.withExcluded(tt_move);
+                        const saved_multi_cut_static_eval = context.thread.static_evals[ply];
                         context.observer.singularMultiCutProbe();
+                        context.observer.exclusionEnter(ply);
                         const verification = negamax(
                             features,
                             false,
@@ -1027,12 +1576,17 @@ fn negamaxNode(
                             beta,
                             .cut,
                             .singular_probe,
+                            node_scope,
                         ) catch |err| {
+                            context.observer.exclusionExit(ply);
                             context.thread.ply_contexts[ply] = saved_context;
+                            context.thread.static_evals[ply] = saved_multi_cut_static_eval;
                             context.thread.pv_lengths[ply] = 0;
                             return err;
                         };
+                        context.observer.exclusionExit(ply);
                         context.thread.ply_contexts[ply] = saved_context;
+                        context.thread.static_evals[ply] = saved_multi_cut_static_eval;
                         context.thread.pv_lengths[ply] = 0;
                         const cutoff = exclusionProvesAtLeast(verification, beta);
                         context.observer.singularMultiCut(cutoff);
@@ -1056,28 +1610,61 @@ fn negamaxNode(
     else
         null;
     const continuation_contexts = continuationSet(features, context.thread, ply, value.side_to_move);
-    var picker = ordering.Picker.init(
-        features.capture_history,
-        &moves,
-        value,
-        binding,
-        table_evidence.chess_move,
-        context.heuristics,
-        context.params,
-        ply,
-        reply_context,
-        continuation_contexts,
-        context.heuristics != null,
-        @TypeOf(context.observer.*).observes_move_sources,
-    );
+    var picker = if (comptime features.live_history_staging)
+        ordering.LiveHistoryPicker.init(
+            features.capture_history,
+            &moves,
+            value,
+            binding,
+            table_evidence.chess_move,
+            context.heuristics,
+            context.params,
+            ply,
+            reply_context,
+            continuation_contexts,
+            context.heuristics != null,
+            @TypeOf(context.observer.*).observes_move_sources,
+            delay_non_tactical_quiets,
+        )
+    else
+        ordering.Picker.init(
+            features.capture_history,
+            &moves,
+            value,
+            binding,
+            table_evidence.chess_move,
+            context.heuristics,
+            context.params,
+            ply,
+            reply_context,
+            continuation_contexts,
+            context.heuristics != null,
+            @TypeOf(context.observer.*).observes_move_sources,
+        );
+
+    if (comptime features.search_evidence_observation) {
+        if (context.heuristics) |heuristics|
+            observeRankedHistory(
+                &context.thread.search_evidence,
+                heuristics,
+                value,
+                reply_context,
+                continuation_contexts,
+                moves.slice(),
+            );
+    }
 
     const original_alpha = alpha_initial;
     var alpha = alpha_initial;
     var best = -score.infinity_raw;
     var best_provenance: types.Provenance = .full_search;
+    var best_shadow_authorized = false;
+    var best_authority: NodeAggregateAuthority = .{};
+    var aggregate_authority: NodeAggregateAuthority = .{};
     var best_reduction: u16 = 1;
     var best_move: chess.move.Move = .none;
     var searched_move_count: usize = 0;
+    var actually_searched_count: usize = 0;
     var pruned_late_move = false;
     var searched_quiets: [
         if (features.search_context and features.contextual_history)
@@ -1086,6 +1673,14 @@ fn negamaxNode(
             0
     ]chess.move.Move = undefined;
     var searched_quiet_count: usize = 0;
+    var core_quiets: [
+        if (features.selective_core) chess.types.move_capacity else 0
+    ]chess.move.Move = undefined;
+    var core_quiet_count: usize = 0;
+    var shadow_quiets: [
+        if (features.search_evidence_observation) chess.types.move_capacity else 0
+    ]chess.move.Move = undefined;
+    var shadow_quiet_count: usize = 0;
     var lmr_positive_feedback: [
         if (features.search_context and features.contextual_history and features.lmr_synchronization)
             chess.types.move_capacity
@@ -1097,7 +1692,40 @@ fn negamaxNode(
         if (features.capture_history) chess.types.move_capacity else 0
     ]chess.move.Move = undefined;
     var searched_capture_count: usize = 0;
-    while (picker.next()) |selection| {
+    while (true) {
+        const maybe_selection = picker.next();
+        if (comptime features.live_history_staging) {
+            if (maybe_selection == null) {
+                const quiet_start = moves.count;
+                if (picker.enterQuiets(
+                    features.capture_history,
+                    value,
+                    binding,
+                    table_evidence.chess_move,
+                    context.heuristics,
+                    context.params,
+                    ply,
+                    reply_context,
+                    continuation_contexts,
+                )) |generated| {
+                    context.observer.generated(generated);
+                    context.observer.liveHistoryQuiets(generated);
+                    if (comptime features.search_evidence_observation) {
+                        if (context.heuristics) |heuristics|
+                            observeRankedHistory(
+                                &context.thread.search_evidence,
+                                heuristics,
+                                value,
+                                reply_context,
+                                continuation_contexts,
+                                moves.moves[quiet_start .. quiet_start + generated],
+                            );
+                    }
+                    continue;
+                }
+            }
+        }
+        const selection = maybe_selection orelse break;
         const chess_move = selection.chess_move;
         const move_index = selection.index;
         if (exclusion_node and chess_move.raw() == excluded_move.raw()) {
@@ -1113,6 +1741,19 @@ fn negamaxNode(
         const is_capture = chess.movegen.isCapture(value, chess_move);
         const is_promotion = chess_move.kind() == .promotion;
         const quiet = !is_capture and !is_promotion;
+        const move_identity = moveIdentity(value, chess_move);
+        if (comptime features.search_evidence_observation) {
+            if (quiet) if (context.heuristics) |heuristics|
+                context.thread.search_evidence.observeHistory(historyFacts(
+                    .depth,
+                    &context.thread.search_evidence,
+                    heuristics,
+                    value,
+                    reply_context,
+                    continuation_contexts,
+                    chess_move,
+                ));
+        }
         if (comptime features.capture_history and @TypeOf(context.observer.*).observes_capture_history) {
             if (is_capture) if (context.heuristics) |heuristics|
                 context.observer.captureHistorySelection(
@@ -1141,6 +1782,22 @@ fn negamaxNode(
                 };
         }
         const move_source = selection.source;
+        // ADR-0071 B's `stat`. Delayed quiets carry the value they were ranked
+        // with; a TT or killer quiet was never ranked by history, so its value
+        // is read on demand from the same composite the picker would use.
+        const core_stat: i32 = if (comptime features.selective_core) stat: {
+            if (!quiet) break :stat 0;
+            const heuristics = context.heuristics orelse break :stat 0;
+            if (move_source == .quiet_history) break :stat selection.history;
+            break :stat ordering.quietHistoryValue(
+                heuristics,
+                value,
+                chess_move,
+                context.params,
+                reply_context,
+                continuation_contexts,
+            );
+        } else 0;
         const history_confident = if (comptime features.history_lmr)
             if (quiet)
                 if (context.heuristics) |heuristics|
@@ -1193,10 +1850,83 @@ fn negamaxNode(
         )) context.observer.lmrHistoryProtection();
 
         var shallow_cause: ?diagnostics.PruneCause = null;
+        var core_skip_quiets = false;
         var main_see_candidate = false;
         var capture_futility_candidate = false;
         var capture_futility_failed = false;
-        if (comptime features.shallow_selectivity) {
+        if (comptime features.coreMovePruning()) {
+            // ADR-0071 C. Every rule reads one prospective depth: the depth
+            // this move would really be searched at once the reduction surface
+            // has had its say. Judging a move by the parent's nominal depth,
+            // as the accepted head does, prices work the search was never
+            // going to do.
+            const new_depth: u16 = depth - 1;
+            const premake_singular = singular_move.isChessMove() and
+                chess_move.raw() == singular_move.raw();
+            // The estimate differs from the applied reduction in exactly one
+            // input: a checking move is exempt from omission after `make`, so
+            // asking the surface about it before `make` is pointless.
+            const estimate: u16 = if (coreReductionEligible(
+                depth,
+                search_index,
+                in_check,
+                false,
+                premake_singular,
+                quiet,
+                is_capture and !is_promotion and move_source == .bad_tactical,
+            )) coreReduction(.{
+                .depth = depth,
+                .search_index = search_index,
+                .pv_node = pv_node,
+                .cut_node = expectation == .cut,
+                .improving = shallow.known and shallow.improving,
+                .has_tt_move = table_evidence.chess_move != null,
+                .stat = core_stat,
+                .root = ply == 0,
+            }, new_depth) else 0;
+            const prospective_depth = new_depth -| estimate;
+            std.debug.assert(prospective_depth <= new_depth);
+            // One gate for every rule. A node that has not yet searched a move
+            // has no honest bound to prune against, and a decisive window is
+            // not a quantity these margins can reason about.
+            const omission_gate = coreOmissionGate(
+                shallow.known,
+                pv_node,
+                in_check,
+                actually_searched_count,
+                shallow_has_non_pawn_material,
+                alpha,
+                beta,
+            );
+            if (omission_gate) {
+                if (quiet) {
+                    if (prospective_depth <= 8 and search_index >=
+                        coreLateMoveCount(context.params, prospective_depth, shallow.improving))
+                    {
+                        context.observer.lateMovePruningCandidate();
+                        shallow_cause = .late_move;
+                        core_skip_quiets = true;
+                    } else if (prospective_depth <= 8 and shallow.pruning_eval +
+                        context.params.quiet_futility_unit * (@as(i32, prospective_depth) + 1) +
+                        shallowConfidenceBonus(shallow.improving) <= alpha)
+                    {
+                        context.observer.quietFutilityCandidate();
+                        shallow_cause = .futility;
+                    } else if (prospective_depth <= 6 and
+                        core_stat < -4000 * @as(i32, prospective_depth))
+                    {
+                        shallow_cause = .history;
+                    }
+                } else if (is_capture and !is_promotion and prospective_depth <= 8) {
+                    const threshold = @max(
+                        @as(i32, -1000),
+                        -context.params.see_pruning_unit * @as(i32, prospective_depth),
+                    );
+                    main_see_candidate = true;
+                    if (!binding.seeAtLeast(value, chess_move, threshold)) shallow_cause = .see;
+                }
+            }
+        } else if (comptime features.shallow_selectivity) {
             if (quiet) {
                 if (lateMovePruneEligible(
                     features,
@@ -1288,6 +2018,28 @@ fn negamaxNode(
                 value.current.checkers != 0,
             );
         const gives_check = value.current.checkers != 0;
+        const singular = singular_move.isChessMove() and chess_move.raw() == singular_move.raw();
+        const full_child_depth = if (singular)
+            types.DepthIntent.extended(depth - 1, singular_extension_plies)
+        else
+            types.DepthIntent.full(depth - 1);
+        const child_check_extension: u16 = @intFromBool(
+            features.search_context and features.depth_authority and features.check_extension and
+                features.nonroot_check_extension and
+                checkExtensionEligible(gives_check, full_child_depth, ply + 1),
+        );
+        const move_facts = types.MoveFacts{
+            .chess_move = chess_move,
+            .resulting_piece = move_identity.resulting_piece,
+            .victim = move_identity.victim,
+            .tactical = move_identity.tactical,
+            .tt_move = table_evidence.chess_move != null and
+                table_evidence.chess_move.?.raw() == chess_move.raw(),
+            .evasion = in_check,
+            .gives_check = gives_check,
+            .selected_ordinal = @intCast(search_index),
+            .searched_before = @intCast(actually_searched_count),
+        };
         if (main_see_candidate)
             context.observer.mainSeePruning(shallow_cause == .see and !gives_check);
         if (capture_futility_candidate)
@@ -1297,6 +2049,21 @@ fn negamaxNode(
             );
         if (shallow_cause) |cause| {
             if (!gives_check) {
+                if (comptime features.coreMovePruning()) {
+                    if (core_skip_quiets) picker.skipRemainingQuiets(value);
+                }
+                if (comptime features.search_evidence_observation)
+                    context.thread.search_evidence.observeMovePlan(move_facts, .{
+                        .full = full_child_depth,
+                        .probe = full_child_depth,
+                        .prune_depth = depth,
+                        .selected_ordinal = @intCast(search_index),
+                        .searched_before = @intCast(actually_searched_count),
+                        .singular_extension = if (singular) singular_extension_plies else 0,
+                        .child_check_extension = child_check_extension,
+                        .proposed_reduction = 0,
+                        .shallow_omitted = true,
+                    });
                 unmake(value, binding, context.thread, ply, chess_move);
                 context.observer.prune(cause);
                 pruned_late_move = true;
@@ -1307,6 +2074,12 @@ fn negamaxNode(
             if (quiet and !exclusion_node and reply_context != null) {
                 searched_quiets[searched_quiet_count] = chess_move;
                 searched_quiet_count += 1;
+            }
+        }
+        if (comptime features.coreHistory()) {
+            if (quiet and !exclusion_node) {
+                core_quiets[core_quiet_count] = chess_move;
+                core_quiet_count += 1;
             }
         }
         if (comptime features.capture_history) {
@@ -1326,23 +2099,45 @@ fn negamaxNode(
         var reduction: u16 = 0;
         var lmr_full_depth_fail_low = false;
         var lmr_researched = false;
-        const singular = singular_move.isChessMove() and chess_move.raw() == singular_move.raw();
         if (singular) context.observer.extension(.singular);
-        const full_child_depth = if (singular)
-            types.DepthIntent.extended(depth - 1, singular_extension_plies)
+        const core_reduction_plies: u16 = if (comptime features.coreLmr()) plies: {
+            if (!coreReductionEligible(
+                depth,
+                search_index,
+                in_check,
+                gives_check,
+                singular,
+                quiet,
+                is_capture and !is_promotion and move_source == .bad_tactical,
+            )) break :plies 0;
+            break :plies coreReduction(.{
+                .depth = depth,
+                .search_index = search_index,
+                .pv_node = pv_node,
+                .cut_node = expectation == .cut,
+                .improving = shallow.known and shallow.improving,
+                .has_tt_move = table_evidence.chess_move != null,
+                .stat = core_stat,
+                .root = ply == 0,
+            }, full_child_depth.searched());
+        } else 0;
+        // A zero reduction is the ordinary scout: it takes the unreduced path
+        // below and therefore never asks for a verification it does not need.
+        const reduce = if (comptime features.coreLmr())
+            core_reduction_plies > 0
         else
-            types.DepthIntent.full(depth - 1);
-        const reduce = !singular and shouldReduceLateMove(
-            features,
-            depth,
-            search_index,
-            quiet,
-            in_check,
-            value.current.checkers != 0,
-            history_confident,
-        );
+            !singular and shouldReduceLateMove(
+                features,
+                depth,
+                search_index,
+                quiet,
+                in_check,
+                value.current.checkers != 0,
+                history_confident,
+            );
+        actually_searched_count += 1;
         if (reduce) {
-            reduction = synchronizedLateMoveReduction(
+            reduction = if (comptime features.coreLmr()) core_reduction_plies else synchronizedLateMoveReduction(
                 features,
                 context.params,
                 depth,
@@ -1357,6 +2152,18 @@ fn negamaxNode(
                 context.observer,
             );
             context.observer.lmrProbe(reduction);
+            if (comptime features.search_evidence_observation)
+                context.thread.search_evidence.observeMovePlan(move_facts, .{
+                    .full = full_child_depth,
+                    .probe = types.DepthIntent.reduced(depth - 1, reduction),
+                    .prune_depth = depth,
+                    .selected_ordinal = @intCast(search_index),
+                    .searched_before = @intCast(actually_searched_count - 1),
+                    .singular_extension = if (singular) singular_extension_plies else 0,
+                    .child_check_extension = child_check_extension,
+                    .proposed_reduction = reduction,
+                    .shallow_omitted = false,
+                });
             child = negamax(
                 features,
                 true,
@@ -1370,6 +2177,7 @@ fn negamaxNode(
                 -alpha,
                 expectation.child(false),
                 .reduced_probe,
+                node_scope,
             ) catch |err| {
                 unmake(value, binding, context.thread, ply, chess_move);
                 return err;
@@ -1391,6 +2199,7 @@ fn negamaxNode(
                     -alpha,
                     expectation.child(false),
                     .reduction_research,
+                    node_scope,
                 ) catch |err| {
                     unmake(value, binding, context.thread, ply, chess_move);
                     return err;
@@ -1402,6 +2211,18 @@ fn negamaxNode(
                 context.observer.lmrAccepted();
             }
         } else if (search_index == 0 or !pv_node) {
+            if (comptime features.search_evidence_observation)
+                context.thread.search_evidence.observeMovePlan(move_facts, .{
+                    .full = full_child_depth,
+                    .probe = full_child_depth,
+                    .prune_depth = depth,
+                    .selected_ordinal = @intCast(search_index),
+                    .searched_before = @intCast(actually_searched_count - 1),
+                    .singular_extension = if (singular) singular_extension_plies else 0,
+                    .child_check_extension = child_check_extension,
+                    .proposed_reduction = 0,
+                    .shallow_omitted = false,
+                });
             child = negamax(
                 features,
                 true,
@@ -1415,12 +2236,25 @@ fn negamaxNode(
                 -alpha,
                 expectation.child(search_index == 0 and pv_node),
                 if (search_index == 0) .first_move else .scout,
+                node_scope,
             ) catch |err| {
                 unmake(value, binding, context.thread, ply, chess_move);
                 return err;
             };
             candidate = negated(child);
         } else {
+            if (comptime features.search_evidence_observation)
+                context.thread.search_evidence.observeMovePlan(move_facts, .{
+                    .full = full_child_depth,
+                    .probe = full_child_depth,
+                    .prune_depth = depth,
+                    .selected_ordinal = @intCast(search_index),
+                    .searched_before = @intCast(actually_searched_count - 1),
+                    .singular_extension = if (singular) singular_extension_plies else 0,
+                    .child_check_extension = child_check_extension,
+                    .proposed_reduction = 0,
+                    .shallow_omitted = false,
+                });
             child = negamax(
                 features,
                 true,
@@ -1434,6 +2268,7 @@ fn negamaxNode(
                 -alpha,
                 expectation.child(false),
                 .scout,
+                node_scope,
             ) catch |err| {
                 unmake(value, binding, context.thread, ply, chess_move);
                 return err;
@@ -1455,6 +2290,7 @@ fn negamaxNode(
                 -alpha,
                 expectation.child(true),
                 .pv_research,
+                node_scope,
             ) catch |err| {
                 unmake(value, binding, context.thread, ply, chess_move);
                 return err;
@@ -1462,6 +2298,8 @@ fn negamaxNode(
             candidate = negated(child);
         }
         unmake(value, binding, context.thread, ply, chess_move);
+        if (comptime types.search_evidence_observation_compiled)
+            absorbCandidateAuthority(&aggregate_authority, node_scope, candidate);
         if (ply == 0) {
             context.root_iteration.append(.{
                 .chess_move = chess_move,
@@ -1487,6 +2325,7 @@ fn negamaxNode(
                     std.debug.assert(searched_quiets[searched_quiet_count - 1].raw() == chess_move.raw());
                     searched_quiet_count -= 1;
                     recordLmrContextFeedback(
+                        features.coreHistory(),
                         heuristics,
                         value,
                         reply,
@@ -1514,13 +2353,21 @@ fn negamaxNode(
                     // avoid double training the same node outcome.
                     std.debug.assert(searched_quiet_count != 0);
                     std.debug.assert(searched_quiets[searched_quiet_count - 1].raw() == chess_move.raw());
-                    heuristics.recordReplyFailure(value, reply, chess_move, depth);
+                    heuristics.recordReplyFailure(value, reply, chess_move, depth, features.coreHistory());
                     searched_quiet_count -= 1;
                     context.observer.contextualHistoryLmrFailure();
                 };
             }
         }
 
+        if (comptime features.search_evidence_observation) {
+            if (quiet and !exclusion_node and
+                shadowCandidateEligible(candidate, full_child_depth.searched()))
+            {
+                shadow_quiets[shadow_quiet_count] = chess_move;
+                shadow_quiet_count += 1;
+            }
+        }
         if (candidate.raw > best) {
             best = candidate.raw;
             best_move = chess_move;
@@ -1531,6 +2378,10 @@ fn negamaxNode(
             else
                 .pvs_probe;
             best_reduction = if (reduced_only) reduction else 1;
+            best_shadow_authorized = shadowCandidateEligible(candidate, full_child_depth.searched());
+            if (comptime types.search_evidence_observation_compiled) {
+                best_authority = authorityFromCandidate(node_scope, candidate);
+            }
             if (!reduced_only and !exclusion_node) extendPv(context.thread, ply, chess_move);
         }
         if (candidate.raw > alpha) alpha = candidate.raw;
@@ -1542,32 +2393,57 @@ fn negamaxNode(
                     if (comptime features.search_context and features.contextual_history) {
                         if (reply_context) |reply|
                             recordContextualQuietOutcome(
+                                features.search_evidence_observation,
+                                features.coreHistory(),
+                                &context.thread.search_evidence,
                                 heuristics,
                                 value,
                                 reply,
                                 continuation_contexts,
                                 chess_move,
                                 searched_quiets[0..searched_quiet_count],
+                                shadow_quiets[0..shadow_quiet_count],
+                                shadowOutcomeEligible(
+                                    route,
+                                    if (comptime types.search_evidence_observation_compiled)
+                                        best_authority.scope
+                                    else
+                                        node_scope,
+                                    ply,
+                                    best,
+                                    .lower,
+                                    best_shadow_authorized,
+                                ),
                                 lmr_positive_feedback[0..lmr_positive_feedback_count],
                                 depth,
                                 .cutoff,
                                 context.observer,
                             );
                     }
-                    if (comptime features.balanced_history)
-                        heuristics.recordQuietCutoff(value.side_to_move, chess_move, depth, ply)
-                    else
-                        heuristics.recordLegacyQuietCutoff(value.side_to_move, chess_move, depth, ply);
-                    context.observer.historyReward(depth);
-                    if (comptime features.balanced_history) {
+                    if (comptime features.coreHistory()) {
+                        recordCoreQuietOutcome(
+                            heuristics,
+                            value,
+                            chess_move,
+                            core_quiets[0..core_quiet_count],
+                            depth,
+                            ply,
+                            context.observer,
+                        );
+                    } else if (comptime features.balanced_history) {
+                        heuristics.recordQuietCutoff(value.side_to_move, chess_move, depth, ply, false);
+                        context.observer.historyReward(depth);
                         for (moves.slice()[0..move_index]) |prior_move| {
                             if (!chess.movegen.isCapture(value, prior_move) and
                                 prior_move.kind() != .promotion)
                             {
-                                heuristics.recordQuietFailure(value.side_to_move, prior_move, depth);
+                                heuristics.recordQuietFailure(value.side_to_move, prior_move, depth, false);
                                 context.observer.historyPenalty(depth);
                             }
                         }
+                    } else {
+                        heuristics.recordLegacyQuietCutoff(value.side_to_move, chess_move, depth, ply);
+                        context.observer.historyReward(depth);
                     }
                 }
             }
@@ -1595,33 +2471,89 @@ fn negamaxNode(
             if (!exclusion_node) if (table_evidence.chess_move) |tt_move|
                 context.observer.ttBest(tt_move.raw() == best_move.raw());
             recordCorrectionEvidence(features, context, value, shallow, cutoff, depth, exclusion_node, false);
-            return resolved(cutoff, active_depth);
+            var resolution = resolvedWithOmission(cutoff, active_depth, pruned_late_move);
+            if (comptime types.search_evidence_observation_compiled)
+                applyAggregateAuthority(
+                    &resolution,
+                    resultAuthority(.lower, best_authority, aggregate_authority),
+                    pruned_late_move,
+                );
+            return resolution;
+        }
+    }
+    if (comptime features.coreMovePruning()) {
+        // Quiets dropped inside the picker were omitted by the same rule as
+        // the move that triggered it, so each is counted as both a candidate
+        // of that rule and an omission by it. Counting only the omission would
+        // leave the aggregate above its own candidate denominator.
+        for (0..picker.skippedQuiets()) |_| {
+            context.observer.lateMovePruningCandidate();
+            context.observer.prune(.late_move);
         }
     }
     if (exclusion_node and searched_move_count == 0) {
-        return resolved(.{
-            .raw = alpha_initial,
-            .bound = .upper,
-            .provenance = .exclusion_search,
-        }, active_depth);
+        return resolvedWithAuthority(
+            .{
+                .raw = alpha_initial,
+                .bound = .upper,
+                .provenance = .exclusion_search,
+            },
+            active_depth,
+            0,
+            .exclusion_search,
+            .not_required,
+            restrictiveScope(node_scope, .exclusion),
+            false,
+        );
     }
     const result = NodeValue{
         .raw = best,
         .bound = if (best <= original_alpha) .upper else .exact,
         .provenance = if (exclusion_node) .exclusion_search else best_provenance,
     };
+    if (comptime features.coreHistory()) {
+        if (!exclusion_node and result.bound == .exact and best_move.isChessMove() and
+            !chess.movegen.isCapture(value, best_move) and best_move.kind() != .promotion)
+        {
+            if (context.heuristics) |heuristics|
+                recordCoreQuietOutcome(
+                    heuristics,
+                    value,
+                    best_move,
+                    core_quiets[0..core_quiet_count],
+                    depth,
+                    ply,
+                    context.observer,
+                );
+        }
+    }
     if (comptime features.search_context and features.contextual_history) {
         if (!exclusion_node and result.bound == .exact and best_move.isChessMove() and
             !chess.movegen.isCapture(value, best_move) and best_move.kind() != .promotion)
         {
             if (reply_context) |reply| if (context.heuristics) |heuristics|
                 recordContextualQuietOutcome(
+                    features.search_evidence_observation,
+                    features.coreHistory(),
+                    &context.thread.search_evidence,
                     heuristics,
                     value,
                     reply,
                     continuation_contexts,
                     best_move,
                     searched_quiets[0..searched_quiet_count],
+                    shadow_quiets[0..shadow_quiet_count],
+                    shadowOutcomeEligible(
+                        route,
+                        if (comptime types.search_evidence_observation_compiled)
+                            aggregate_authority.scope
+                        else
+                            node_scope,
+                        ply,
+                        result.raw,
+                        result.bound,
+                        best_shadow_authorized,
+                    ),
                     lmr_positive_feedback[0..lmr_positive_feedback_count],
                     depth,
                     .exact,
@@ -1650,7 +2582,14 @@ fn negamaxNode(
         // speculative in the same sense as a reduced fail-low: some legal
         // sibling was never searched, so it cannot claim full nominal-depth
         // TT authority even though the winning move's own evidence is exact.
-        const stored_result = speculativeStoreValue(result, pruned_late_move);
+        // ADR-0071 C. Alpha-beta exactness is defined inside the engine's own
+        // selective policy, so an omission no longer downgrades the entry;
+        // relabelling these made the table refuse most non-PV upper bounds.
+        // The certificate still records the omission for diagnostics.
+        const stored_result = if (comptime features.coreMovePruning())
+            result
+        else
+            speculativeStoreValue(result, pruned_late_move);
         storeTableWithReduction(
             context,
             value.current.key,
@@ -1665,7 +2604,14 @@ fn negamaxNode(
     if (!exclusion_node) if (table_evidence.chess_move) |tt_move|
         context.observer.ttBest(tt_move.raw() == best_move.raw());
     recordCorrectionEvidence(features, context, value, shallow, result, depth, exclusion_node, pruned_late_move);
-    return resolved(result, active_depth);
+    var resolution = resolvedWithOmission(result, active_depth, pruned_late_move);
+    if (comptime types.search_evidence_observation_compiled)
+        applyAggregateAuthority(
+            &resolution,
+            resultAuthority(result.bound, best_authority, aggregate_authority),
+            pruned_late_move,
+        );
+    return resolution;
 }
 
 fn continuationSet(
@@ -1710,13 +2656,54 @@ fn continuationAt(
     );
 }
 
+fn ordinarySearchedProducer(producer: types.Provenance) bool {
+    return switch (producer) {
+        .full_search, .pvs_probe => true,
+        else => false,
+    };
+}
+
+fn shadowOutcomeEligible(
+    route: types.EntryRoute,
+    scope: types.EvidenceScope,
+    ply: usize,
+    raw: i32,
+    bound: types.Bound,
+    winner_authorized: bool,
+) bool {
+    if (!ordinaryMainRoute(route) or scope != .ordinary or ply == 0 or !winner_authorized) return false;
+    if (bound != .exact and bound != .lower) return false;
+    const searched_score = score.Score{ .raw_value = raw };
+    return searched_score.isOrdinary() and raw != 0;
+}
+
+fn ordinaryMainRoute(route: types.EntryRoute) bool {
+    return switch (route) {
+        .first_move, .scout, .pv_research, .reduction_research => true,
+        else => false,
+    };
+}
+
+fn shadowCandidateEligible(candidate: NodeValue, required_horizon: u16) bool {
+    if (comptime !types.search_evidence_observation_compiled) return false;
+    return ordinarySearchedProducer(candidate.provenance) and
+        candidate.observation.scope == .ordinary and
+        candidate.observation.verification != .reduced_only and
+        candidate.observation.searched_horizon >= required_horizon;
+}
+
 fn recordContextualQuietOutcome(
+    comptime observe_search_evidence: bool,
+    comptime core_history: bool,
+    search_evidence: *types.SearchEvidenceObservation,
     heuristics: *ordering.State,
     value: *const chess.position.Position,
     reply: ordering.ReplyContext,
     continuations: ordering.ContinuationSet,
     winner: chess.move.Move,
     searched_quiets: []const chess.move.Move,
+    shadow_quiets: []const chess.move.Move,
+    shadow_admitted: bool,
     pretrained_winners: []const chess.move.Move,
     depth: u16,
     disposition: types.NodeDisposition,
@@ -1725,6 +2712,19 @@ fn recordContextualQuietOutcome(
     std.debug.assert(disposition == .exact or disposition == .cutoff);
     std.debug.assert(!chess.movegen.isCapture(value, winner) and winner.kind() != .promotion);
     const winner_pretrained = containsMove(pretrained_winners, winner);
+    if (comptime observe_search_evidence) {
+        search_evidence.observeShadowAdmission(depth, shadow_admitted);
+        if (shadow_admitted)
+            recordShadowQuietOutcome(
+                search_evidence,
+                value,
+                reply,
+                continuations,
+                winner,
+                shadow_quiets,
+                depth,
+            );
+    }
     var winner_seen = winner_pretrained;
     var penalty_count: usize = 0;
     for (searched_quiets) |candidate| {
@@ -1736,11 +2736,11 @@ fn recordContextualQuietOutcome(
         // Do not reward and penalize the same key when two equal piece types
         // can reach the same destination in one position.
         if (sameReplyMoveKey(value, winner, candidate)) continue;
-        heuristics.recordReplyFailure(value, reply, candidate, depth);
+        heuristics.recordReplyFailure(value, reply, candidate, depth, core_history);
         penalty_count += 1;
     }
     std.debug.assert(winner_seen);
-    if (!winner_pretrained) heuristics.recordReplySuccess(value, reply, winner, depth);
+    if (!winner_pretrained) heuristics.recordReplySuccess(value, reply, winner, depth, core_history);
     observer.contextualHistoryUpdate(disposition, penalty_count, !winner_pretrained);
     for (continuations.items, 0..) |maybe_continuation, slot| {
         const continuation = maybe_continuation orelse continue;
@@ -1748,11 +2748,11 @@ fn recordContextualQuietOutcome(
         for (searched_quiets) |candidate| {
             if (candidate.raw() == winner.raw() or sameReplyMoveKey(value, winner, candidate))
                 continue;
-            heuristics.recordContinuationFailure(value, continuation, candidate, depth);
+            heuristics.recordContinuationFailure(value, continuation, candidate, depth, core_history);
             continuation_penalties += 1;
         }
         if (!winner_pretrained)
-            heuristics.recordContinuationSuccess(value, continuation, winner, depth);
+            heuristics.recordContinuationSuccess(value, continuation, winner, depth, core_history);
         observer.continuationHistoryUpdate(
             @enumFromInt(slot),
             disposition,
@@ -1762,7 +2762,157 @@ fn recordContextualQuietOutcome(
     }
 }
 
+fn historyFacts(
+    point: types.HistoryObservationPoint,
+    observation: *const types.SearchEvidenceObservation,
+    heuristics: *const ordering.State,
+    value: *const chess.position.Position,
+    reply: ?ordering.ReplyContext,
+    continuations: ordering.ContinuationSet,
+    chess_move: chess.move.Move,
+) types.HistoryFacts {
+    const main_key = ordering.quietEvidenceKey(value.side_to_move, chess_move);
+    var facts = types.HistoryFacts{
+        .point = point,
+        .main = .{
+            .key = main_key,
+            .value = heuristics.quietScore(value.side_to_move, chess_move),
+            .shadow = observation.sample(main_key),
+        },
+    };
+    if (reply) |active_reply| {
+        const key = ordering.replyEvidenceKey(value, active_reply, chess_move);
+        facts.reply = .{
+            .key = key,
+            .value = heuristics.replyScore(value, active_reply, chess_move),
+            .shadow = observation.sample(key),
+        };
+    }
+    for (continuations.items, 0..) |maybe_context, index| {
+        const context = maybe_context orelse continue;
+        const key = ordering.continuationEvidenceKey(value, context, chess_move);
+        facts.continuations[index] = .{
+            .key = key,
+            .value = heuristics.continuationScore(value, context, chess_move),
+            .shadow = observation.sample(key),
+        };
+    }
+    return facts;
+}
+
+fn observeRankedHistory(
+    observation: *types.SearchEvidenceObservation,
+    heuristics: *const ordering.State,
+    value: *const chess.position.Position,
+    reply: ?ordering.ReplyContext,
+    continuations: ordering.ContinuationSet,
+    ranked_moves: []const chess.move.Move,
+) void {
+    for (ranked_moves) |chess_move| {
+        if (chess.movegen.isCapture(value, chess_move) or chess_move.kind() == .promotion) continue;
+        observation.observeHistory(historyFacts(
+            .ranking,
+            observation,
+            heuristics,
+            value,
+            reply,
+            continuations,
+            chess_move,
+        ));
+    }
+}
+
+fn recordShadowQuietOutcome(
+    search_evidence: *types.SearchEvidenceObservation,
+    value: *const chess.position.Position,
+    reply: ordering.ReplyContext,
+    continuations: ordering.ContinuationSet,
+    winner: chess.move.Move,
+    searched_quiets: []const chess.move.Move,
+    depth: u16,
+) void {
+    const bonus = ordering.shadowOutcomeBonus(depth);
+    search_evidence.record(ordering.quietEvidenceKey(value.side_to_move, winner), bonus);
+    search_evidence.record(ordering.replyEvidenceKey(value, reply, winner), bonus);
+    const winner_main_key = ordering.quietEvidenceKey(value.side_to_move, winner);
+    const winner_reply_key = ordering.replyEvidenceKey(value, reply, winner);
+    for (searched_quiets, 0..) |candidate, candidate_index| {
+        const main_key = ordering.quietEvidenceKey(value.side_to_move, candidate);
+        if (main_key != winner_main_key and !quietKeySeenEarlier(
+            value.side_to_move,
+            searched_quiets[0..candidate_index],
+            main_key,
+        )) search_evidence.record(main_key, -bonus);
+
+        const reply_key = ordering.replyEvidenceKey(value, reply, candidate);
+        if (reply_key != winner_reply_key and !replyKeySeenEarlier(
+            value,
+            reply,
+            searched_quiets[0..candidate_index],
+            reply_key,
+        )) search_evidence.record(reply_key, -bonus);
+    }
+
+    for (continuations.items, 0..) |maybe_continuation, slot| {
+        const continuation = maybe_continuation orelse continue;
+        const winner_key = ordering.continuationEvidenceKey(value, continuation, winner);
+        var duplicate = false;
+        for (continuations.items[0..slot]) |earlier| {
+            const prior = earlier orelse continue;
+            if (ordering.continuationEvidenceKey(value, prior, winner) == winner_key) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (duplicate) continue;
+        search_evidence.record(winner_key, bonus);
+        for (searched_quiets, 0..) |candidate, candidate_index| {
+            const candidate_key = ordering.continuationEvidenceKey(value, continuation, candidate);
+            if (candidate_key == winner_key or continuationKeySeenEarlier(
+                value,
+                continuation,
+                searched_quiets[0..candidate_index],
+                candidate_key,
+            )) continue;
+            search_evidence.record(candidate_key, -bonus);
+        }
+    }
+}
+
+fn quietKeySeenEarlier(
+    side: chess.types.Color,
+    moves: []const chess.move.Move,
+    key: u64,
+) bool {
+    for (moves) |prior|
+        if (ordering.quietEvidenceKey(side, prior) == key) return true;
+    return false;
+}
+
+fn replyKeySeenEarlier(
+    value: *const chess.position.Position,
+    reply: ordering.ReplyContext,
+    moves: []const chess.move.Move,
+    key: u64,
+) bool {
+    for (moves) |prior|
+        if (ordering.replyEvidenceKey(value, reply, prior) == key) return true;
+    return false;
+}
+
+fn continuationKeySeenEarlier(
+    value: *const chess.position.Position,
+    continuation: ordering.ContinuationContext,
+    moves: []const chess.move.Move,
+    key: u64,
+) bool {
+    for (moves) |prior|
+        if (ordering.continuationEvidenceKey(value, continuation, prior) == key) return true;
+    return false;
+}
+
 fn recordLmrContextFeedback(
+    comptime core_history: bool,
     heuristics: *ordering.State,
     value: *const chess.position.Position,
     reply: ordering.ReplyContext,
@@ -1773,18 +2923,46 @@ fn recordLmrContextFeedback(
     observer: anytype,
 ) void {
     if (positive)
-        heuristics.recordReplySuccess(value, reply, chess_move, depth)
+        heuristics.recordReplySuccess(value, reply, chess_move, depth, core_history)
     else
-        heuristics.recordReplyFailure(value, reply, chess_move, depth);
+        heuristics.recordReplyFailure(value, reply, chess_move, depth, core_history);
     observer.contextualHistoryLmrFeedback(positive);
     for (continuations.items, 0..) |maybe_continuation, slot| {
         const continuation = maybe_continuation orelse continue;
         if (positive)
-            heuristics.recordContinuationSuccess(value, continuation, chess_move, depth)
+            heuristics.recordContinuationSuccess(value, continuation, chess_move, depth, core_history)
         else
-            heuristics.recordContinuationFailure(value, continuation, chess_move, depth);
+            heuristics.recordContinuationFailure(value, continuation, chess_move, depth, core_history);
         observer.continuationHistoryLmrFeedback(@enumFromInt(slot), positive);
     }
+}
+
+/// ADR-0071 A. Under the core, main history learns the same way the reply and
+/// continuation tables already do: the quiet that produced the node's answer is
+/// rewarded, and every quiet the node actually searched before it is penalised
+/// by the same magnitude through the bounded gravity update.
+///
+/// Only moves that were really recursed are penalised. A move omitted by
+/// shallow selectivity was never shown to be bad -- the node simply declined to
+/// look -- so training on it would teach the table the pruning policy's own
+/// prejudice and then feed that back into the pruning decision.
+fn recordCoreQuietOutcome(
+    heuristics: *ordering.State,
+    value: *const chess.position.Position,
+    winner: chess.move.Move,
+    searched_quiets: []const chess.move.Move,
+    depth: u16,
+    ply: usize,
+    observer: anytype,
+) void {
+    std.debug.assert(!chess.movegen.isCapture(value, winner) and winner.kind() != .promotion);
+    for (searched_quiets) |candidate| {
+        if (candidate.raw() == winner.raw()) continue;
+        heuristics.recordQuietFailure(value.side_to_move, candidate, depth, true);
+        observer.historyPenalty(depth);
+    }
+    heuristics.recordQuietCutoff(value.side_to_move, winner, depth, ply, true);
+    observer.historyReward(depth);
 }
 
 fn containsMove(moves: []const chess.move.Move, needle: chess.move.Move) bool {
@@ -1832,6 +3010,31 @@ fn sameReplyMoveKey(
     return first_piece.pieceType() == second_piece.pieceType() and first.to() == second.to();
 }
 
+const MoveIdentity = struct {
+    resulting_piece: chess.types.PieceType,
+    victim: chess.types.PieceType,
+    tactical: bool,
+};
+
+/// Derives stable move-class facts before make. En passant identifies the pawn
+/// removed off-destination; promotions identify the resulting promoted piece.
+fn moveIdentity(value: *const chess.position.Position, chess_move: chess.move.Move) MoveIdentity {
+    const moving = value.physical.pieceOn(chess_move.from());
+    std.debug.assert(moving != .none and moving.color() == value.side_to_move);
+    const is_capture = chess.movegen.isCapture(value, chess_move);
+    const is_promotion = chess_move.kind() == .promotion;
+    return .{
+        .resulting_piece = if (is_promotion) chess_move.promotionPiece() else moving.pieceType(),
+        .victim = if (!is_capture)
+            .none
+        else if (chess_move.kind() == .en_passant)
+            .pawn
+        else
+            value.physical.pieceOn(chess_move.to()).pieceType(),
+        .tactical = is_capture or is_promotion,
+    };
+}
+
 fn quiescence(
     comptime features: types.Features,
     context: anytype,
@@ -1842,8 +3045,16 @@ fn quiescence(
     alpha_initial: i32,
     beta: i32,
     expectation: types.NodeExpectation,
+    inherited_scope: types.EvidenceScope,
+    /// Plies below the main search, not below the root. ADR-0071 F generates
+    /// quiet checks only at zero, which bounds the extension to one ply.
+    q_ply: usize,
 ) Abort!NodeValue {
-    const result = try quiescenceNode(
+    const q_scope: types.EvidenceScope = if (inherited_scope == .ordinary)
+        .quiescence
+    else
+        inherited_scope;
+    const result = quiescenceNode(
         features,
         context,
         value,
@@ -1853,7 +3064,49 @@ fn quiescence(
         alpha_initial,
         beta,
         expectation,
-    );
+        q_scope,
+        q_ply,
+    ) catch |err| {
+        if (comptime features.search_evidence_observation)
+            observeIncompleteOutcome(
+                context,
+                q_scope,
+                types.DepthIntent.full(0),
+            );
+        return err;
+    };
+    if (comptime features.search_evidence_observation) {
+        const attribution = types.OutcomeAttribution.init(
+            .quiescence,
+            types.DepthIntent.full(0),
+            expectation,
+            evidence(result.raw, result.bound, result.provenance),
+        );
+        context.thread.search_evidence.observeWindow(types.WindowFacts.init(
+            alpha_initial,
+            beta,
+            context.root_reference_width,
+            expectation,
+        ));
+        context.thread.search_evidence.observeNodePlan(.{
+            .requested = types.DepthIntent.full(0),
+            .active = types.DepthIntent.full(0),
+            .admitted_check_extension = 0,
+            .admitted_iir_reduction = 0,
+            .ply_capacity = @intCast(chess.types.max_ply - 1 - @min(ply, chess.types.max_ply - 1)),
+            .scope = q_scope,
+        });
+        context.thread.search_evidence.observeOutcome(.{
+            .attribution = attribution,
+            .scope = result.observation.scope,
+            .requested_horizon = 0,
+            .searched_horizon = 0,
+            .verification = .not_required,
+            .omitted_siblings = result.observation.omitted_siblings,
+            .complete = true,
+            .original_producer = result.observation.producer orelse result.provenance,
+        });
+    }
     if (comptime features.search_context)
         context.observer.nodeOutcome(types.OutcomeAttribution.init(
             .quiescence,
@@ -1874,6 +3127,8 @@ fn quiescenceNode(
     alpha_initial: i32,
     beta: i32,
     expectation: types.NodeExpectation,
+    q_scope: types.EvidenceScope,
+    q_ply: usize,
 ) Abort!NodeValue {
     const pv_node = expectation.isPrincipal();
     std.debug.assert(pv_node or beta == alpha_initial + 1);
@@ -1881,6 +3136,7 @@ fn quiescenceNode(
     if (comptime features.search_context)
         context.observer.nodeContext(
             .quiescence,
+            ply,
             context.thread.ply_contexts[ply],
             .quiescence,
             types.DepthIntent.full(0),
@@ -1888,21 +3144,44 @@ fn quiescenceNode(
         );
     context.thread.pv_lengths[ply] = 0;
     if (chess.draw.isSearchDraw(value, @intCast(ply)))
-        return .{ .raw = 0, .bound = .exact, .provenance = .terminal };
+        return qsearchValue(
+            .{ .raw = 0, .bound = .exact, .provenance = .terminal },
+            restrictiveScope(q_scope, .history_local),
+            false,
+            .terminal,
+        );
     if (ply >= chess.types.max_ply - 1)
-        return .{ .raw = binding.evaluate(value).raw(), .bound = .exact, .provenance = .static_eval };
+        return qsearchValue(
+            .{ .raw = binding.evaluate(value).raw(), .bound = .exact, .provenance = .static_eval },
+            q_scope,
+            false,
+            .static_eval,
+        );
 
     const table_evidence = probeTable(context, value, 0, ply, alpha_initial, beta);
-    if (table_evidence.cutoff) |cutoff| return cutoff;
+    if (comptime features.search_evidence_observation)
+        context.thread.search_evidence.observeTt(table_evidence.facts);
+    if (table_evidence.cutoff) |cutoff|
+        return qsearchValue(
+            cutoff,
+            storedProducerScope(q_scope, table_evidence.record.?.producer),
+            false,
+            table_evidence.record.?.producer,
+        );
 
     const in_check = value.current.checkers != 0;
     var moves = chess.position.MoveList.init();
-    chess.movegen.generate(.all, value, &moves);
-    context.observer.generated(moves.count);
-    if (moves.count == 0) {
+    const generation = generateQsearchMoves(
+        features.qsearch_tactical_generation,
+        value,
+        in_check,
+        &moves,
+    );
+    context.observer.generated(generation.generated_count);
+    if (!generation.has_legal_move) {
         const terminal = terminalNode(value, ply);
         storeTable(context, value.current.key, .none, terminal, null, 0, ply);
-        return terminal;
+        return qsearchValue(terminal, q_scope, false, .terminal);
     }
     var picker = ordering.Picker.init(
         features.capture_history,
@@ -1923,6 +3202,13 @@ fn quiescenceNode(
     var alpha = alpha_initial;
     var best = -score.infinity_raw;
     var best_move: chess.move.Move = .none;
+    var omitted_siblings = false;
+    var best_scope = q_scope;
+    var aggregate_scope = q_scope;
+    var best_original_producer: types.Provenance = .qsearch_move;
+    var aggregate_original_producer: types.Provenance = .qsearch_move;
+    var inherited_omission = false;
+    var best_inherited_omission = false;
     var static_evidence: ShallowEvidence = .{};
     var baseline_provenance: types.Provenance = .qsearch_move;
     if (!in_check) {
@@ -1937,6 +3223,8 @@ fn quiescenceNode(
             false,
             table_evidence.record,
         );
+        if (comptime features.search_evidence_observation)
+            context.thread.search_evidence.observeStatic(staticFacts(context.thread, ply, static_evidence, q_scope));
         // Step 5.4.1 gives correction history evaluation authority only. The
         // corrected value is therefore the qsearch stand-pat score, while
         // delta/SEE pruning below continues to consume `pruning_eval`, which
@@ -1947,9 +3235,42 @@ fn quiescenceNode(
             context.observer.qsearchStandPat(true, false);
             const cutoff = NodeValue{ .raw = best, .bound = .lower, .provenance = baseline_provenance };
             storeTable(context, value.current.key, .none, cutoff, tableStaticEval(features, static_evidence), 0, ply);
-            return cutoff;
+            return qsearchValue(cutoff, q_scope, false, baseline_provenance);
         }
         if (best > alpha) alpha = best;
+    }
+
+    // ADR-0071 F. Only at the first quiescence ply, only outside check and
+    // only once stand-pat has declined to cut: a node that already fails high
+    // needs no extra moves, and generating below this ply would let the
+    // extension recurse instead of adding exactly one forcing layer.
+    var quiet_checks: [
+        if (features.selective_core) chess.types.move_capacity else 0
+    ]chess.move.Move = undefined;
+    var quiet_check_count: usize = 0;
+    if (comptime features.coreQsChecks()) {
+        if (!in_check and q_ply == 0) {
+            const appended_start = moves.count;
+            chess.movegen.generateAppend(.quiet_checks, value, &moves);
+            quiet_check_count = moves.count - appended_start;
+            if (quiet_check_count != 0) {
+                @memcpy(
+                    quiet_checks[0..quiet_check_count],
+                    moves.moves[appended_start..moves.count],
+                );
+                picker.rankAppended(
+                    features.capture_history,
+                    value,
+                    binding,
+                    table_evidence.chess_move,
+                    context.heuristics,
+                    context.params,
+                    ply,
+                    appended_start,
+                );
+                context.observer.generated(quiet_check_count);
+            }
+        }
     }
 
     var searched_index: usize = 0;
@@ -1957,6 +3278,7 @@ fn quiescenceNode(
         const chess_move = selection.chess_move;
         const is_capture = chess.movegen.isCapture(value, chess_move);
         const is_promotion = chess_move.kind() == .promotion;
+        const move_identity = moveIdentity(value, chess_move);
         if (comptime features.capture_history and @TypeOf(context.observer.*).observes_capture_history) {
             if (is_capture) if (context.heuristics) |heuristics|
                 context.observer.captureHistorySelection(
@@ -1964,8 +3286,26 @@ fn quiescenceNode(
                     heuristics.captureScore(value, chess_move) != 0,
                 );
         }
-        if (!in_check and !is_capture and !is_promotion)
-            continue;
+        const quiet_check = if (comptime features.coreQsChecks())
+            !in_check and !is_capture and !is_promotion and
+                containsMove(quiet_checks[0..quiet_check_count], chess_move)
+        else
+            false;
+        if (!in_check and !is_capture and !is_promotion) {
+            // A check is searched only if it does not simply hang the mover.
+            // `seeAtLeast` prices a quiet move's destination since ADR-0071 F's
+            // review decision; before that it answered every quiet move `true`.
+            if (!quiet_check or !binding.seeAtLeast(value, chess_move, 0)) {
+                if (quiet_check) {
+                    // A dropped check is a quiescence SEE omission and is
+                    // accounted as one, so the cross-cutting `see` aggregate
+                    // stays the sum of its two phase counters.
+                    context.observer.qsearchSee(false);
+                    context.observer.prune(.see);
+                }
+                continue;
+            }
+        }
         const move_source = selection.source;
         const see_non_losing = if (comptime features.qsearch_see)
             if (!in_check and is_capture and !is_promotion)
@@ -2010,11 +3350,56 @@ fn quiescenceNode(
             if (negative_see_candidate) context.observer.qsearchSee(gives_check);
             if (delta_candidate) context.observer.qsearchDelta(gives_check);
             if (!gives_check) {
+                if (comptime features.search_evidence_observation)
+                    context.thread.search_evidence.observeMovePlan(.{
+                        .chess_move = chess_move,
+                        .resulting_piece = move_identity.resulting_piece,
+                        .victim = move_identity.victim,
+                        .tactical = move_identity.tactical,
+                        .tt_move = table_evidence.chess_move != null and
+                            table_evidence.chess_move.?.raw() == chess_move.raw(),
+                        .evasion = in_check,
+                        .gives_check = false,
+                        .selected_ordinal = @intCast(selection.index),
+                        .searched_before = @intCast(searched_index),
+                    }, .{
+                        .full = types.DepthIntent.full(0),
+                        .probe = types.DepthIntent.full(0),
+                        .prune_depth = 0,
+                        .selected_ordinal = @intCast(selection.index),
+                        .searched_before = @intCast(searched_index),
+                        .singular_extension = 0,
+                        .proposed_reduction = 0,
+                        .shallow_omitted = true,
+                    });
                 context.observer.prune(if (negative_see_candidate) .see else .qsearch_delta);
                 unmake(value, binding, context.thread, ply, chess_move);
+                omitted_siblings = true;
                 continue;
             }
         }
+        if (comptime features.search_evidence_observation)
+            context.thread.search_evidence.observeMovePlan(.{
+                .chess_move = chess_move,
+                .resulting_piece = move_identity.resulting_piece,
+                .victim = move_identity.victim,
+                .tactical = move_identity.tactical,
+                .tt_move = table_evidence.chess_move != null and
+                    table_evidence.chess_move.?.raw() == chess_move.raw(),
+                .evasion = in_check,
+                .gives_check = value.current.checkers != 0,
+                .selected_ordinal = @intCast(selection.index),
+                .searched_before = @intCast(searched_index),
+            }, .{
+                .full = types.DepthIntent.full(0),
+                .probe = types.DepthIntent.full(0),
+                .prune_depth = 0,
+                .selected_ordinal = @intCast(selection.index),
+                .searched_before = @intCast(searched_index),
+                .singular_extension = 0,
+                .proposed_reduction = 0,
+                .shallow_omitted = false,
+            });
         context.observer.searched(.quiescence);
         context.observer.moveSource(move_source);
         const child = quiescence(
@@ -2027,15 +3412,30 @@ fn quiescenceNode(
             -beta,
             -alpha,
             if (pv_node) .principal else expectation.child(false),
+            q_scope,
+            q_ply + 1,
         ) catch |err| {
             unmake(value, binding, context.thread, ply, chess_move);
             return err;
         };
         const candidate = negated(child);
         unmake(value, binding, context.thread, ply, chess_move);
+        if (comptime types.search_evidence_observation_compiled) {
+            const candidate_scope = restrictiveScope(q_scope, candidate.observation.scope);
+            if (aggregate_scope == q_scope and candidate_scope != q_scope)
+                aggregate_scope = candidate_scope;
+            inherited_omission = inherited_omission or candidate.observation.omitted_siblings;
+            if (candidate_scope != q_scope)
+                aggregate_original_producer = candidate.observation.producer orelse candidate.provenance;
+        }
         if (candidate.raw > best) {
             best = candidate.raw;
             best_move = chess_move;
+            if (comptime types.search_evidence_observation_compiled) {
+                best_scope = restrictiveScope(q_scope, candidate.observation.scope);
+                best_original_producer = candidate.observation.producer orelse candidate.provenance;
+                best_inherited_omission = candidate.observation.omitted_siblings;
+            }
             extendPv(context.thread, ply, chess_move);
         }
         if (candidate.raw > alpha) alpha = candidate.raw;
@@ -2047,7 +3447,12 @@ fn quiescenceNode(
             storeTable(context, value.current.key, best_move, cutoff, tableStaticEval(features, static_evidence), 0, ply);
             if (table_evidence.chess_move) |tt_move|
                 context.observer.ttBest(tt_move.raw() == best_move.raw());
-            return cutoff;
+            return qsearchValue(
+                cutoff,
+                best_scope,
+                qsearchOmission(.lower, omitted_siblings, best_inherited_omission, inherited_omission),
+                best_original_producer,
+            );
         }
         searched_index += 1;
     }
@@ -2060,7 +3465,12 @@ fn quiescenceNode(
             .provenance = .stand_pat,
         };
         storeTable(context, value.current.key, .none, result, tableStaticEval(features, static_evidence), 0, ply);
-        return result;
+        return qsearchValue(
+            result,
+            aggregate_scope,
+            qsearchOmission(result.bound, omitted_siblings, best_inherited_omission, inherited_omission),
+            baseline_provenance,
+        );
     }
     if (!in_check) context.observer.qsearchStandPat(false, false);
     const result = NodeValue{
@@ -2071,13 +3481,144 @@ fn quiescenceNode(
     storeTable(context, value.current.key, best_move, result, tableStaticEval(features, static_evidence), 0, ply);
     if (table_evidence.chess_move) |tt_move|
         context.observer.ttBest(tt_move.raw() == best_move.raw());
+    return qsearchValue(
+        result,
+        if (result.bound == .upper) aggregate_scope else best_scope,
+        qsearchOmission(result.bound, omitted_siblings, best_inherited_omission, inherited_omission),
+        if (result.bound == .upper) aggregate_original_producer else best_original_producer,
+    );
+}
+
+/// A qsearch fail-low rests on every searched child, so it inherits the
+/// aggregate omission. A cutoff or a returned best value is established by its
+/// winner alone and inherits only that child's omission, matching how the main
+/// search certifies a fail-high. This node's own SEE/delta omissions always
+/// count.
+fn qsearchOmission(
+    bound: types.Bound,
+    local: bool,
+    winner_inherited: bool,
+    aggregate_inherited: bool,
+) bool {
+    if (local) return true;
+    return if (bound == .upper) aggregate_inherited else winner_inherited;
+}
+
+fn qsearchValue(
+    value: NodeValue,
+    scope: types.EvidenceScope,
+    omitted_siblings: bool,
+    original_producer: types.Provenance,
+) NodeValue {
+    var result = value;
+    if (comptime types.search_evidence_observation_compiled) {
+        result.observation = .{
+            .producer = original_producer,
+            .searched_horizon = 0,
+            .scope = scope,
+            .verification = .not_required,
+            .omitted_siblings = omitted_siblings,
+        };
+    }
     return result;
+}
+
+const QsearchGeneration = struct {
+    has_legal_move: bool,
+    generated_count: usize,
+};
+
+/// Produces exactly the moves qsearch can consume while retaining a complete
+/// terminal witness. In check, every legal evasion remains searchable. At an
+/// ordinary node, the exact tactical partition is sufficient unless empty;
+/// only then is the disjoint quiet partition generated into the same bounded
+/// storage to prove stalemate or its absence, and immediately discarded.
+fn generateQsearchMoves(
+    comptime tactical_only: bool,
+    value: *const chess.position.Position,
+    in_check: bool,
+    moves: *chess.position.MoveList,
+) QsearchGeneration {
+    std.debug.assert(moves.count == 0);
+    if (!tactical_only or in_check) {
+        chess.movegen.generate(.all, value, moves);
+        return .{
+            .has_legal_move = moves.count != 0,
+            .generated_count = moves.count,
+        };
+    }
+
+    chess.movegen.generate(.tacticals, value, moves);
+    if (moves.count != 0) {
+        return .{ .has_legal_move = true, .generated_count = moves.count };
+    }
+
+    chess.movegen.generate(.non_tactical_quiets, value, moves);
+    const quiet_count = moves.count;
+    moves.count = 0;
+    return .{
+        .has_legal_move = quiet_count != 0,
+        .generated_count = quiet_count,
+    };
+}
+
+test "qsearch tactical generation retains an exact terminal witness" {
+    // The independent full legal list is the oracle. Checked nodes must keep
+    // it verbatim; ordinary nodes either keep the filtered tactical order or,
+    // when that subset is empty, prove quiet mobility without exposing a move
+    // that qsearch would discard.
+    const fixtures = [_][]const u8{
+        "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", // stalemate
+        "4k2N/2Q1p3/2KN3B/8/8/8/8/4R3 b - - 0 1", // stalemate with pinned pseudo-capture
+        "7k/8/8/8/8/8/8/K7 w - - 0 1", // quiet-only mobility
+        "4k3/8/8/8/8/8/3q4/3RK3 w - - 0 1", // legal capture
+        "4k3/P7/8/8/8/8/8/4K3 w - - 0 1", // quiet promotions remain tactical
+        "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", // en passant remains tactical
+        "4r2k/8/8/8/8/8/8/4K3 w - - 0 1", // checked quiet evasions
+    };
+    for (fixtures) |fen_text| {
+        var root: chess.position.PositionState = .{};
+        const value = try chess.fen.parse(fen_text, &root);
+        const in_check = value.current.checkers != 0;
+
+        var all = chess.position.MoveList.init();
+        chess.movegen.generate(.all, &value, &all);
+        var selected = chess.position.MoveList.init();
+        const result = generateQsearchMoves(true, &value, in_check, &selected);
+        try std.testing.expectEqual(all.count != 0, result.has_legal_move);
+
+        if (in_check) {
+            try std.testing.expectEqual(all.count, result.generated_count);
+            try std.testing.expectEqualSlices(chess.move.Move, all.slice(), selected.slice());
+            continue;
+        }
+
+        var tacticals = chess.position.MoveList.init();
+        chess.movegen.generate(.tacticals, &value, &tacticals);
+        if (tacticals.count != 0) {
+            try std.testing.expectEqual(tacticals.count, result.generated_count);
+            try std.testing.expectEqualSlices(chess.move.Move, tacticals.slice(), selected.slice());
+        } else {
+            try std.testing.expectEqual(@as(usize, 0), selected.count);
+            try std.testing.expectEqual(all.count, result.generated_count);
+        }
+    }
+
+    var pinned_root: chess.position.PositionState = .{};
+    const pinned_stalemate = try chess.fen.parse(
+        "4k2N/2Q1p3/2KN3B/8/8/8/8/4R3 b - - 0 1",
+        &pinned_root,
+    );
+    const pseudo_capture = chess.move.Move.normal(.e7, .d6);
+    try std.testing.expect(chess.movegen.isPseudoLegal(&pinned_stalemate, pseudo_capture));
+    try std.testing.expect(!chess.movegen.isLegal(&pinned_stalemate, pseudo_capture));
 }
 
 const TableEvidence = struct {
     chess_move: ?chess.move.Move = null,
     record: ?tt.Record = null,
     cutoff: ?NodeValue = null,
+    facts: types.TtFacts = .{},
 };
 
 fn probeTable(
@@ -2088,16 +3629,28 @@ fn probeTable(
     alpha: i32,
     beta: i32,
 ) TableEvidence {
-    if (ply == 0 and context.root_moves != null) return .{};
-    const table = context.table orelse return .{};
-    const record = table.probe(value.current.key, ply, value.current.rule50) orelse return .{};
+    if (ply == 0 and context.root_moves != null) {
+        context.observer.ttLookup(.unavailable);
+        return .{};
+    }
+    const table = context.table orelse {
+        context.observer.ttLookup(.unavailable);
+        return .{};
+    };
+    const record = table.probe(value.current.key, ply, value.current.rule50) orelse {
+        context.observer.ttLookup(.miss);
+        return .{};
+    };
     var chess_move: ?chess.move.Move = null;
     if (record.chess_move.raw() == chess.move.Move.none.raw()) {
         chess_move = null;
     } else if (record.chess_move.isChessMove() and chess.movegen.isLegal(value, record.chess_move)) {
         chess_move = record.chess_move;
     } else {
-        return .{};
+        context.observer.ttLookup(.illegal_move);
+        var invalid = tableFacts(record, table.generation, null, false);
+        invalid.scope_compatible = false;
+        return .{ .facts = invalid };
     }
     const sufficient_depth = record.depth >= depth;
     const usable_bound = switch (record.bound) {
@@ -2107,7 +3660,17 @@ fn probeTable(
     };
     const usable = sufficient_depth and usable_bound;
     context.observer.ttProbe(record.producer, record.bound, usable);
-    if (!usable) return .{ .chess_move = chess_move, .record = record };
+    context.observer.ttLookup(if (!sufficient_depth)
+        .depth_rejected
+    else if (!usable_bound)
+        .bound_rejected
+    else
+        .usable);
+    if (!usable) return .{
+        .chess_move = chess_move,
+        .record = record,
+        .facts = tableFacts(record, table.generation, chess_move, false),
+    };
     // A TT record owns only its stored move, not a continuation. The next PV
     // row may still describe an earlier sibling because no child search ran
     // for this cutoff. Copying that row can splice two individually legal
@@ -2116,11 +3679,35 @@ fn probeTable(
     return .{
         .chess_move = chess_move,
         .record = record,
+        .facts = tableFacts(record, table.generation, chess_move, true),
         .cutoff = .{
             .raw = record.value.raw(),
             .bound = record.bound,
             .provenance = if (record.bound == .exact) .tt_exact else .tt_bound,
         },
+    };
+}
+
+fn tableFacts(
+    record: tt.Record,
+    current_generation: u8,
+    chess_move: ?chess.move.Move,
+    cutoff_authorized: bool,
+) types.TtFacts {
+    return .{
+        .authenticated = true,
+        .chess_move = chess_move,
+        .value = record.value,
+        .static_eval = record.static_eval,
+        .bound = record.bound,
+        .producer = record.producer,
+        .stored_depth = record.depth,
+        .generation = record.generation,
+        .current_generation = current_generation,
+        .fresh = record.generation == current_generation,
+        .scope_compatible = true,
+        .cutoff_authorized = cutoff_authorized,
+        .pv_origin = null,
     };
 }
 
@@ -2152,8 +3739,8 @@ fn storeTableWithReduction(
     if (!value.isValid() or value.isNone() or value.raw() == score.infinity_raw) return;
     const stored_depth = tableDepth(result.provenance, depth, reduction);
     const cached_eval = if (static_eval) |raw| score.Score.fromOrdinary(raw) else null;
-    table.store(key, chess_move, value, cached_eval, @intCast(stored_depth), result.bound, result.provenance, ply);
-    context.observer.ttStore(result.provenance, result.bound);
+    const outcome = table.store(key, chess_move, value, cached_eval, @intCast(stored_depth), result.bound, result.provenance, ply);
+    context.observer.ttStore(result.provenance, result.bound, outcome);
 }
 
 fn make(
@@ -2218,6 +3805,7 @@ fn tryProbCut(
     shallow: ShallowEvidence,
     has_non_pawn_material: bool,
     table_evidence: TableEvidence,
+    node_scope: types.EvidenceScope,
 ) Abort!?NodeValue {
     const threshold = probCutThreshold(context.params, beta) orelse return null;
     if (!probCutEligible(
@@ -2238,7 +3826,17 @@ fn tryProbCut(
             .cutoff => {
                 context.observer.probCutTableCutoff();
                 context.observer.prune(.probcut);
-                return .{ .raw = beta, .bound = .lower, .provenance = .probcut };
+                var cutoff = NodeValue{ .raw = beta, .bound = .lower, .provenance = .probcut };
+                if (comptime types.search_evidence_observation_compiled) {
+                    cutoff.observation = .{
+                        .producer = table_evidence.record.?.producer,
+                        .searched_horizon = table_evidence.record.?.depth,
+                        .scope = restrictiveScope(node_scope, .probcut),
+                        .verification = .not_required,
+                        .omitted_siblings = false,
+                    };
+                }
+                return cutoff;
             },
             .skip => {
                 context.observer.probCutTableSkip();
@@ -2303,6 +3901,8 @@ fn tryProbCut(
             -threshold,
             -threshold + 1,
             .all,
+            node_scope,
+            0,
         ) catch |err| {
             unmake(value, binding, context.thread, ply, chess_move);
             return err;
@@ -2329,6 +3929,7 @@ fn tryProbCut(
             -threshold + 1,
             .all,
             .probcut_probe,
+            node_scope,
         ) catch |err| {
             unmake(value, binding, context.thread, ply, chess_move);
             return err;
@@ -2341,7 +3942,16 @@ fn tryProbCut(
         if (!verified) continue;
 
         context.observer.prune(.probcut);
-        const cutoff = NodeValue{ .raw = beta, .bound = .lower, .provenance = .probcut };
+        var cutoff = NodeValue{ .raw = beta, .bound = .lower, .provenance = .probcut };
+        if (comptime types.search_evidence_observation_compiled) {
+            cutoff.observation = .{
+                .producer = .probcut,
+                .searched_horizon = parentSearchedHorizon(verified_value.observation.searched_horizon),
+                .scope = restrictiveScope(node_scope, .probcut),
+                .verification = .completed,
+                .omitted_siblings = verified_value.observation.omitted_siblings,
+            };
+        }
         storeTable(context, value.current.key, chess_move, cutoff, tableStaticEval(features, shallow), probCutStoreDepth(depth), ply);
         return cutoff;
     }
@@ -2399,6 +4009,8 @@ fn probCutTableDecision(record: ?tt.Record, depth: u16, threshold: i32) ProbCutT
 fn probCutTableProvenance(producer: types.Provenance) bool {
     return switch (producer) {
         .qsearch_move, .pvs_probe, .full_search, .tt_exact, .tt_bound, .probcut => true,
+        // Mate-distance evidence proves nothing about a tactical threshold.
+        .mate_distance,
         .terminal,
         .static_eval,
         .stand_pat,
@@ -2446,7 +4058,236 @@ fn probCutStoreDepth(depth: u16) u16 {
 }
 
 fn resolved(value: NodeValue, depth: types.DepthIntent) NodeResolution {
-    return .{ .value = value, .depth = depth };
+    return .{
+        .value = value,
+        .depth = depth,
+        .searched_horizon = establishedHorizon(value.provenance, depth),
+        .original_producer = value.provenance,
+    };
+}
+
+fn resolvedWithOmission(value: NodeValue, depth: types.DepthIntent, omitted_siblings: bool) NodeResolution {
+    var result = resolved(value, depth);
+    result.omitted_siblings = omitted_siblings;
+    return result;
+}
+
+fn resolvedFromObserved(value: NodeValue, depth: types.DepthIntent) NodeResolution {
+    var result = resolved(value, depth);
+    if (comptime types.search_evidence_observation_compiled) {
+        result.searched_horizon = value.observation.searched_horizon;
+        result.original_producer = value.observation.producer orelse value.provenance;
+        result.verification = value.observation.verification;
+        result.scope_override = value.observation.scope;
+        result.omitted_siblings = value.observation.omitted_siblings;
+    }
+    return result;
+}
+
+fn establishedHorizon(producer: types.Provenance, depth: types.DepthIntent) u16 {
+    return switch (producer) {
+        .full_search, .pvs_probe, .reduced_search, .exclusion_search => depth.searched(),
+        .mate_distance,
+        .terminal,
+        .static_eval,
+        .stand_pat,
+        .qsearch_move,
+        .tt_exact,
+        .tt_bound,
+        .fallback,
+        .null_move,
+        .probcut,
+        .speculative_cutoff,
+        .tablebase,
+        => 0,
+    };
+}
+
+fn resolvedWithAuthority(
+    value: NodeValue,
+    depth: types.DepthIntent,
+    searched_horizon: u16,
+    original_producer: types.Provenance,
+    verification: types.Verification,
+    scope: types.EvidenceScope,
+    omitted_siblings: bool,
+) NodeResolution {
+    return .{
+        .value = value,
+        .depth = depth,
+        .omitted_siblings = omitted_siblings,
+        .searched_horizon = searched_horizon,
+        .original_producer = original_producer,
+        .verification = verification,
+        .scope_override = scope,
+    };
+}
+
+fn restrictiveScope(parent: types.EvidenceScope, child: types.EvidenceScope) types.EvidenceScope {
+    if (parent == .ordinary) return switch (child) {
+        // An ordinary main invocation establishes its own result above normal
+        // qsearch leaves. Every other restriction remains attached.
+        .ordinary, .quiescence => .ordinary,
+        else => child,
+    };
+    if (parent == .quiescence) return switch (child) {
+        .ordinary, .quiescence => .quiescence,
+        else => child,
+    };
+    return parent;
+}
+
+fn storedProducerScope(scope: types.EvidenceScope, producer: types.Provenance) types.EvidenceScope {
+    return restrictiveScope(scope, switch (producer) {
+        .null_move => .null_verification,
+        .probcut => .probcut,
+        .exclusion_search => .exclusion,
+        // Reverse futility and singular multi-cut both store
+        // `speculative_cutoff`, so a stored record cannot say which produced
+        // it. Reverse futility is a static shortcut and is not exclusion
+        // evidence, so labelling every such record `exclusion` is wrong. The
+        // producer is preserved instead: it establishes no horizon and is not
+        // an ordinary searched producer, so it can never train the paired
+        // relation or claim ordinary authority on its own.
+        else => .ordinary,
+    });
+}
+
+/// The entry route dominates the verification label. A reduced probe stays a
+/// reduced probe even when it returns through an internal null-move or ProbCut
+/// verification: that verification proves the shortcut it guards, not the
+/// reduced invocation that happened to reach it.
+fn routeVerification(
+    route: types.EntryRoute,
+    resolved_verification: types.Verification,
+) types.Verification {
+    if (route == .reduced_probe) return .reduced_only;
+    if (resolved_verification != .not_required) return resolved_verification;
+    return switch (route) {
+        .reduction_research, .pv_research, .null_verification => .completed,
+        else => .not_required,
+    };
+}
+
+/// Chooses which certificate describes a completed node, by the bound it
+/// returns. A fail-high is established by the cutting move alone. A fail-low
+/// rests on every searched sibling, so the weakest one bounds the claim. An
+/// exact value is established by its winner: sibling selectivity is reported
+/// as `reduced_siblings`/`omitted_siblings` rather than by shortening the
+/// winner's horizon. See ADR-0070 for the decision and its admission profile.
+fn resultAuthority(
+    bound: types.Bound,
+    best: NodeAggregateAuthority,
+    aggregate: NodeAggregateAuthority,
+) NodeAggregateAuthority {
+    if (comptime !types.search_evidence_observation_compiled) return .{};
+    var chosen = switch (bound) {
+        .lower => best,
+        .upper => aggregate,
+        .exact => NodeAggregateAuthority{
+            .scope = aggregate.scope,
+            .searched_horizon = best.searched_horizon,
+            .verification = best.verification,
+            .omitted_siblings = aggregate.omitted_siblings,
+            .original_producer = best.original_producer,
+        },
+    };
+    chosen.reduced_siblings = aggregate.reduced_siblings;
+    return chosen;
+}
+
+fn parentSearchedHorizon(child_horizon: u16) u16 {
+    return child_horizon +| 1;
+}
+
+fn authorityFromCandidate(
+    node_scope: types.EvidenceScope,
+    candidate: NodeValue,
+) NodeAggregateAuthority {
+    if (comptime !types.search_evidence_observation_compiled) return .{};
+    return .{
+        .scope = restrictiveScope(node_scope, candidate.observation.scope),
+        .searched_horizon = parentSearchedHorizon(candidate.observation.searched_horizon),
+        .verification = if (candidate.observation.verification == .reduced_only)
+            .reduced_only
+        else
+            .not_required,
+        .omitted_siblings = candidate.observation.omitted_siblings,
+        .original_producer = candidate.observation.producer orelse candidate.provenance,
+    };
+}
+
+fn absorbCandidateAuthority(
+    aggregate: *NodeAggregateAuthority,
+    node_scope: types.EvidenceScope,
+    candidate: NodeValue,
+) void {
+    if (comptime types.search_evidence_observation_compiled) {
+        const next = authorityFromCandidate(node_scope, candidate);
+        aggregate.searched_horizon = @min(aggregate.searched_horizon, next.searched_horizon);
+        aggregate.omitted_siblings = aggregate.omitted_siblings or next.omitted_siblings;
+        if (next.verification == .reduced_only) {
+            aggregate.verification = .reduced_only;
+            aggregate.reduced_siblings = true;
+        }
+        if (aggregate.scope == .ordinary and next.scope != .ordinary)
+            aggregate.scope = next.scope;
+        if (aggregate.original_producer == null or next.scope != .ordinary)
+            aggregate.original_producer = next.original_producer;
+    }
+}
+
+fn applyAggregateAuthority(
+    resolution: *NodeResolution,
+    authority: NodeAggregateAuthority,
+    local_omission: bool,
+) void {
+    if (comptime types.search_evidence_observation_compiled) {
+        resolution.searched_horizon = if (authority.searched_horizon == std.math.maxInt(u16))
+            0
+        else
+            authority.searched_horizon;
+        resolution.original_producer = authority.original_producer orelse resolution.value.provenance;
+        resolution.verification = authority.verification;
+        resolution.scope_override = authority.scope;
+        resolution.omitted_siblings = local_omission or authority.omitted_siblings;
+        resolution.reduced_siblings = authority.reduced_siblings;
+    }
+}
+
+fn evidenceScope(
+    inherited: types.EvidenceScope,
+    route: types.EntryRoute,
+    ply: usize,
+    restricted_root: bool,
+) types.EvidenceScope {
+    if (inherited != .ordinary) return inherited;
+    if (ply == 0 and restricted_root) return .restricted_root;
+    return switch (route) {
+        .singular_probe => .exclusion,
+        .null_probe => .null_probe,
+        .null_verification => .null_verification,
+        .probcut_probe => .probcut,
+        .quiescence => .quiescence,
+        else => .ordinary,
+    };
+}
+
+fn observeIncompleteOutcome(
+    context: anytype,
+    scope: types.EvidenceScope,
+    depth: types.DepthIntent,
+) void {
+    context.thread.search_evidence.observeOutcome(.{
+        .attribution = null,
+        .scope = scope,
+        .requested_horizon = depth.searched(),
+        .searched_horizon = 0,
+        .verification = .not_required,
+        .omitted_siblings = false,
+        .complete = false,
+        .original_producer = null,
+    });
 }
 
 fn checkExtensionEligible(in_check: bool, depth: types.DepthIntent, ply: usize) bool {
@@ -2468,6 +4309,11 @@ fn internalIterativeReductionEligible(
     // A cut node needs two additional plies: its null-window result is useful
     // only when a missing TT move makes ordering uncertainty material.
     if (ply == 0 or in_check or has_tt_move or exclusion_node) return false;
+    // ADR-0071 D retires the PV-only rule: a node without a legal TT move has
+    // no ordering evidence whatever its expectation, and spending a ply to
+    // build some is worth the same everywhere. The root keeps its nominal
+    // depth because the completed-iteration contract is stated in it.
+    if (comptime features.coreNodePruning()) return depth >= 4;
     if (expectation == .principal) return depth >= 5;
     return features.depth_authority_sync and features.iir_cut_expectation and
         expectation == .cut and depth >= 7;
@@ -2497,6 +4343,9 @@ fn singularExtensionEligibility(
 fn singularTableProvenance(producer: types.Provenance) bool {
     return switch (producer) {
         .full_search, .pvs_probe => true,
+        // Mate-distance evidence is a window proof, never a searched move, so
+        // it can never establish that one move is singular.
+        .mate_distance,
         .terminal,
         .static_eval,
         .stand_pat,
@@ -2517,6 +4366,34 @@ fn singularTableProvenance(producer: types.Provenance) bool {
 fn singularThreshold(tt_value: score.Score) i32 {
     std.debug.assert(tt_value.isOrdinary());
     return @max(-score.ordinary_max_raw, tt_value.raw() - score.units_per_pawn);
+}
+
+fn singularExclusionDepth(comptime features: types.Features, depth: u16) u16 {
+    std.debug.assert(depth >= 6);
+    if (!features.singular_exclusion_horizon) return depth - 2;
+    // Half of the launching horizon preserves at least three plies at the
+    // first eligible node and grows monotonically every other ply. The probe
+    // remains deep enough to search alternatives rather than treating their
+    // absence as evidence, while no longer shadowing the ordinary child
+    // horizon as depth grows.
+    return (depth + 1) / 2;
+}
+
+test "singular exclusion horizon is bounded and monotonic" {
+    // SCORE-011/QUAL-014: the candidate changes only how much work establishes
+    // exclusion fail-low. It always retains a real multi-ply search, never
+    // exceeds the accepted depth-minus-two horizon, and cannot become shallower
+    // when the launching search becomes deeper.
+    var previous: u16 = 0;
+    for (6..32) |raw_depth| {
+        const depth: u16 = @intCast(raw_depth);
+        try std.testing.expectEqual(depth - 2, singularExclusionDepth(.{}, depth));
+        const candidate = singularExclusionDepth(.{ .singular_exclusion_horizon = true }, depth);
+        try std.testing.expect(candidate >= 3);
+        try std.testing.expect(candidate <= depth - 2);
+        try std.testing.expect(candidate >= previous);
+        previous = candidate;
+    }
 }
 
 fn singularExtensionPlies(
@@ -2549,14 +4426,27 @@ fn exclusionProvesAtLeast(result: NodeValue, threshold: i32) bool {
 test "depth-authority synchronization consumes only typed expectation and TT provenance" {
     // SCORE-022: missing move evidence may reduce a mature PV or cut node, but
     // check, root, exclusion and any legal TT move preserve the full horizon.
-    try std.testing.expect(internalIterativeReductionEligible(.{}, 5, 1, .principal, false, false, false));
-    try std.testing.expect(internalIterativeReductionEligible(.{ .depth_authority_sync = true }, 7, 1, .cut, false, false, false));
-    try std.testing.expect(!internalIterativeReductionEligible(.{ .depth_authority_sync = false }, 7, 1, .cut, false, false, false));
-    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .all, false, false, false));
-    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 0, .cut, false, false, false));
-    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .cut, true, false, false));
-    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .cut, false, true, false));
-    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .cut, false, false, true));
+    // That is the pre-core rule, live only with ADR-0071's umbrella off, so
+    // these cases name that configuration rather than the production default.
+    try std.testing.expect(internalIterativeReductionEligible(.{ .selective_core = false }, 5, 1, .principal, false, false, false));
+    try std.testing.expect(internalIterativeReductionEligible(.{ .selective_core = false, .depth_authority_sync = true }, 7, 1, .cut, false, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{ .selective_core = false, .depth_authority_sync = false }, 7, 1, .cut, false, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{ .selective_core = false }, 7, 1, .all, false, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{ .selective_core = false }, 7, 0, .cut, false, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{ .selective_core = false }, 7, 1, .cut, true, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{ .selective_core = false }, 7, 1, .cut, false, true, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{ .selective_core = false }, 7, 1, .cut, false, false, true));
+
+    // ADR-0071 D.4, the production rule: every expectation from depth four,
+    // with the same root, check, TT-move and exclusion exemptions.
+    inline for (.{ .principal, .cut, .all }) |expectation| {
+        try std.testing.expect(internalIterativeReductionEligible(.{}, 4, 1, expectation, false, false, false));
+        try std.testing.expect(!internalIterativeReductionEligible(.{}, 3, 1, expectation, false, false, false));
+    }
+    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 0, .all, false, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .all, true, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .all, false, true, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .all, false, false, true));
 
     const chess_move = chess.move.Move.normal(.e2, .e4);
     const ordinary = score.Score.fromOrdinary(300).?;
@@ -2626,6 +4516,105 @@ test "singular separation gives bounded extension and searched multi-cut authori
         .{ .raw = threshold - 1, .bound = .upper, .provenance = .exclusion_search },
         threshold,
     ));
+}
+
+/// ADR-0071 B. One reduction surface for the whole core, in 1024ths of a ply.
+///
+/// The accepted MAN-S13 surface takes the minimum of a linear depth band and a
+/// logarithmic move band, which caps the whole thing at four plies however deep
+/// the search runs. The core replaces it with a product of logarithms: each
+/// doubling of the remaining depth and each doubling of the searched prefix
+/// multiply the confidence that a late quiet will not matter, rather than one
+/// merely licensing what the other already allowed. That product is what makes
+/// the tree narrow with depth instead of widening.
+///
+/// `0.625` is the floor in plies for the earliest reducible move at the
+/// shallowest reducible depth, and `2.4` sets how fast the product grows. Both
+/// are Manta seeds to be fitted in Step 6.5.11, not imported constants.
+const core_reduction_table = build: {
+    @setEvalBranchQuota(200_000);
+    var table: [64][64]i32 = undefined;
+    for (0..64) |d| {
+        for (0..64) |m| {
+            const log_depth: f64 = if (d < 1) 0 else @log(@as(f64, @floatFromInt(d)));
+            const log_move: f64 = if (m < 1) 0 else @log(@as(f64, @floatFromInt(m)));
+            const plies = 0.625 + log_depth * log_move / 2.4;
+            table[d][m] = @intFromFloat(1024.0 * plies);
+        }
+    }
+    break :build table;
+};
+
+/// Everything the surface reads. Named rather than positional because the
+/// pre-make pruning estimate in ADR-0071 C evaluates the same surface with one
+/// input deliberately different, and a positional call would hide that.
+const CoreReductionInputs = struct {
+    depth: u16,
+    search_index: usize,
+    pv_node: bool,
+    cut_node: bool,
+    improving: bool,
+    has_tt_move: bool,
+    /// Composite quiet history for this move, clamped to the table range.
+    stat: i32,
+    root: bool,
+};
+
+/// Reduction in 1024ths before the clamp. Signed: a principal node with strong
+/// history can drive this below zero, which the caller reads as "do not reduce".
+fn coreReductionUnits(inputs: CoreReductionInputs) i32 {
+    var units: i32 = core_reduction_table[@min(inputs.depth, 63)][@min(inputs.search_index, 63)];
+    // A principal node carries the answer and must not lose it to a probe; a
+    // node that is not principal is expected to be refuted, not explored.
+    units += if (inputs.pv_node) -1024 else 1024;
+    // A rising static evaluation means this line is working, so spend on it.
+    if (inputs.improving) units -= 1024;
+    // A cut node expects one move to refute it; the rest are noise.
+    if (inputs.cut_node) units += 768;
+    // A present TT move that already failed to cut makes late alternatives
+    // weaker still, but only once the early alternatives have also failed.
+    if (inputs.has_tt_move and inputs.search_index >= 4) units += 512;
+    // History is the only per-move evidence about a quiet's quality. The clamp
+    // bounds this term to about two plies in either direction.
+    units -= @divTrunc(std.math.clamp(inputs.stat, -history_stat_limit, history_stat_limit) * 1024, 8192);
+    // The root chooses the move that gets played; it may not be guessed at.
+    if (inputs.root) units -= 1024;
+    return units;
+}
+
+const history_stat_limit: i32 = 16 * 1024;
+
+/// Plies, clamped to `[0, new_depth - 1]`, and zero when there is no child
+/// depth to give away.
+///
+/// Amended by ADR-0071's third review: the probe keeps at least one
+/// main-search ply. A zero-depth probe hands the opponent a quiescence, and
+/// component F generates quiet checks only for the side to move at the first
+/// quiescence ply, so the side that just moved loses its own quiet mate
+/// threats there. The trace found exactly that: a mate in one invisible to a
+/// probe that had collapsed to quiescence.
+fn coreReduction(inputs: CoreReductionInputs, new_depth: u16) u16 {
+    if (new_depth == 0) return 0;
+    const units = coreReductionUnits(inputs);
+    if (units < 1024) return 0;
+    const plies = @divFloor(units, 1024);
+    return @intCast(@min(plies, @as(i32, new_depth) - 1));
+}
+
+/// Legality and class exemptions, evaluated identically before and after
+/// `make`; only `gives_check` differs, and ADR-0071 C states that difference.
+fn coreReductionEligible(
+    depth: u16,
+    search_index: usize,
+    in_check: bool,
+    gives_check: bool,
+    singular: bool,
+    quiet_non_promotion: bool,
+    losing_capture: bool,
+) bool {
+    if (depth < 2 or search_index < 2) return false;
+    if (in_check or gives_check or singular) return false;
+    return quiet_non_promotion or losing_capture;
 }
 
 fn shouldReduceLateMove(
@@ -2795,6 +4784,58 @@ fn synchronizedLateMoveReduction(
 /// that resets the clock, or to establish that none exists.
 const tt_rule_fifty_guard_clock: u16 = 90;
 
+/// Step-6.5.10.1 complete mate windows. Mate distance is measured in plies
+/// from the root, so a node at `ply` can do no better than mating on the next
+/// ply and no worse than being mated on this one. Every score the rules of
+/// chess allow it to return lies in `[matedIn(ply), mateIn(ply + 1)]`, so the
+/// node may intersect its caller's window with that band before searching:
+/// the clipped edges exclude only outcomes no legal continuation can produce.
+///
+/// When the intersection is empty the window described nothing reachable and
+/// the node returns a proven bound instead of searching. That happens in
+/// exactly two ways -- alpha already holds a mate at least as fast as this ply
+/// can deliver, or beta already sits at or below being mated on it -- because
+/// the band itself is never empty and the caller's own window never crosses.
+///
+/// A bound proven against the clipped window stays valid for the caller's
+/// wider one: a fail-low at the clipped alpha says the score is at most a
+/// value the true score cannot fall below, and a fail-high at the clipped beta
+/// says it is at least a value the true score cannot rise above. Both facts
+/// survive the transposition table's distance-relative normalization, since an
+/// upper bound of `mateIn(ply + 1)` normalizes to "no mate faster than one ply
+/// from here" and a lower bound of `matedIn(ply)` to "not already mated".
+///
+/// For a zero window the clip is inert: raising alpha above its own value
+/// already reaches beta and lowering beta below its own value already reaches
+/// alpha, so a zero window either crosses and returns or is searched exactly
+/// as requested. The clip therefore changes only open windows -- the first ply
+/// below root, principal re-searches and full-window root retries -- which is
+/// where `MAN-S32`'s crossing-only test proved nothing.
+const MateWindow = union(enum) {
+    /// The clipped window still holds reachable scores; search it.
+    searchable: SearchedWindow,
+    /// No score the rules allow at this ply lies in the window.
+    proven: NodeValue,
+};
+
+fn mateWindow(ply: usize, alpha: i32, beta: i32) MateWindow {
+    const fastest_mate = (score.Score.mateIn(ply + 1) orelse
+        return .{ .searchable = .{ .alpha = alpha, .beta = beta } }).raw();
+    const fastest_loss = (score.Score.matedIn(ply) orelse
+        return .{ .searchable = .{ .alpha = alpha, .beta = beta } }).raw();
+    // Alpha already holds a mate at least as fast as anything reachable here,
+    // so nothing this node can find raises it.
+    if (alpha >= fastest_mate)
+        return .{ .proven = .{ .raw = fastest_mate, .bound = .upper, .provenance = .mate_distance } };
+    // Beta is at or below being mated immediately, which cannot be undercut.
+    if (fastest_loss >= beta)
+        return .{ .proven = .{ .raw = fastest_loss, .bound = .lower, .provenance = .mate_distance } };
+    return .{ .searchable = .{
+        .alpha = @max(alpha, fastest_loss),
+        .beta = @min(beta, fastest_mate),
+    } };
+}
+
 fn tableDepth(provenance: types.Provenance, nominal_depth: u16, reduction: u16) u16 {
     std.debug.assert(reduction != 0);
     return if (provenance == .reduced_search) nominal_depth -| reduction else nominal_depth;
@@ -2809,6 +4850,70 @@ fn speculativeStoreValue(result: NodeValue, pruned_late_move: bool) NodeValue {
     if (!pruned_late_move or result.bound != .upper) return result;
     return .{ .raw = result.raw, .bound = result.bound, .provenance = .reduced_search };
 }
+
+/// ADR-0071 D. One gate for every node-level forward proof. Each of them
+/// replaces a real search with a claim about the static evaluation, so all of
+/// them need a static evaluation, a window they can price in centipawns, a
+/// position where a quiet move cannot reverse the verdict, and a node that is
+/// not carrying the answer. An exclusion search is excluded outright: it exists
+/// to prove something about one move and manufactures no reusable authority.
+fn coreNodeProofGate(
+    static_known: bool,
+    pv_node: bool,
+    in_check: bool,
+    exclusion_node: bool,
+    has_non_pawn_material: bool,
+    beta: i32,
+) bool {
+    return static_known and !pv_node and !in_check and !exclusion_node and
+        has_non_pawn_material and (score.Score{ .raw_value = beta }).isOrdinary();
+}
+
+/// ADR-0071 D, amended by its third review. The accepted margin fires only at
+/// depth one; the core extends the same claim to depth eight and widens it
+/// when the line is not improving, because a falling evaluation makes a static
+/// claim about the future less trustworthy and should cost more to act on.
+///
+/// The first seed reused MAN-S29's fitted depth-one margin of `68` plus `50`
+/// per ply. Manta's evaluator swings by more than five pawns for an attacked
+/// queen, so at depth three that margin let a static claim override a mate in
+/// one; the trace is in PLAN 6.5.10.2. The margin now scales with the
+/// evaluator's own range rather than with a depth-one fit.
+const core_reverse_futility_unit: i32 = 150;
+const core_reverse_futility_falling: i32 = 60;
+
+fn coreReverseFutilityMargin(depth: u16, improving: bool) i32 {
+    const plies: i32 = @intCast(depth);
+    const unit = core_reverse_futility_unit +
+        if (improving) 0 else core_reverse_futility_falling;
+    return unit * plies;
+}
+
+/// ADR-0071 D, amended by its third review. A node this far below alpha is
+/// claimed not to reach it with quiet play, so quiescence's tactical answer is
+/// accepted instead of a full search.
+///
+/// Depth one only. At depth two or three this replaces a main-search ply in
+/// which the razored side's own quiet mate threats would be visible with a
+/// quiescence in which they are not, which is the same defect the probe floor
+/// above fixes.
+const core_razoring_margin: i32 = 300;
+
+/// ADR-0071 D. The reduction grows with depth and with how far the static
+/// evaluation already exceeds beta: both raise the confidence that the side to
+/// move can give up a tempo and still be winning. The `min(3, ...)` keeps a
+/// huge evaluation from collapsing the probe to nothing on its own.
+fn coreNullReduction(depth: u16, pruning_eval: i32, beta: i32) u16 {
+    const margin_term: i32 = @min(3, @divTrunc(pruning_eval - beta, 200));
+    const reduction: i32 = 3 + @as(i32, @intCast(depth / 4)) + @max(@as(i32, 0), margin_term);
+    return @intCast(reduction);
+}
+
+/// Below this depth a null fail-high is trusted on its own; at or above it the
+/// existing same-node real-move verification decides. Verifying every fail-high
+/// costs a second search at almost the same depth, and the accepted head's own
+/// diagnostics recorded it confirming `99.91%` of them.
+const core_null_verification_depth: u16 = 10;
 
 fn reverseFutilityEligible(
     comptime features: types.Features,
@@ -2845,6 +4950,7 @@ const ShallowEvidence = struct {
     /// the transposition table ever stores: a corrected evaluation written back
     /// would be corrected again on every reuse, compounding without bound.
     table_eval: i32 = 0,
+    corrected_eval: i32 = 0,
     pruning_eval: i32 = 0,
     improving: bool = false,
     known: bool = false,
@@ -2916,11 +5022,46 @@ fn shallowEvidence(
     return .{
         .static_eval = static_eval,
         .table_eval = table_eval,
+        .corrected_eval = corrected_eval,
         .pruning_eval = pruning_eval,
         .improving = improving,
         .known = true,
         .cached = cached_value != null,
         .refined = refined,
+    };
+}
+
+fn staticFacts(
+    thread: *const types.ThreadState,
+    ply: usize,
+    shallow: ShallowEvidence,
+    scope: types.EvidenceScope,
+) types.StaticFacts {
+    if (!shallow.known or scope != .ordinary) return .{};
+    const own_previous = if (ply >= 2) thread.static_evals[ply - 2] else types.static_eval_unknown;
+    const opponent_previous = if (ply >= 1) thread.static_evals[ply - 1] else types.static_eval_unknown;
+    const own_chain = ply >= 2 and thread.ply_contexts[ply - 1].arrival == .move and
+        thread.ply_contexts[ply].arrival == .move;
+    const opponent_chain = ply >= 1 and thread.ply_contexts[ply].arrival == .move;
+    return .{
+        .raw_hce = shallow.table_eval,
+        .raw_hce_cached = shallow.cached,
+        .ordinary_tt_refinement = if (shallow.pruning_eval != shallow.table_eval)
+            shallow.pruning_eval
+        else
+            null,
+        .corrected = if (shallow.corrected_eval != shallow.table_eval)
+            shallow.corrected_eval
+        else
+            null,
+        .own_trend = if (own_chain and own_previous != types.static_eval_unknown)
+            .{ .current = shallow.table_eval, .previous = own_previous }
+        else
+            null,
+        .opponent_trend = if (opponent_chain and opponent_previous != types.static_eval_unknown)
+            .{ .current = shallow.table_eval, .previous = -opponent_previous }
+        else
+            null,
     };
 }
 
@@ -2991,7 +5132,9 @@ fn refinedStaticEval(raw: i32, table_record: ?tt.Record) i32 {
 fn searchedEvalProvenance(producer: types.Provenance) bool {
     return switch (producer) {
         .qsearch_move, .pvs_probe, .full_search, .tt_exact, .tt_bound, .reduced_search, .probcut => true,
-        .terminal, .static_eval, .stand_pat, .fallback, .null_move, .speculative_cutoff, .exclusion_search, .tablebase => false,
+        // Mate-distance evidence proves a bound from ply arithmetic and knows
+        // nothing about the position, so it can never refine an evaluation.
+        .terminal, .static_eval, .stand_pat, .fallback, .null_move, .speculative_cutoff, .exclusion_search, .tablebase, .mate_distance => false,
     };
 }
 
@@ -3042,6 +5185,41 @@ fn lateMovePruneEligible(
             alpha,
             beta,
         );
+}
+
+/// ADR-0071 C. One gate for every omission rule.
+///
+/// `actually_searched >= 1` is the load-bearing term: a node that has recursed
+/// nothing has no honest bound to prune against, and omitting its first move
+/// could leave it with no searched move at all. The window terms keep these
+/// centipawn margins away from mate and tablebase scores, which they cannot
+/// reason about, and the zugzwang guard keeps a quiet move from being called
+/// futile in a position where any move loses.
+fn coreOmissionGate(
+    static_known: bool,
+    pv_node: bool,
+    in_check: bool,
+    actually_searched: usize,
+    has_non_pawn_material: bool,
+    alpha: i32,
+    beta: i32,
+) bool {
+    return static_known and !pv_node and !in_check and actually_searched >= 1 and
+        has_non_pawn_material and
+        (score.Score{ .raw_value = alpha }).isOrdinary() and
+        (score.Score{ .raw_value = beta }).isOrdinary();
+}
+
+/// ADR-0071 C. The count grows with the square of the prospective depth, so a
+/// node that will really be searched deeply keeps looking at alternatives while
+/// one that will be reduced to nothing stops early. MAN-S29's fitted `4/3/4`
+/// are reused as the seed; the quadratic shape is the change.
+fn coreLateMoveCount(search_params: params.Values, prospective_depth: u16, improving: bool) usize {
+    const pd: i32 = @intCast(prospective_depth);
+    const quadratic = @divTrunc(search_params.late_move_depth_scale * pd * pd, 4);
+    const improving_bonus: i32 = if (improving) search_params.late_move_improving_bonus else 0;
+    const count = search_params.late_move_base + quadratic + improving_bonus;
+    return @intCast(@max(@as(i32, 2), count));
 }
 
 fn lateMovePruneThreshold(search_params: params.Values, depth: u16, improving: bool) usize {
@@ -3919,6 +6097,81 @@ test "main-search SEE pruning excludes promotions, wide windows, PV and pawn-onl
     try std.testing.expectEqual(-3 * search_params.see_pruning_unit, seePruningThreshold(search_params, 3));
 }
 
+test "search fact adapters preserve special moves, TT origin, and real-move trend chains" {
+    // Step 6.5.9 facts are observations of independent chess/search producers;
+    // they cannot reconstruct EP victims, promotions, freshness, or history
+    // continuity from a convenient but false default.
+    var ep_root: chess.position.PositionState = .{};
+    const ep = try chess.fen.parse("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", &ep_root);
+    const ep_identity = moveIdentity(&ep, chess.move.Move.enPassant(.e5, .d6));
+    try std.testing.expectEqual(chess.types.PieceType.pawn, ep_identity.resulting_piece);
+    try std.testing.expectEqual(chess.types.PieceType.pawn, ep_identity.victim);
+    try std.testing.expect(ep_identity.tactical);
+
+    var promotion_root: chess.position.PositionState = .{};
+    const promotion = try chess.fen.parse("4k3/P7/8/8/8/8/8/4K3 w - - 0 1", &promotion_root);
+    const promotion_identity = moveIdentity(
+        &promotion,
+        chess.move.Move.promotion(.a7, .a8, .queen),
+    );
+    try std.testing.expectEqual(chess.types.PieceType.queen, promotion_identity.resulting_piece);
+    try std.testing.expectEqual(chess.types.PieceType.none, promotion_identity.victim);
+    try std.testing.expect(promotion_identity.tactical);
+
+    const record = tt.Record{
+        .chess_move = chess.move.Move.normal(.e2, .e4),
+        .value = score.Score.fromOrdinary(12).?,
+        .static_eval = score.Score.fromOrdinary(9),
+        .depth = 5,
+        .bound = .lower,
+        .generation = 3,
+        .producer = .full_search,
+    };
+    const stale = tableFacts(record, 4, record.chess_move, false);
+    try std.testing.expect(stale.authenticated);
+    try std.testing.expectEqual(@as(?bool, false), stale.fresh);
+    try std.testing.expectEqual(types.Provenance.full_search, stale.producer.?);
+    try std.testing.expectEqual(@as(?bool, null), stale.pv_origin);
+    try std.testing.expect(!stale.cutoff_authorized);
+
+    var thread = types.ThreadState.init();
+    thread.static_evals[0] = 5;
+    thread.static_evals[1] = -10;
+    thread.ply_contexts[1] = types.PlyContext.afterMove(
+        chess.move.Move.normal(.e7, .e5),
+        .pawn,
+        false,
+        false,
+        false,
+    );
+    thread.ply_contexts[2] = types.PlyContext.afterMove(
+        chess.move.Move.normal(.g1, .f3),
+        .knight,
+        false,
+        false,
+        false,
+    );
+    const connected = staticFacts(&thread, 2, .{
+        .static_eval = 20,
+        .table_eval = 20,
+        .corrected_eval = 20,
+        .pruning_eval = 20,
+        .known = true,
+    }, .ordinary);
+    try std.testing.expect(connected.own_trend.?.improving());
+    try std.testing.expect(connected.opponent_trend.?.improving());
+    thread.ply_contexts[2] = types.PlyContext.afterNull(false);
+    const broken = staticFacts(&thread, 2, .{
+        .static_eval = 20,
+        .table_eval = 20,
+        .corrected_eval = 20,
+        .pruning_eval = 20,
+        .known = true,
+    }, .ordinary);
+    try std.testing.expectEqual(@as(?types.EvalTrend, null), broken.own_trend);
+    try std.testing.expectEqual(@as(?types.EvalTrend, null), broken.opponent_trend);
+}
+
 /// Extends the current PV with the continuation produced by the child search
 /// that just returned from this exact position transition.
 fn extendPv(thread: *types.ThreadState, ply: usize, chess_move: chess.move.Move) void {
@@ -3964,6 +6217,7 @@ fn negated(child: NodeValue) NodeValue {
             .upper => .lower,
         },
         .provenance = child.provenance,
+        .observation = child.observation,
     };
 }
 
@@ -3971,6 +6225,663 @@ fn evidence(raw: i32, bound: types.Bound, provenance: types.Provenance) types.Ev
     const value = score.Score{ .raw_value = raw };
     std.debug.assert(value.isValid() and !value.isNone());
     return .{ .value = value, .bound = bound, .provenance = provenance };
+}
+
+test "a mate window states only what the rules of chess guarantee" {
+    // Independent oracle: mate distance is counted in plies from the root, so
+    // at ply p the reachable band is exactly [matedIn(p), mateIn(p + 1)]. The
+    // asserted bounds are re-derived here from that definition rather than from
+    // the implementation's expressions.
+    const ply: usize = 7;
+    const fastest_mate = score.Score.mateIn(ply + 1).?.raw();
+    const fastest_loss = score.Score.matedIn(ply).?.raw();
+
+    // Alpha already holds a mate at least as fast as anything reachable here.
+    const above = mateWindow(ply, fastest_mate, fastest_mate + 1).proven;
+    try std.testing.expectEqual(types.Bound.upper, above.bound);
+    try std.testing.expectEqual(fastest_mate, above.raw);
+    try std.testing.expectEqual(types.Provenance.mate_distance, above.provenance);
+
+    // Beta sits at or below being mated on this very ply.
+    const below = mateWindow(ply, fastest_loss - 1, fastest_loss).proven;
+    try std.testing.expectEqual(types.Bound.lower, below.bound);
+    try std.testing.expectEqual(fastest_loss, below.raw);
+    try std.testing.expectEqual(types.Provenance.mate_distance, below.provenance);
+
+    // An ordinary window lies strictly inside the band and is searched whole.
+    try std.testing.expectEqual(
+        SearchedWindow{ .alpha = -50, .beta = 50 },
+        mateWindow(ply, -50, 50).searchable,
+    );
+    // One unit inside either edge is still reachable and must be searched.
+    try std.testing.expectEqual(
+        SearchedWindow{ .alpha = fastest_mate - 1, .beta = fastest_mate },
+        mateWindow(ply, fastest_mate - 1, fastest_mate).searchable,
+    );
+    try std.testing.expectEqual(
+        SearchedWindow{ .alpha = fastest_loss, .beta = fastest_loss + 1 },
+        mateWindow(ply, fastest_loss, fastest_loss + 1).searchable,
+    );
+
+    // An open window keeps exactly the reachable band. This is the whole
+    // difference from the crossing-only predecessor.
+    const open = mateWindow(ply, -score.infinity_raw, score.infinity_raw).searchable;
+    try std.testing.expectEqual(fastest_loss, open.alpha);
+    try std.testing.expectEqual(fastest_mate, open.beta);
+}
+
+test "a clipped mate window never excludes a searchable score" {
+    // The property that licenses searching the clipped window instead of the
+    // requested one. A node that still has a legal move cannot score worse than
+    // being mated after that move, nor better than mating on the next ply, so
+    // every score it can return lies strictly inside (matedIn(ply),
+    // mateIn(ply + 1)). For exactly those scores the clipped window must accept
+    // and reject the same values as the requested one. Both band edges are
+    // excluded on purpose and are checked separately below.
+    var ply: usize = 1;
+    while (ply < chess.types.max_ply - 1) : (ply += 37) {
+        const fastest_mate = score.Score.mateIn(ply + 1).?.raw();
+        const fastest_loss = score.Score.matedIn(ply).?.raw();
+        const edges = [_]i32{
+            -score.infinity_raw, fastest_loss - 2, fastest_loss - 1, fastest_loss,
+            fastest_loss + 1,    -300,             0,                300,
+            fastest_mate - 2,    fastest_mate - 1, fastest_mate,     fastest_mate + 1,
+            score.infinity_raw,
+        };
+        for (edges) |alpha| {
+            for (edges) |beta| {
+                if (beta <= alpha) continue;
+                switch (mateWindow(ply, alpha, beta)) {
+                    .proven => try std.testing.expect(alpha >= fastest_mate or beta <= fastest_loss),
+                    .searchable => |window| {
+                        try std.testing.expect(window.alpha < window.beta);
+                        // A clip only tightens, and never past the band.
+                        try std.testing.expect(window.alpha >= alpha and window.beta <= beta);
+                        try std.testing.expect(window.alpha >= fastest_loss and window.beta <= fastest_mate);
+                        for ([_]i32{
+                            fastest_loss + 1, fastest_loss + 2, -300,
+                            0,                300,              fastest_mate - 2,
+                            fastest_mate - 1,
+                        }) |searchable| {
+                            try std.testing.expectEqual(
+                                searchable > alpha and searchable < beta,
+                                searchable > window.alpha and searchable < window.beta,
+                            );
+                        }
+                    },
+                }
+            }
+        }
+    }
+}
+
+test "the clipped band edges are the two scores only a proof can name" {
+    // The clip deliberately drops both edges of the band from the searched
+    // window, and each drop is answered by an exact chess fact rather than by
+    // the search. Being mated on this ply is reachable only with no legal move
+    // at all, which the terminal rule decides before the window is consulted;
+    // mating on the next ply is the best any legal move can do, so a result
+    // that reaches it fails high with a lower bound that is already the whole
+    // truth. Nothing between the edges is affected, which is what keeps the
+    // clipped bound valid for a caller holding a wider window.
+    const ply: usize = 5;
+    const fastest_mate = score.Score.mateIn(ply + 1).?.raw();
+    const fastest_loss = score.Score.matedIn(ply).?.raw();
+    const window = mateWindow(ply, -score.infinity_raw, score.infinity_raw).searchable;
+    try std.testing.expectEqual(fastest_loss, window.alpha);
+    try std.testing.expectEqual(fastest_mate, window.beta);
+
+    // The worst a legal move can do is be mated one ply later than the node
+    // itself could be, and the best is the mate the clipped beta names.
+    const worst_with_a_move = score.Score.matedIn(ply + 2).?.raw();
+    const best_with_a_move = -score.Score.matedIn(ply + 1).?.raw();
+    try std.testing.expect(worst_with_a_move > window.alpha);
+    try std.testing.expectEqual(fastest_mate, best_with_a_move);
+
+    // Nothing strictly inside the band is lost at either edge.
+    try std.testing.expect(fastest_loss + 1 > window.alpha);
+    try std.testing.expect(fastest_mate - 1 < window.beta);
+}
+
+test "a zero window is clipped exactly as the crossing test decided it" {
+    // Zero windows carry the accepted production tree, so the complete clip
+    // must leave them identical to the crossing-only predecessor: any clip that
+    // would move an edge also crosses them, and no other zero window changes.
+    // This is what confines the new behavior to open windows.
+    var ply: usize = 1;
+    while (ply < chess.types.max_ply - 1) : (ply += 37) {
+        const fastest_mate = score.Score.mateIn(ply + 1).?.raw();
+        const fastest_loss = score.Score.matedIn(ply).?.raw();
+        for ([_]i32{
+            fastest_loss - 2, fastest_loss - 1, fastest_loss,     fastest_loss + 1,
+            -300,             0,                300,              fastest_mate - 2,
+            fastest_mate - 1, fastest_mate,     fastest_mate + 1,
+        }) |alpha| {
+            const beta = alpha + 1;
+            const crossed = alpha >= fastest_mate or fastest_loss >= beta;
+            switch (mateWindow(ply, alpha, beta)) {
+                .proven => try std.testing.expect(crossed),
+                .searchable => |window| {
+                    try std.testing.expect(!crossed);
+                    try std.testing.expectEqual(alpha, window.alpha);
+                    try std.testing.expectEqual(beta, window.beta);
+                },
+            }
+        }
+    }
+}
+
+test "the core reduction table grows with both of its arguments" {
+    // ADR-0071 B's surface is a product of logarithms, so it must be
+    // non-decreasing in depth at fixed move index and in move index at fixed
+    // depth, and strictly increasing once both arguments leave one. The oracle
+    // is that monotonicity statement, re-derived here rather than read off the
+    // table: a surface that ever reduced LESS at greater depth would make a
+    // refutation unattributable between regions.
+    for (2..64) |m| {
+        var previous = core_reduction_table[1][m];
+        for (2..64) |d| {
+            const current = core_reduction_table[d][m];
+            try std.testing.expect(current >= previous);
+            previous = current;
+        }
+    }
+    for (2..64) |d| {
+        var previous = core_reduction_table[d][1];
+        for (2..64) |m| {
+            const current = core_reduction_table[d][m];
+            try std.testing.expect(current >= previous);
+            previous = current;
+        }
+    }
+    // ln(1) is zero, so the whole first row and column sit on the floor.
+    try std.testing.expectEqual(@as(i32, 640), core_reduction_table[1][1]);
+    try std.testing.expectEqual(@as(i32, 640), core_reduction_table[63][1]);
+    try std.testing.expectEqual(@as(i32, 640), core_reduction_table[1][63]);
+    try std.testing.expect(core_reduction_table[63][63] > core_reduction_table[8][8]);
+    try std.testing.expect(core_reduction_table[8][8] > core_reduction_table[4][4]);
+}
+
+test "each core reduction adjustment moves in the direction it argues for" {
+    // One input changes at a time against a fixed reference, so each assertion
+    // is about that term alone. The directions come from ADR-0071 B's stated
+    // rationale, not from the arithmetic: principal nodes and improving lines
+    // keep depth, cut nodes and stale TT alternatives lose it, good history
+    // protects a move, and the root is never guessed at.
+    const reference = CoreReductionInputs{
+        .depth = 8,
+        .search_index = 6,
+        .pv_node = false,
+        .cut_node = false,
+        .improving = false,
+        .has_tt_move = false,
+        .stat = 0,
+        .root = false,
+    };
+    const base = coreReductionUnits(reference);
+
+    var principal = reference;
+    principal.pv_node = true;
+    try std.testing.expectEqual(base - 2048, coreReductionUnits(principal));
+
+    var improving = reference;
+    improving.improving = true;
+    try std.testing.expectEqual(base - 1024, coreReductionUnits(improving));
+
+    var cut = reference;
+    cut.cut_node = true;
+    try std.testing.expectEqual(base + 768, coreReductionUnits(cut));
+
+    var tt_late = reference;
+    tt_late.has_tt_move = true;
+    try std.testing.expectEqual(base + 512, coreReductionUnits(tt_late));
+
+    // The TT term is deliberately silent until the early alternatives failed.
+    var tt_early = reference;
+    tt_early.has_tt_move = true;
+    tt_early.search_index = 3;
+    var early = reference;
+    early.search_index = 3;
+    try std.testing.expectEqual(coreReductionUnits(early), coreReductionUnits(tt_early));
+
+    var loved = reference;
+    loved.stat = history_stat_limit;
+    try std.testing.expectEqual(base - 2048, coreReductionUnits(loved));
+
+    var hated = reference;
+    hated.stat = -history_stat_limit;
+    try std.testing.expectEqual(base + 2048, coreReductionUnits(hated));
+
+    // History beyond the table range cannot buy more than the clamp allows.
+    var absurd = reference;
+    absurd.stat = 64 * history_stat_limit;
+    try std.testing.expectEqual(coreReductionUnits(loved), coreReductionUnits(absurd));
+
+    var root = reference;
+    root.root = true;
+    try std.testing.expectEqual(base - 1024, coreReductionUnits(root));
+}
+
+test "a core reduction always leaves one main-search ply" {
+    // The clamp is the safety property, amended by ADR-0071's third review:
+    // the probe may be shallow but it is never zero-depth, because the side
+    // that just moved would then lose its own quiet mate threats in a
+    // quiescence that generates checks only for the side to move. A reduction
+    // equal to the child depth is exactly the collapse the trace found.
+    for (2..40) |depth| {
+        for (2..40) |index| {
+            for ([_]i32{ -history_stat_limit, -4000, 0, 4000, history_stat_limit }) |stat| {
+                inline for (.{ true, false }) |pv| {
+                    const new_depth: u16 = @intCast(depth - 1);
+                    const reduction = coreReduction(.{
+                        .depth = @intCast(depth),
+                        .search_index = index,
+                        .pv_node = pv,
+                        .cut_node = !pv,
+                        .improving = false,
+                        .has_tt_move = true,
+                        .stat = stat,
+                        .root = false,
+                    }, new_depth);
+                    try std.testing.expect(reduction < new_depth);
+                    try std.testing.expect(new_depth - reduction >= 1);
+                }
+            }
+        }
+    }
+    // No child depth to give away: nothing is reduced at all.
+    try std.testing.expectEqual(@as(u16, 0), coreReduction(.{
+        .depth = 1,
+        .search_index = 40,
+        .pv_node = false,
+        .cut_node = true,
+        .improving = false,
+        .has_tt_move = true,
+        .stat = -history_stat_limit,
+        .root = false,
+    }, 0));
+    // A strongly protected principal move at a shallow node is not reduced.
+    try std.testing.expectEqual(@as(u16, 0), coreReduction(.{
+        .depth = 2,
+        .search_index = 2,
+        .pv_node = true,
+        .cut_node = false,
+        .improving = true,
+        .has_tt_move = false,
+        .stat = history_stat_limit,
+        .root = true,
+    }, 1));
+}
+
+test "core reduction eligibility keeps every legality exemption" {
+    // ADR-0071 B and SCORE-034: nothing is reduced in check, when the move
+    // gives check, for a promotion, for a good capture, for the singular move
+    // or before the third selected move. Each case flips exactly one input.
+    const eligible = coreReductionEligible(8, 2, false, false, false, true, false);
+    try std.testing.expect(eligible);
+    // The first two selected moves.
+    try std.testing.expect(!coreReductionEligible(8, 0, false, false, false, true, false));
+    try std.testing.expect(!coreReductionEligible(8, 1, false, false, false, true, false));
+    // Depth floor.
+    try std.testing.expect(!coreReductionEligible(1, 9, false, false, false, true, false));
+    // In check, giving check, singular.
+    try std.testing.expect(!coreReductionEligible(8, 9, true, false, false, true, false));
+    try std.testing.expect(!coreReductionEligible(8, 9, false, true, false, true, false));
+    try std.testing.expect(!coreReductionEligible(8, 9, false, false, true, true, false));
+    // Neither a quiet non-promotion nor a losing capture: promotions and good
+    // captures reach neither argument and are therefore never reduced.
+    try std.testing.expect(!coreReductionEligible(8, 9, false, false, false, false, false));
+    // A losing capture is reducible on its own.
+    try std.testing.expect(coreReductionEligible(8, 9, false, false, false, false, true));
+}
+
+test "the core node-proof margins scale with the evaluator's own range" {
+    // ADR-0071 D's amended seeds. The oracle is the defect the third review
+    // traced: at depth three the old margin was 354 centipawns while Manta's
+    // evaluator prices an attacked queen at over 500, so a static claim could
+    // outrank a mate in one. The replacement must exceed that swing by depth
+    // three and must grow when the line is not improving.
+    try std.testing.expectEqual(@as(i32, 150), coreReverseFutilityMargin(1, true));
+    try std.testing.expectEqual(@as(i32, 210), coreReverseFutilityMargin(1, false));
+
+    // The traced node: static eval 570 against beta 206 at depth three. The
+    // old margin cut (570 - 354 = 216 >= 206) and overrode a mate in one; the
+    // amended margin must refuse, whichever way the trend points.
+    const traced_eval: i32 = 570;
+    const traced_beta: i32 = 206;
+    inline for (.{ true, false }) |improving| {
+        try std.testing.expect(
+            traced_eval - coreReverseFutilityMargin(3, improving) < traced_beta,
+        );
+    }
+    try std.testing.expect(coreReverseFutilityMargin(3, false) > coreReverseFutilityMargin(3, true));
+
+    // Monotone in depth, and a falling line always costs more to cut.
+    var depth: u16 = 1;
+    while (depth <= 8) : (depth += 1) {
+        try std.testing.expect(
+            coreReverseFutilityMargin(depth, false) > coreReverseFutilityMargin(depth, true),
+        );
+        if (depth > 1) try std.testing.expect(
+            coreReverseFutilityMargin(depth, true) > coreReverseFutilityMargin(depth - 1, true),
+        );
+    }
+
+    // Razoring is a single fixed margin at depth one; there is no depth term
+    // left to scale, which is the point of restricting it back to one ply.
+    try std.testing.expectEqual(@as(i32, 300), core_razoring_margin);
+}
+
+test "the core omission gate refuses every unsafe node" {
+    // Each assertion flips exactly one conjunct of ADR-0071 C's gate against a
+    // reference that passes, so the test names the reason each term exists
+    // rather than restating the expression.
+    const mate = score.Score.mateIn(6).?.raw();
+    try std.testing.expect(coreOmissionGate(true, false, false, 1, true, -50, 50));
+    // No static evaluation to price the margin against.
+    try std.testing.expect(!coreOmissionGate(false, false, false, 1, true, -50, 50));
+    // A principal node carries the answer.
+    try std.testing.expect(!coreOmissionGate(true, true, false, 1, true, -50, 50));
+    // In check every legal move is forced evidence.
+    try std.testing.expect(!coreOmissionGate(true, false, true, 1, true, -50, 50));
+    // Nothing has been searched yet, so there is no bound to prune against.
+    try std.testing.expect(!coreOmissionGate(true, false, false, 0, true, -50, 50));
+    // Zugzwang: without non-pawn material a quiet move can reverse the verdict.
+    try std.testing.expect(!coreOmissionGate(true, false, false, 1, false, -50, 50));
+    // Decisive windows are not a quantity these centipawn margins can price.
+    try std.testing.expect(!coreOmissionGate(true, false, false, 1, true, mate, mate + 1));
+    try std.testing.expect(!coreOmissionGate(true, false, false, 1, true, -mate - 1, -mate));
+}
+
+test "the core late-move count grows with prospective depth" {
+    // ADR-0071 C. The count must never fall as the prospective depth rises,
+    // must never drop below the two-move floor, and improving must widen it.
+    // The floor is the load-bearing part: a count below two could omit a move
+    // at a node that has searched only one.
+    var previous: usize = 0;
+    for (0..9) |pd| {
+        const count = coreLateMoveCount(.{}, @intCast(pd), false);
+        try std.testing.expect(count >= 2);
+        try std.testing.expect(count >= previous);
+        try std.testing.expect(count >= coreLateMoveCount(.{}, @intCast(pd), false) - 1);
+        try std.testing.expect(coreLateMoveCount(.{}, @intCast(pd), true) >= count);
+        previous = count;
+    }
+    // The stated seed curve for pd = 2..8 with MAN-S29's 4/3/4.
+    try std.testing.expectEqual(@as(usize, 7), coreLateMoveCount(.{}, 2, false));
+    try std.testing.expectEqual(@as(usize, 10), coreLateMoveCount(.{}, 3, false));
+    try std.testing.expectEqual(@as(usize, 16), coreLateMoveCount(.{}, 4, false));
+    try std.testing.expectEqual(@as(usize, 22), coreLateMoveCount(.{}, 5, false));
+    try std.testing.expectEqual(@as(usize, 31), coreLateMoveCount(.{}, 6, false));
+    try std.testing.expectEqual(@as(usize, 40), coreLateMoveCount(.{}, 7, false));
+    try std.testing.expectEqual(@as(usize, 52), coreLateMoveCount(.{}, 8, false));
+}
+
+test "prospective depth never exceeds the depth the move would be searched at" {
+    // SCORE-034's bound. The estimate is the same surface the dispatcher uses,
+    // and the surface is clamped to the child depth, so the prospective depth
+    // is in [0, new_depth] for every input combination. A prospective depth
+    // above the real one would price work the search will actually do.
+    for (1..40) |depth| {
+        const new_depth: u16 = @intCast(depth - 1);
+        for (0..40) |index| {
+            for ([_]i32{ -history_stat_limit, -1, 0, 4000, history_stat_limit }) |stat| {
+                const eligible = coreReductionEligible(
+                    @intCast(depth),
+                    index,
+                    false,
+                    false,
+                    false,
+                    true,
+                    false,
+                );
+                const estimate: u16 = if (eligible) coreReduction(.{
+                    .depth = @intCast(depth),
+                    .search_index = index,
+                    .pv_node = false,
+                    .cut_node = true,
+                    .improving = false,
+                    .has_tt_move = true,
+                    .stat = stat,
+                    .root = false,
+                }, new_depth) else 0;
+                const prospective = new_depth -| estimate;
+                try std.testing.expect(prospective <= new_depth);
+                // The estimate shares the reduction's clamp, so a prospective
+                // depth of zero can only come from a node with no child depth.
+                if (new_depth >= 1) try std.testing.expect(prospective >= 1);
+            }
+        }
+    }
+}
+
+test "mate-distance evidence never acquires ordinary search authority" {
+    // The proof knows the ply and nothing about the position, so it may not
+    // refine an evaluation, qualify a singular move or settle a ProbCut
+    // threshold. These filters are exhaustive switches, so a future provenance
+    // cannot silently default into any of them either.
+    try std.testing.expect(!searchedEvalProvenance(.mate_distance));
+    try std.testing.expect(!singularTableProvenance(.mate_distance));
+    try std.testing.expect(!probCutTableProvenance(.mate_distance));
+}
+
+test "search evidence scope remains restrictive across nested routes" {
+    // A real move inside a null, exclusion, ProbCut or restricted-root probe
+    // cannot launder that ancestor's evidence into ordinary feedback.
+    try std.testing.expectEqual(
+        types.EvidenceScope.null_probe,
+        evidenceScope(.null_probe, .first_move, 3, false),
+    );
+    try std.testing.expectEqual(
+        types.EvidenceScope.exclusion,
+        evidenceScope(.exclusion, .scout, 4, false),
+    );
+    try std.testing.expectEqual(
+        types.EvidenceScope.probcut,
+        evidenceScope(.probcut, .quiescence, 5, false),
+    );
+    try std.testing.expectEqual(
+        types.EvidenceScope.restricted_root,
+        evidenceScope(.ordinary, .root, 0, true),
+    );
+}
+
+test "shadow outcomes require completed ordinary searched authority" {
+    // Draw/mate, root, restricted and reduced/TT-derived winners do not train
+    // the paired diagnostic relation.
+    try std.testing.expect(shadowOutcomeEligible(.scout, .ordinary, 2, 35, .exact, true));
+    try std.testing.expect(shadowOutcomeEligible(.pv_research, .ordinary, 2, 35, .lower, true));
+    try std.testing.expect(!shadowOutcomeEligible(.root, .ordinary, 0, 35, .exact, true));
+    try std.testing.expect(!shadowOutcomeEligible(.reduced_probe, .ordinary, 2, 35, .lower, true));
+    try std.testing.expect(!shadowOutcomeEligible(.scout, .null_verification, 2, 35, .lower, true));
+    try std.testing.expect(!shadowOutcomeEligible(.scout, .ordinary, 2, 0, .exact, true));
+    try std.testing.expect(!shadowOutcomeEligible(
+        .scout,
+        .ordinary,
+        2,
+        score.Score.mateIn(3).?.raw(),
+        .lower,
+        true,
+    ));
+    try std.testing.expect(!shadowOutcomeEligible(.scout, .ordinary, 2, 35, .upper, true));
+    try std.testing.expect(!shadowOutcomeEligible(.scout, .ordinary, 2, 35, .exact, false));
+}
+
+test "recursive observation authority preserves restriction and actual horizon" {
+    if (comptime !types.search_evidence_observation_compiled) return error.SkipZigTest;
+    const child = NodeValue{
+        .raw = 17,
+        .bound = .upper,
+        .provenance = .full_search,
+        .observation = .{
+            .producer = .null_move,
+            .searched_horizon = 2,
+            .scope = .null_verification,
+            .verification = .completed,
+            .omitted_siblings = true,
+        },
+    };
+    const authority = authorityFromCandidate(.ordinary, child);
+    try std.testing.expectEqual(types.EvidenceScope.null_verification, authority.scope);
+    try std.testing.expectEqual(@as(u16, 3), authority.searched_horizon);
+    try std.testing.expect(authority.omitted_siblings);
+    try std.testing.expectEqual(types.Provenance.null_move, authority.original_producer.?);
+    try std.testing.expect(!shadowCandidateEligible(child, 2));
+
+    var reduced = child;
+    reduced.observation = .{
+        .producer = .full_search,
+        .searched_horizon = 2,
+        .scope = .ordinary,
+        .verification = .reduced_only,
+    };
+    try std.testing.expect(!shadowCandidateEligible(reduced, 2));
+}
+
+test "shadow packet updates each aliased relation once" {
+    if (comptime !types.search_evidence_observation_compiled) return error.SkipZigTest;
+    var root: chess.position.PositionState = .{};
+    const value = try chess.fen.parse(chess.fen.start_position, &root);
+    const winner = chess.move.Move.normal(.e2, .e4);
+    const alternative = chess.move.Move.normal(.d2, .d4);
+    const reply = ordering.ReplyContext{ .previous_piece = .knight, .previous_to = .f6 };
+    var observation: types.SearchEvidenceObservation = .{};
+    recordShadowQuietOutcome(
+        &observation,
+        &value,
+        reply,
+        .{},
+        winner,
+        &.{ alternative, alternative },
+        6,
+    );
+    const sample = observation.sample(ordering.quietEvidenceKey(.white, alternative)).?;
+    try std.testing.expectEqual(@as(u8, 1), sample.support);
+}
+
+test "observed horizon distinguishes searched work from shortcuts" {
+    const depth = types.DepthIntent.reduced(8, 2);
+    try std.testing.expectEqual(@as(u16, 6), establishedHorizon(.full_search, depth));
+    try std.testing.expectEqual(@as(u16, 6), establishedHorizon(.exclusion_search, depth));
+    try std.testing.expectEqual(@as(u16, 0), establishedHorizon(.terminal, depth));
+    try std.testing.expectEqual(@as(u16, 0), establishedHorizon(.speculative_cutoff, depth));
+    try std.testing.expectEqual(@as(u16, 0), establishedHorizon(.tablebase, depth));
+}
+
+test "an exact result certifies its winner, not a reduced sibling" {
+    // F1/D1: an exact value is established by the move that produced it. A
+    // sibling that was only probed at a reduced depth is reported separately
+    // and must not rewrite the winner's producer, verification or horizon.
+    if (comptime !types.search_evidence_observation_compiled) return error.SkipZigTest;
+    const winner = NodeValue{
+        .raw = 40,
+        .bound = .upper,
+        .provenance = .full_search,
+        .observation = .{
+            .producer = .full_search,
+            .searched_horizon = 4,
+            .scope = .ordinary,
+            .verification = .not_required,
+        },
+    };
+    const probe = NodeValue{
+        .raw = -60,
+        .bound = .lower,
+        .provenance = .reduced_search,
+        .observation = .{
+            .producer = .tt_exact,
+            .searched_horizon = 1,
+            .scope = .ordinary,
+            .verification = .reduced_only,
+        },
+    };
+    var aggregate: NodeAggregateAuthority = .{};
+    absorbCandidateAuthority(&aggregate, .ordinary, probe);
+    absorbCandidateAuthority(&aggregate, .ordinary, winner);
+    const best = authorityFromCandidate(.ordinary, winner);
+
+    const exact = resultAuthority(.exact, best, aggregate);
+    try std.testing.expectEqual(types.Verification.not_required, exact.verification);
+    try std.testing.expectEqual(types.Provenance.full_search, exact.original_producer.?);
+    try std.testing.expectEqual(@as(u16, 5), exact.searched_horizon);
+    try std.testing.expect(exact.reduced_siblings);
+
+    const cutoff = resultAuthority(.lower, best, aggregate);
+    try std.testing.expectEqual(types.Verification.not_required, cutoff.verification);
+    try std.testing.expectEqual(@as(u16, 5), cutoff.searched_horizon);
+    try std.testing.expect(cutoff.reduced_siblings);
+
+    // A fail-low rests on every searched sibling, so it keeps the conservative
+    // aggregate: the weakest sibling bounds both horizon and verification.
+    const fail_low = resultAuthority(.upper, best, aggregate);
+    try std.testing.expectEqual(types.Verification.reduced_only, fail_low.verification);
+    try std.testing.expectEqual(@as(u16, 2), fail_low.searched_horizon);
+}
+
+test "a reduced probe stays reduced through an internal verification" {
+    // F2: the null-move and ProbCut verifications prove the shortcut they
+    // guard, not the reduced invocation that reached them.
+    try std.testing.expectEqual(
+        types.Verification.reduced_only,
+        routeVerification(.reduced_probe, .completed),
+    );
+    try std.testing.expectEqual(
+        types.Verification.reduced_only,
+        routeVerification(.reduced_probe, .not_required),
+    );
+    try std.testing.expectEqual(
+        types.Verification.completed,
+        routeVerification(.null_verification, .not_required),
+    );
+    try std.testing.expectEqual(
+        types.Verification.completed,
+        routeVerification(.scout, .completed),
+    );
+    try std.testing.expectEqual(
+        types.Verification.not_required,
+        routeVerification(.scout, .not_required),
+    );
+}
+
+test "qsearch omission follows the bound that established the result" {
+    // F4: a cutoff and a returned best value inherit only the winning child's
+    // omission; a fail-low inherits every searched child's. Local SEE/delta
+    // omissions always count.
+    try std.testing.expect(!qsearchOmission(.lower, false, false, true));
+    try std.testing.expect(qsearchOmission(.lower, false, true, false));
+    try std.testing.expect(!qsearchOmission(.exact, false, false, true));
+    try std.testing.expect(qsearchOmission(.upper, false, false, true));
+    try std.testing.expect(qsearchOmission(.lower, true, false, false));
+}
+
+test "qsearch completion retains original source scope and omission" {
+    if (comptime !types.search_evidence_observation_compiled) return error.SkipZigTest;
+    const resolved_q = qsearchValue(
+        .{ .raw = -12, .bound = .upper, .provenance = .qsearch_move },
+        .history_local,
+        true,
+        .tt_bound,
+    );
+    try std.testing.expectEqual(types.Provenance.tt_bound, resolved_q.observation.producer.?);
+    try std.testing.expectEqual(types.EvidenceScope.history_local, resolved_q.observation.scope);
+    try std.testing.expectEqual(@as(u16, 0), resolved_q.observation.searched_horizon);
+    try std.testing.expect(resolved_q.observation.omitted_siblings);
+    try std.testing.expectEqual(
+        types.EvidenceScope.probcut,
+        storedProducerScope(.ordinary, .probcut),
+    );
+    // F3: reverse futility and singular multi-cut share `speculative_cutoff`,
+    // so a stored record cannot be called exclusion evidence. Its producer is
+    // preserved instead and establishes no horizon of its own.
+    try std.testing.expectEqual(
+        types.EvidenceScope.ordinary,
+        storedProducerScope(.ordinary, .speculative_cutoff),
+    );
+    try std.testing.expectEqual(
+        types.EvidenceScope.exclusion,
+        storedProducerScope(.ordinary, .exclusion_search),
+    );
+    try std.testing.expect(!ordinarySearchedProducer(.speculative_cutoff));
 }
 
 comptime {

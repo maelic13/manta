@@ -19,22 +19,12 @@ reproducible installation check.
 
 ## Download
 
-Download Manta from the [latest GitHub Release](https://github.com/maelic13/manta/releases/latest).
-Manta 1.0.0 provides portable 64-bit binaries for:
+- [Latest release](https://github.com/maelic13/manta/releases/latest)
+- [All releases](https://github.com/maelic13/manta/releases)
 
-- Windows x86-64: `manta-v1.0.0-windows-x86-64.exe`
-- Linux x86-64: `manta-v1.0.0-linux-x86-64`
-- Linux ARM64: `manta-v1.0.0-linux-arm64`
-- macOS x86-64: `manta-v1.0.0-macos-x86-64`
-- macOS ARM64: `manta-v1.0.0-macos-arm64`
-
-The first release contains portable builds only. It does not contain separate
-PEXT, AVX2, AVX-512 or profile-guided builds.
-
-Every release also publishes `SHA256SUMS`. Verify a download against it with
-`sha256sum -c SHA256SUMS --ignore-missing` on Linux, `shasum -a 256 -c
-SHA256SUMS --ignore-missing` on macOS, or `Get-FileHash <binary> -Algorithm
-SHA256` on Windows.
+Releases contain portable builds only, with no separate PEXT, AVX2, AVX-512 or
+profile-guided variants. The fastest executable for a given machine is a
+native build from source, described under [Build from source](#build-from-source).
 
 ## Use Manta
 
@@ -76,7 +66,10 @@ zig build
 ```
 
 This creates a native `ReleaseFast` executable under `zig-out/bin` and a named
-artifact under `zig-out/dist`. For a portable binary suitable for distribution:
+artifact under `zig-out/dist`. It is the fastest build Manta offers: the
+compiler targets the exact processor it runs on, so the binary is typically
+faster than the portable release download and should be used on that machine
+only. For a portable binary suitable for distribution:
 
 ```text
 zig build -Dportable
@@ -92,8 +85,10 @@ Useful build options are:
 | `-Doptimize=Debug\|ReleaseSafe\|ReleaseFast\|ReleaseSmall` | Select the Zig optimization mode |
 | `-Dversion=X.Y.Z` | Override the embedded semantic version for a controlled build |
 
-Cross-compilation and specialized ISA/PGO profiles are not supported in Manta
-1.0.0. Release artifacts are built natively on each supported platform.
+Cross-compilation is not supported, and the reserved `avx2`, `pext` and
+`avx512` profiles and `-Dpgo` fail rather than silently degrade; the native
+default already uses every instruction-set extension the host provides.
+Release artifacts are built natively on each supported platform.
 
 To run the focused development gate or the complete test suite:
 
@@ -116,9 +111,10 @@ bench 13
 bench 13 1 64
 ```
 
-The final `bench total` line reports elapsed time, nodes, nodes per second and
-the deterministic one-thread node fingerprint. Throughput varies by hardware;
-the node count is the useful compatibility check.
+The final summary line reports the nodes searched, elapsed time and nodes per
+second. Throughput varies by hardware; the node count is the useful
+compatibility check, because a one-thread search is deterministic. For Manta
+1.1.0, `bench 6 1` searches `359,259` nodes on every supported platform.
 
 ## License
 

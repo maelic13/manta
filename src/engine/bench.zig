@@ -18,6 +18,7 @@ pub const Spec = struct {
 };
 
 pub const PositionRecord = struct {
+    score: i32 = 0,
     nodes: u64 = 0,
     time_ms: u64 = 0,
     completed_depth: u16 = 0,
@@ -38,6 +39,7 @@ pub const Report = struct {
     fingerprint_nodes: u64 = 0,
     geomean_ebf_milli: u64 = 0,
     median_nodes: u64 = 0,
+    maximum_nodes: u64 = 0,
     top_share_million: u64 = 0,
     cancelled: bool = false,
     failed: bool = false,
@@ -61,6 +63,7 @@ pub const Report = struct {
                 ebf_count += 1;
             }
         }
+        self.maximum_nodes = maximum;
         std.mem.sort(u64, &sorted, {}, std.sort.asc(u64));
         self.median_nodes = sorted[sorted.len / 2];
         if (ebf_count != 0) {
@@ -86,6 +89,19 @@ pub fn positionEbfMilli(record: PositionRecord) u64 {
     return @intFromFloat(@round(value * 1000.0));
 }
 
+pub fn positionEbfCenti(record: PositionRecord) u64 {
+    if (record.nodes == 0 or record.completed_depth == 0) return 0;
+    const value = @exp(@log(@as(f64, @floatFromInt(record.nodes))) /
+        @as(f64, @floatFromInt(record.completed_depth)));
+    return @intFromFloat(@round(value * 100.0));
+}
+
+pub fn topShareTenthsPercent(report: *const Report) u64 {
+    if (report.fingerprint_nodes == 0) return 0;
+    const numerator = @as(u128, report.maximum_nodes) * 1000;
+    return @intCast((numerator + report.fingerprint_nodes / 2) / report.fingerprint_nodes);
+}
+
 /// Runs the real scalar search with caller-owned resources. `clock` affects
 /// descriptive timing only; `control` owns cancellation and neither can change
 /// the deterministic completed-search node fingerprint.
@@ -101,6 +117,19 @@ pub fn run(
         .{
             .correction_history = search_build_options.correction_history,
             .aspiration = search_build_options.stability_aspiration,
+            .live_history_staging = search_build_options.live_history_staging,
+            .nonroot_check_extension = search_build_options.nonroot_check_extension,
+            .mate_windows = search_build_options.mate_windows,
+            .selective_core = search_build_options.selective_core,
+            .core_history = search_build_options.core_history,
+            .core_lmr = search_build_options.core_lmr,
+            .core_move_pruning = search_build_options.core_move_pruning,
+            .core_node_pruning = search_build_options.core_node_pruning,
+            .core_aspiration = search_build_options.core_aspiration,
+            .core_qs_checks = search_build_options.core_qs_checks,
+            .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
+            .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
+            .search_evidence_observation = search_build_options.search_evidence_observation,
         },
         spec,
         clock,
@@ -185,10 +214,17 @@ pub fn runWithFeaturesAndParams(
 
             if (repeat == 0) {
                 report.positions[position_index] = .{
+                    .score = result.evidence.value.raw(),
                     .nodes = result.nodes,
                     .time_ms = elapsed_ms,
                     .completed_depth = if (result.completed) |completed| completed.depth else 0,
                 };
+                // A long bench is otherwise silent until the whole corpus is
+                // done. A caller that wants running feedback declares this
+                // hook; the report it receives at the end is unchanged, so no
+                // caller is obliged to consume progress.
+                if (@hasDecl(@TypeOf(control.*), "benchPosition"))
+                    control.benchPosition(position_index, report.positions[position_index]);
             }
             report.completed_positions += 1;
         }
