@@ -2588,7 +2588,15 @@ workstation, native ReleaseFast unless stated:
 
 The one skip difference between arms is `tools/search_observe.zig`, which
 skips under the core as the 6.5.10.4 record explains. No expectation was
-changed. On `c3ba519` the default `zig build test` was executed a second time
+changed. The table was run a third time on `e05dbaa`, the head carrying repair 5
+and addendum B: `zig build test` (default), `zig build test
+-Dselective-core=false`, `zig build test -Doptimize=ReleaseSafe`, `zig build
+test-uci`, `zig build lint` (which includes `fmt` and `policy`) all passed, and
+both-arm `bench 6 1` read `359,259` and `642,336`. One honest note: the first
+attempt at the default and off-arm suites on that head failed while another
+`zig build` was running against the same cache for a document edit; each was
+re-run alone and passed. Concurrent builds in one cache are not a valid gate
+run, and this record counts only the isolated runs. On `c3ba519` the default `zig build test` was executed a second time
 only to confirm from the step summary that test runs are not served from cache;
 it passed identically. The time, SMP lifecycle and platform gates of item 1,
 and items 2 to 4, are deferred with the maintainer direction above; the release
