@@ -26,6 +26,10 @@ All notable user-visible changes to Manta are recorded here. The format follows
   still allow.
 - `bench` reports each position as it finishes instead of printing the whole
   report at the end. The one-thread depth-6 fingerprint is now `359,259` nodes.
+- Principal variations no longer stop at a transposition-table hit. The
+  displayed line continues from the table with legal stored moves, so a depth
+  resolved from memory shows the line its score stands on instead of a single
+  move, and the suggested ponder move is available in more positions.
 
 ### Fixed
 

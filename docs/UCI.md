@@ -433,7 +433,14 @@ sample replaces a pending one, and a line is discarded rather than waiting when
 the output queue is full.
 
 Each fully completed iteration emits the ordinary score/depth/PV line, once per
-depth and in depth order, for any `Threads` value. Completed-iteration lines
+depth and in depth order, for any `Threads` value. The searched principal
+variation may end at a transposition-table hit; for display it is then extended
+from the table: each appended move is the stored move of an authenticated
+non-upper-bound entry for the position reached, legal there, and the extension
+stops at the first missing entry, unusable move, repeated position or capacity
+limit. The searched prefix is unchanged and the extension carries no search
+authority. The `ponder` move of `bestmove` is the second move of that same
+displayed line, so it may come from the table. Completed-iteration lines
 are required output: they are neither coalesced with root-move progress nor
 dropped when the output queue is full, and they wait for presenter capacity.
 The worker-side record of completed iterations is bounded; if more than it

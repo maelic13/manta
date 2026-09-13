@@ -2705,6 +2705,28 @@ diagnostic and the handle-mode rule for both standard streams;
 `ARCHITECTURE.md` and `tests/uci/README.md` follow. The gates in the table
 above were re-run on `13eb275`; on `7cce340` (repair 5) the fast subsets in ReleaseSafe and ReleaseFast, the UCI process suite, lint and both-arm `bench 6 1` were re-run, and the fastchess reproduction match was repeated: 46 games at `Threads 6`, 15 disconnects for the pre-fix arm, none for the repaired ReleaseSafe and ReleaseFast builds, no panic in the merged engine log.
 
+**6.5.15.1 addendum B (2026-09-13): displayed principal variations.** After
+the per-depth info lines became visible, the maintainer's Colosseum view
+showed why many of them carried one move: with the table warm from the previous
+search, shallow iterations resolve entirely from transposition hits (one node
+per ply, `seldepth 0`), and Manta publishes only the line it searched, which
+ends at the hit. 1.0.0 behaved the same and the coalescing slot hid it. The
+maintainer directed the display repair into 1.1.0. The controller now extends
+a completed iteration's variation from the table before formatting it, in
+`extendPrincipalVariation`: replay the searched prefix from the game root on a
+private state stack, then append the stored move of each authenticated
+non-upper-bound entry while it is legal in the position reached, stopping at a
+missing entry, an unusable move, a repeated position or capacity. The same
+extension is applied to the final search line, the retained ponder line and
+the `bestmove` publication, so the ponder move may come from the table. The
+walk reads the table through the workers' lock-free authenticated probe and
+touches no search state, so a live search may run concurrently; the one-thread
+fingerprint is untouched at `359,259`. Tests: extension along a stored line,
+stopping at an illegal stored move, refusing an upper-bound entry, leaving an
+unplayable searched prefix alone, and stopping on a knight-shuffle repetition
+cycle that would otherwise run to capacity. `docs/UCI.md` records the display
+rule and the ponder consequence.
+
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
 6.5.15 closeout. Their surviving content is owned by the steps above; their
