@@ -241,13 +241,16 @@ Phase 1 fixes both the command and output mailboxes at 64 records. A formatted
 output record is at most 4,096 bytes, while an input command is derived from a
 line of at most 65,536 bytes and retains only bounded parsed/sanitized fields.
 The shell uses separate Zig `std.Io` input, controller and presenter tasks. Its
-live-search progress offer never waits and may be dropped when the presenter
-queue is full. Required protocol lines wait for bounded presenter capacity;
-urgent stop/quit state is still applied independently by the input task, and
-shutdown closes the queue to release a blocked producer. Step 6.1 adds one
-worker-to-controller coalesced progress slot and a separate joined completion
-result; completion and required `bestmove` are never stored in the droppable
-slot. The fixed mailbox capacities are unchanged.
+live root-move progress offer never waits and may be dropped when the presenter
+queue is full. Required protocol lines, including completed-iteration lines,
+wait for bounded presenter capacity; urgent stop/quit state is still applied
+independently by the input task, and shutdown waits a bounded interval for the
+controller before cancelling it, so a producer blocked behind a stalled reader
+is released. Step 6.1 adds a worker-to-controller progress slot and a separate
+joined completion result; completion and required `bestmove` are never stored
+in it. Root moves coalesce in one slot, while completed iterations queue in a
+fixed ring in arrival order, dropping the oldest on overflow. The fixed mailbox
+capacities are unchanged.
 
 ## 5. Ownership and lifetimes
 

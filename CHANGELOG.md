@@ -29,7 +29,16 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ### Fixed
 
-- The crashes seen in Manta 1.0.0 tournament play no longer occur.
+- The engine no longer loses its connection mid-game with more than one thread:
+  a transposition table replacement could read an entry another thread was
+  rewriting. Reported in issue #2.
+- A full output queue no longer ends the session: the engine waits for an
+  interface that reads slowly instead of exiting. Reported in issue #2.
+- Every completed depth reports its score and principal variation, in depth
+  order, with any thread count; previously most depths showed only `currmove`
+  progress. Reported in issue #2.
+- `quit` exits within a bound even when the interface has stopped reading
+  output.
 
 ## [1.0.0] - 2026-09-04
 

@@ -118,7 +118,9 @@ info string failed <command>: <reason>
 ```
 
 This is not a parse rejection. Its transactional effect is defined by the
-owning resource or file contract.
+owning resource or file contract. A search-form `go` that cannot allocate its
+search emits `info string failed go: resource allocation failed`, publishes no
+`bestmove` for that command, and leaves the session idle and responsive.
 
 ## 4. Session states and ordering
 
@@ -177,7 +179,10 @@ job.
   have not started, join owned tasks, and exit successfully. They do not require
   a pending `bestmove` to be published.
 - A failed or permanently blocked stdout closes presentation, cancels work, and
-  cannot make shutdown unbounded.
+  cannot make shutdown unbounded. After `quit` or EOF the controller gets a
+  bounded interval to finish and is then cancelled, so an interface that has
+  stopped reading while required lines fill the output queue cannot keep the
+  process alive; the exit code stays 0 unless output or input failed.
 
 ## 5. Command matrix
 
@@ -412,16 +417,25 @@ Scores use the root side's perspective. Centipawn and mate values obey
 root uses `score mate 0`. Bound tags are emitted only when the score is actually
 a lower or upper bound.
 
-During search, the bounded coalescible progress channel may emit:
+During search, live root-move progress may emit:
 
 ```text
 info depth <D> currmove <legal-root-move> currmovenumber <N> nodes <N> time <MS>
 ```
 
-Each fully completed iteration may emit the ordinary score/depth/PV line.
-Intermediate root information is observational only and may be replaced under
-load; a completed result and its required `bestmove` are not droppable. Partial
-or aborted iterations never manufacture PV, score or bound authority.
+Root-move lines are the only search output that may coalesce or drop: a newer
+sample replaces a pending one, and a line is discarded rather than waiting when
+the output queue is full.
+
+Each fully completed iteration emits the ordinary score/depth/PV line, once per
+depth and in depth order, for any `Threads` value. Completed-iteration lines
+are required output: they are neither coalesced with root-move progress nor
+dropped when the output queue is full, and they wait for presenter capacity.
+The worker-side record of completed iterations is bounded; if more than it
+holds complete before the controller drains it, the oldest are discarded and
+the newest always survives. A completed result and its required `bestmove` are
+not droppable. Partial or aborted iterations never manufacture PV, score or
+bound authority.
 
 Normal completion is:
 

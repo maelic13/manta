@@ -71,7 +71,10 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   anomaly, and the core is production. Per the maintainer's direction Phase 6.5
   pauses at a consolidation release of Manta 1.1.0. The pre-release full gates
   passed once each on `c3ba519` (PLAN 6.5.15.1 record), and the release commit
-  sets version `1.1.0` with its dated changelog section. 6.5.11 to 6.5.14 and
+  sets version `1.1.0` with its dated changelog section. The release head then
+  moved to include the issue #2 repairs (SMP table replacement, per-depth info
+  lines, bounded shutdown behind a stalled reader, `go` allocation failure), and
+  every gate passed again on it. 6.5.11 to 6.5.14 and
   6.5.15.2 to 6.5.15.4 stay open for when development resumes, with expected
   gains recorded in PLAN.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or

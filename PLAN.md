@@ -2569,29 +2569,113 @@ board and search targets and items 2 to 4 above are deferred with 6.5.11 to
 6.5.14, not abandoned; the expected-gains table in the Phase 6.5 introduction
 is the basis for deciding whether and when to resume.
 
-**6.5.15.1 record (2026-09-13): pre-release full gates, all pass.** Run once
-each, serially, on head `c3ba519` (the MAN-S36 promotion `a276fe8` plus its
-review record) with Zig `0.16.0` on the workstation, native ReleaseFast unless
-stated:
+**6.5.15.1 record (2026-09-13): pre-release full gates, all pass.** The gates
+first passed on head `c3ba519` (the MAN-S36 promotion `a276fe8` plus its review
+record). After the issue #2 repairs recorded in the addendum below they were
+re-run once each, serially, on head `13eb275` (the repairs; the commit that
+records this table changes documents only) with Zig `0.16.0` on the
+workstation, native ReleaseFast unless stated:
 
-| Gate | Outcome |
+| Gate | Outcome on `13eb275` |
 | --- | --- |
-| `zig build test` (default, core on) | Pass: 53/53 steps, 440/458 tests, 18 skipped |
-| `zig build test -Dselective-core=false` | Pass: 53/53 steps, 441/458 tests, 17 skipped; the MAN-S35 observation suite runs and passes |
-| `zig build test -Doptimize=ReleaseSafe` | Pass: 53/53 steps, 440/458 tests, 18 skipped |
+| `zig build test` (default, core on) | Pass: 53/53 steps, 444/462 tests, 18 skipped; transcript 26 cases |
+| `zig build test -Dselective-core=false` | Pass: 53/53 steps, 445/462 tests, 17 skipped; the MAN-S35 observation suite runs and passes |
+| `zig build test -Doptimize=ReleaseSafe` | Pass: 53/53 steps, 444/462 tests, 18 skipped |
 | `zig build fmt` | Pass |
 | `zig build policy` | Pass |
 | `zig build lint` | Pass: 0 errors, 0 warnings across 53 files |
-| `zig build test-uci` | Pass: 17/17 tests, transcript 24 cases |
+| `zig build test-uci` | Pass: 18/18 tests, transcript 26 cases |
 
 The one skip difference between arms is `tools/search_observe.zig`, which
 skips under the core as the 6.5.10.4 record explains. No expectation was
-changed. The default `zig build test` was executed a second time only to
-confirm from the step summary that test runs are not served from cache; it
-passed identically. The time, SMP lifecycle and platform gates of item 1, and
-items 2 to 4, are deferred with the maintainer direction above; the release
+changed. On `c3ba519` the default `zig build test` was executed a second time
+only to confirm from the step summary that test runs are not served from cache;
+it passed identically. The time, SMP lifecycle and platform gates of item 1,
+and items 2 to 4, are deferred with the maintainer direction above; the release
 workflow's native smoke tests and cross-platform bench agreement remain the
 platform check for 1.1.0.
+
+**6.5.15.1 addendum (2026-09-13): issue #2 repairs.** Before the 1.1.0 tag,
+four defects were repaired in `13eb275`: two reported in GitHub issue #2
+against 1.0.0 at `Threads 6`, and two found in Fable's review of the same
+paths. The reporter's attached patch archive was not downloaded or applied; the
+repairs follow the maintainer's ticket. All four are one-thread-neutral: native
+ReleaseFast `bench 6 1` reads `359,259` by default and `642,336` with
+`-Dselective-core=false`, and the default build reports `Manta 1.1.0`.
+
+1. **Transposition-table replacement seed** (`src/search/tt.zig`). The
+   occupancy scan can see four full ways while a concurrent `Entry.store` has
+   zeroed slot zero's guard in its three-step publish (zero the guard, write
+   the payload, write the guard), so the replacement seed's unwrap dereferenced
+   null: a panic in ReleaseSafe and undefined behaviour, observed as a vanished
+   process, in ReleaseFast. The seed now treats an emptied slot zero as the
+   ideal victim, stores there and returns `filled`, as the loop below it
+   already did. The replacement scan moved unchanged into `Table.replace` so a
+   deterministic test can reach it: a guard zeroed before calling `store` is
+   absorbed by the occupancy scan, so a test through `store` passed on the old
+   code and could not serve as the regression. Tests: the deterministic seed
+   test calls `replace` with slot zero emptied and expects the new key
+   probeable and the other ways intact; the stress test runs six threads of
+   200,000 random stores (odd non-zero keys, depth 1 to 40, random bound) into
+   a one-cluster table, advancing the generation every 4,096 stores, then
+   probes a freshly stored key. Both crashed with `attempt to use null value`
+   at the seed in ReleaseSafe before the fix, and both pass after it in
+   ReleaseFast and ReleaseSafe. The stress test's generation advance is an
+   unsynchronized byte write shared by the six writers, as the ticket
+   specified; production advances the generation only before helpers start.
+2. **Per-depth info lines** (`src/engine/runtime.zig`, `src/uci/session.zig`).
+   One coalescing slot served both root-move and completed-iteration progress,
+   so the next depth's first `currmove` overwrote a finished iteration before
+   the controller drained it, and iteration lines were also offered without
+   waiting. `ProgressSlot` now keeps one coalescing root-move slot and a
+   16-entry iteration ring in arrival order that drops the oldest on overflow;
+   `take` returns iterations first, then the root move, and `offer` reports a
+   wake only on the empty-to-non-empty transition across both kinds. The
+   controller drains until empty, in its loop and in `finishActive`;
+   completed-iteration lines use the blocking `offerLine`, root-move lines stay
+   on `tryOfferInfoLine`, and `last_published_iteration_nodes` still suppresses
+   a duplicate final line. Tests: a `ProgressSlot` unit test for ordering,
+   root-move coalescing, iteration retention across interleaved offers,
+   overflow and the wake rule; and a `13-smp` transcript case in which
+   `go depth 10` at `Threads 4` and at `Threads 1` must produce `info depth 1`
+   through `info depth 10`, each once and in order, before `bestmove`. The
+   `{{ITERATION_INFO}}` placeholder cannot express a depth, and an
+   `allow-info` region would silently skip a wrong one, so the harness gained
+   `{{ITERATION_FIELDS}}` (the fields after a literal `info depth <D> `) and a
+   rule that a completed-iteration line is never skipped while a completed
+   iteration is expected. On the old progress code the case failed with depth
+   3 arriving where depth 2 was expected.
+3. **Bounded shutdown behind a stalled reader** (`src/uci/session.zig`).
+   Required lines block on the 64-slot output queue, and `run` awaited the
+   controller unconditionally after `quit`, so a controller blocked in `putOne`
+   behind an interface that stopped reading kept the process alive. `run` now
+   waits for the controller at most `shutdown_controller_ms` (250 ms, the order
+   of `shutdown_flush_ms`) and cancels it on expiry; its defer still cancels and
+   joins any active job uncancelably, and the exit code stays 0 unless fatal was
+   set. Cancellation in `std.Io` is delivered only at the first cancelation
+   point, and the controller treats a refused line as finished output rather
+   than an error, so a refused offer re-arms cancellation; otherwise the next
+   queued command's required line would block again. Test: a
+   `12-output-backpressure` transcript case blocks stdout, sends forty
+   `bench 1` commands 25 ms apart and `quit`, and requires exit 0 within
+   1,000 ms. Streamed bench rows are used rather than search output because
+   only required lines block, and forty short reports fill both a 64 KB Linux
+   pipe and the 4 KB Windows pipe plus the queue without filling the command
+   mailbox. On the old session code the case timed out waiting for exit.
+4. **Allocation failure on `go`** (`src/uci/session.zig`). An error from
+   `startActive` propagated out of `handleGo` and ended the session with exit
+   code 1. It is now caught: the engine emits `info string failed go: resource
+   allocation failed` and stays idle. The `fail-next` hooks are consumed by the
+   Hash and Threads resize paths and never reach `Runtime.start`, so the
+   coverage is a session unit test: a failing allocator refuses the next
+   allocation, `go` reports the failure with no active job and epoch zero, and
+   the next `go` starts once allocation succeeds.
+
+Documents: `docs/UCI.md` now states which search lines may coalesce or drop
+(root-move progress only) and which may not (completed iterations, results and
+`bestmove`), the bounded controller wait at shutdown and the `go` allocation
+diagnostic; `ARCHITECTURE.md` and `tests/uci/README.md` follow. The gates in
+the table above were re-run on `13eb275`.
 
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
