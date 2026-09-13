@@ -2735,6 +2735,33 @@ unplayable searched prefix alone, and stopping on a knight-shuffle repetition
 cycle that would otherwise run to capacity. `docs/UCI.md` records the display
 rule and the ponder consequence.
 
+**6.5.15.1 addendum C (2026-09-13): repeated last depth under SMP.** With
+`Threads` above one, a depth-limited search printed its last depth twice.
+Cause: `finishActive` publishes a closing search line when the nodes of the
+last published iteration differ from the result's, but `Runtime.finish` adds
+the helpers' nodes to the result before that comparison, while iteration lines
+count the main worker only; under SMP the counts always differed. Decision
+(maintainer, option B of Fable's framing): decide on the main worker's node
+count captured before aggregation. A depth-limited search never repeats its
+last depth at any thread count; a stopped, timed or node-limited search keeps
+its closing line with the combined nodes, time and `nps`, exactly as at one
+thread, whose output is byte-identical. The iteration lines, `bestmove`, the
+retained ponder line and the variation extension are unchanged. Deciding by
+depth identity alone (option A) was rejected because it would also drop the
+one-thread closing line of every stopped search. Tests: a session unit test
+runs `go depth 6` to completion at `Threads 4` and at `Threads 1` and requires
+exactly one `info depth 6 ` search line (live `currmove` lines excluded)
+followed by `bestmove`; the four-thread case found two such lines on the old
+code. A second test pins a one-thread `go nodes 5000`: the last two search
+depth lines share their depth, the closing one carries `nodes 5000`, and
+`bestmove` follows. Deferred to 1.1.1: the Stockfish-style alternative of
+aggregated nodes in every iteration line, which needs an atomic per-worker node
+counter readable while helpers run. Gates: `zig build test-uci`,
+`zig build test-fast` in ReleaseFast and ReleaseSafe and `zig build lint`
+passed on `d2826d9`; native ReleaseFast `bench 6 1` reads `359,259` by default
+and `642,336` with `-Dselective-core=false`, and the default build reports
+`Manta 1.1.0`.
+
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
 6.5.15 closeout. Their surviving content is owned by the steps above; their

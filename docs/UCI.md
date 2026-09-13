@@ -449,6 +449,13 @@ the newest always survives. A completed result and its required `bestmove` are
 not droppable. Partial or aborted iterations never manufacture PV, score or
 bound authority.
 
+Completed-iteration lines count the main worker's nodes. A search that did not
+end at its depth limit -- stopped, timed or node-limited inside an iteration --
+emits one closing line before `bestmove` that repeats its last completed depth
+and PV with the combined nodes, time and `nps` of all threads, or a depth-0
+score line when no iteration completed. A search that ends at its depth limit
+does not repeat its last depth, at any `Threads` value.
+
 Normal completion is:
 
 ```text

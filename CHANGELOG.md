@@ -43,6 +43,8 @@ All notable user-visible changes to Manta are recorded here. The format follows
   progress. Reported in issue #2.
 - `quit` exits within a bound even when the interface has stopped reading
   output.
+- With more than one thread, a search that reaches its depth limit no longer
+  prints its last depth twice.
 - On Windows the engine no longer dies silently under interfaces that create
   asynchronous pipes, such as fastchess, once its output runs ahead of the
   reader: standard output now follows the inherited handle's I/O mode, as
