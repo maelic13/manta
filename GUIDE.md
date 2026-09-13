@@ -52,18 +52,20 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   the two mate positions (`-88.5%` at depth 10); the ordinary 38-position
   subset moved `+0.21%` and ordinary elapsed time was noise-dominated, so no
   ordinary-position strength is claimed.
-- Phase 6.5 was redirected on 2026-09-12. The measured gap is tree shape:
-  geometric branching `2.225` against `1.88` for the pinned classical
-  Stockfish on the same forty positions, `82.2 M` nodes against `2.6 M` at
-  depth 12. Step 6.5.10 is now one coordinated selective-search core,
-  `MAN-S36`, designed in ADR-0071 and contracted by `SCORE-034`. 6.5.10.2
-  implementation is approved and is next: Opus implements from the ADR, Fable
-  reviews, then one registered 1T SPRT decides. After that verdict the
-  maintainer decides between finishing Phase 6.5 and releasing 1.1.0.
-  Progress: tickets A to D are committed and E is implemented; the first
-  review found the core blind to a quiet-move mate threat that the classical
-  reference sees through first-ply quiescence checks, so ADR-0071 gained
-  component F `core_qs_checks` and ticket E2 precedes F and G.
+- Phase 6.5 was redirected on 2026-09-12 toward one coordinated selective-
+  search core, `MAN-S36`, designed in ADR-0071 and contracted by `SCORE-034`.
+  The core is implemented (tickets A to G plus E2 to E4), reviewed and repaired
+  once: the review found an unverified null cutoff being stored as a full-depth
+  bound, and the fix stores nothing. Post-repair diagnostics on the workstation:
+  geometric branching `1.775` against the off arm's `2.225` and the classical
+  reference's `1.88`, `9.69 M` nodes at depth 12 against `82.2 M`, relative NPS
+  `0.964`, local match `+117.55 +/- 22.68` Elo over 500 games. The 42-engine
+  Colosseum pool (52,491 games) rates the core build `2670` against Manta 1.0.0
+  `2535`, about `360` behind Rarog 2.4.0 and Basilisk 1.10.0 and `586` behind
+  Stockfish 5, and shows no Manta forfeits or crashes. The registered `MAN-S36`
+  SPRT is running on the designated host since 2026-09-13. On H1 the maintainer
+  has directed a consolidation release of Manta 1.1.0; 6.5.11 to 6.5.14 stay
+  open for when development resumes, with expected gains recorded in PLAN.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
@@ -198,14 +200,15 @@ values for Manta's contracts.
   depth pruning, node-level proofs and root aspiration, gated once.
   - [x] **6.5.10.1 — Complete mate windows:** `MAN-S35` non-root window clip;
     production by maintainer exception on a neutral gate.
-  - [ ] **6.5.10.2 — Implement the core:** Opus tickets A to G from the ADR,
-    ending in branching, attribution and a local diagnostic match.
-  - [ ] **6.5.10.3 — Review loop:** Fable authority and legality review with
-    bounded repairs until acceptance is recorded.
-  - [ ] **6.5.10.4 — Registered gate and decision:** One 1T SPRT on the
-    designated host; then continue or release 1.1.0.
+  - [x] **6.5.10.2 — Implement the core:** Tickets A to G plus E2 to E4;
+    branching `1.775`, depth-12 nodes `9.69 M`, local match `+117.55`.
+  - [x] **6.5.10.3 — Review loop:** One authority repair (unverified null
+    cutoffs no longer stored); accepted 2026-09-13.
+  - [ ] **6.5.10.4 — Registered gate and decision:** `MAN-S36` SPRT running
+    on the designated host; on H1, promote and release 1.1.0. Expected
+    `+90` to `+130`.
 - [ ] **6.5.11 — Fit of the accepted core:** Conditional SPSA of the live
-  coordinates and one rounded bake, `MAN-S37`.
+  coordinates and one rounded bake, `MAN-S37`. Expected `+20` to `+50`.
   - [ ] **6.5.11.1 — Coordinate set:** Fable freezes the live coordinates and
     ranges; Opus exposes them through the tune-only registry.
   - [ ] **6.5.11.2 — Fit and bake:** Maintainer-run Weather Factory fit on the
@@ -215,7 +218,8 @@ values for Manta's contracts.
     root statistics they were fitted to; no separate clock candidate.
 - [ ] **6.5.12 — Evaluator calibration:** The king-danger block was never
   fitted and disagrees with the classical reference by hundreds of centipawns
-  in attacking positions; SPSA is necessary but not the whole answer.
+  in attacking positions; SPSA is necessary but not the whole answer. Expected
+  `+70` to `+240` across its tickets, the widest and least certain range.
   - [ ] **6.5.12.1 — King-danger game fit:** Tune-only exposure of the
     nonlinear king-danger scalars, one Weather Factory fit, one bake, one 1T
     SPRT, `MAN-E22`; residual harness before and after.
@@ -230,21 +234,23 @@ values for Manta's contracts.
   - [ ] **6.5.12.5 — Correction history as pruning input:** Producer and
     consumers together, re-derived on the core.
 - [ ] **6.5.13 — Second-order search relationships:** Conditional follow-on
-  packages on the accepted core, each gated alone.
+  packages on the accepted core, each gated alone. Expected `+20` to `+60`.
   - [ ] **6.5.13.1 — Capture history and capture-aware SEE and futility.**
   - [ ] **6.5.13.2 — Singular review on the new reduction surface.**
   - [ ] **6.5.13.3 — ProbCut move cap and typed TT proof reuse.**
   - [ ] **6.5.13.4 — Quiet SEE pruning and upcoming-repetition bound.**
   - [ ] **6.5.13.5 — TT replacement and aging review.**
 - [ ] **6.5.14 — Residual full-search cost and board target:** Profile-owned
-  exact work after the tree freezes; PGO optional.
+  exact work after the tree freezes; PGO optional. Expected `+30` to `+60`,
+  more with a working PGO pipeline.
   - [ ] **6.5.14.1 — Profile and fix the largest residual owner.**
   - [ ] **6.5.14.2 — HCE traversal and pawn-cache inspection.**
   - [ ] **6.5.14.3 — TT cache-line versus capacity and replacement.**
   - [ ] **6.5.14.4 — Six-cell board target on the designated host.**
 - [ ] **6.5.15 — Targets, cumulative gate and release decision:** Depth curve
   against classical Stockfish, board cells, `MAN-C03` against 1.0.0, then
-  continue or release 1.1.0 and freeze.
+  continue or release 1.1.0 and freeze. Maintainer direction of 2026-09-13:
+  release 1.1.0 after the `MAN-S36` gate; the rest resumes later.
   - [ ] **6.5.15.1 — Freeze and final gates.**
   - [ ] **6.5.15.2 — Depth curve and board cells on the designated host.**
   - [ ] **6.5.15.3 — Search and board targets recorded, met or open.**

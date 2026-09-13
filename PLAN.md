@@ -322,6 +322,34 @@ re-derived; never quietly activate a rejected umbrella. The sequence is:
 14 residual cost -> 15 targets, cumulative gate and release decision`
 (resequenced 2026-09-12).
 
+**Expected gains (planning estimates, 2026-09-13).** Anchors: the Colosseum
+pool of 42 engines and 52,491 games at `3+0.03` rates the core build `2670`
+against Manta 1.0.0 `2535`, Rarog 2.4.0 `3030`, Basilisk 1.10.0 `3031`,
+Stockfish 3 `3019` and Stockfish 5 `3256`, all `+/- 9`. The remaining gap to
+the maintainer's best engines is therefore about `360` Elo. The estimates
+below are ranges at 1T `3+0.03` against the head each step starts from; they
+are expectations to be refuted by the registered gates, not claims, and they
+are not additive with certainty because later steps change what earlier fits
+were fitted to.
+
+| Step | Lever | Expected gain | Confidence and basis |
+|---|---|---|---|
+| 6.5.10.4 `MAN-S36` gate | Coordinated selective core | `+90` to `+130` | High: local match `+117 +/- 23`, pool `+136` over 1.0.0 including the earlier `+50` |
+| 6.5.11 core and clock fit | SPSA of about twenty seed coordinates plus six time responses | `+20` to `+50` | Medium: seeds are order-of-magnitude values; fits of a coherent core rarely exceed this |
+| 6.5.12.1 king-danger game fit | Never-fitted nonlinear king danger, `MAN-E22` | `+30` to `+80` | Medium: attacking-cohort residuals of 100 to 765 centipawns against the reference |
+| 6.5.12.2 structural king-attack review | Conditional single change | `0` to `+40` | Low: only if the fit leaves the residual above 150 |
+| 6.5.12.3 and 12.4 refit on a core-generated corpus | Linear terms refitted on labels from a stronger, deeper search | `+40` to `+100` | Medium-low: the label-quality gamble; Rarog measured a `329` Elo class of evaluator deficit against the reference's HCE |
+| 6.5.12.5 correction history as pruning input | Evaluation reliability feeding search | `0` to `+20` | Low: MAN-S25 lost on the old head |
+| 6.5.13 second-order search packages | Capture history, singular review, ProbCut reuse, quiet SEE and repetition, TT aging | `+20` to `+60` total | Low-medium: each package is small and separately gated |
+| 6.5.14 residual cost and board target | Node speed `0.95 M` against `2.3 M` to `2.5 M` for the peers; a realistic `1.3x` to `1.6x` | `+30` to `+60`; PGO `+10` to `+20` more if it works | Medium: throughput gains convert reliably, the size of the gain does not |
+| 6.5.15 targets and cumulative gate | Measurement and decision only | `0` | The `MAN-C03` cumulative gate reports the sum |
+
+Sum of the ranges: `+230` to `+560` beyond the core, against a `360` Elo gap.
+Reaching Rarog 2.4.0 and Basilisk 1.10.0 is plausible only if the evaluator
+steps deliver near their upper ranges; the cheapest way to know before
+committing is the evaluator-isolation measurement (the reference search
+driving Manta's evaluator) named in the 6.5.12 rationale.
+
 **Common implementation ticket (applies to every open step).**
 
 - Read the named code/contract; state the changed producer, transformations,
@@ -2237,6 +2265,20 @@ to fit; and reverse futility, razoring and the count skip all read the
 TT-refined pruning evaluation, which is the accepted MAN-S19 producer and is
 left as is.
 
+**Review 1 closure (Fable, 2026-09-13).** The repair in `22419a8` was read and
+accepted: the unverified branch stores nothing, the verified path is
+unchanged, and the new test's oracle is the store site by producer, verified
+to fail with the call reinstated. The post-repair rows all stay inside their
+targets (branching `1.775`, `9,693,589` nodes at depth 12, relative NPS
+`0.964`, local match `+117.55 +/- 22.68`). Two external readings agree: the
+42-engine Colosseum pool of 52,491 games rates the core build `+136` over
+Manta 1.0.0, and the maintainer's `bench 13` shows the core arm at `1.6 M`
+nodes on position 39 where the off arm needs `31.7 M`. The review loop is
+closed. The maintainer launched the registered `MAN-S36` gate on the
+designated host on 2026-09-13 and directed that, on H1, Phase 6.5 pauses at a
+consolidation release of Manta 1.1.0 (see 6.5.15); 6.5.11 to 6.5.14 stay open
+for when development resumes.
+
 **6.5.10.4 — Registered gate and decision.** Prepare `MAN-S36` per the
 EXPERIMENTS template: candidate `-Dselective-core=true` against the same-source
 baseline, both native ReleaseFast with recorded SHA-256, bench fingerprints
@@ -2459,6 +2501,13 @@ one 1T H1 per retained playing change.
    release Manta 1.1.0 on the accepted head and freeze development. GUIDE
    records the board target, the search target and the strength gate
    separately. Phase 7 still needs its own approval.
+
+**Maintainer direction, 2026-09-13.** Once `MAN-S36` accepts H1, Phase 6.5
+pauses at a consolidation release: promote the core, run the pre-release full
+gates in both arms, then follow `docs/RELEASING.md` to ship Manta 1.1.0. The
+board and search targets and items 2 to 4 above are deferred with 6.5.11 to
+6.5.14, not abandoned; the expected-gains table in the Phase 6.5 introduction
+is the basis for deciding whether and when to resume.
 
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
