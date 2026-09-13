@@ -28,6 +28,11 @@ transcripts, `REQUIREMENTS.md`, and the owning plan entry together.
   second command.
 - Every stdout record is one complete, LF-terminated line. The presenter is the
   only stdout writer and flushes each published record before the next one.
+- Both standard streams are driven in the I/O mode of the inherited handle. On
+  Windows an interface may hand the engine synchronous or asynchronous
+  (overlapped) pipes; the engine queries the mode at startup for stdin and
+  stdout alike, and a handle whose mode cannot be determined is a fatal
+  initialization failure rather than a guess.
 - While the protocol session is active, stdout contains only UCI records and
   the explicitly specified `bench` and `go perft` records. Incidental logging,
   stack traces, and fatal details go to stderr.

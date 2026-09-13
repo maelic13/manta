@@ -246,8 +246,11 @@ queue is full. Required protocol lines, including completed-iteration lines,
 wait for bounded presenter capacity; urgent stop/quit state is still applied
 independently by the input task, and shutdown waits a bounded interval for the
 controller before cancelling it, so a producer blocked behind a stalled reader
-is released. Step 6.1 adds a worker-to-controller progress slot and a separate
-joined completion result; completion and required `bestmove` are never stored
+is released. Both standard streams are opened in the inherited handle's I/O
+mode, queried at startup on Windows, because the threaded I/O has separate
+synchronous and asynchronous paths and a mismatch is unrecoverable inside the
+standard library. Step 6.1 adds a worker-to-controller progress slot and a
+separate joined completion result; completion and required `bestmove` are never stored
 in it. Root moves coalesce in one slot, while completed iterations queue in a
 fixed ring in arrival order, dropping the oldest on overflow. The fixed mailbox
 capacities are unchanged.

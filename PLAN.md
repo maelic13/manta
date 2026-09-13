@@ -2671,11 +2671,39 @@ ReleaseFast `bench 6 1` reads `359,259` by default and `642,336` with
    allocation, `go` reports the failure with no active job and epoch zero, and
    the next `go` starts once allocation succeeds.
 
+5. **Standard output handle mode on Windows** (`src/uci/session.zig`), found
+   by the maintainer's reproduction match after the four repairs above. A
+   100-game fastchess match at `Threads 6`, `Hash 16`, `10+0.1`, concurrency
+   2, between the repaired build and the pre-fix `MAN-S36` core arm showed
+   both arms disconnecting at the same rate (seven against five in 22 games),
+   a few tens of milliseconds into a search and directly after a burst of
+   `currmove` output, with nothing on stderr. Replaying the same positions at
+   six threads through synchronous pipes, three engines at once, never
+   reproduced it in either arm, so the cause was in the host's pipes, not in
+   the positions or the thread count. Fastchess creates its engine pipes with
+   overlapped (asynchronous) I/O. Zig 0.16's `File.stdout()` reports the
+   inherited handle as synchronous, and the threaded I/O's synchronous write
+   path treats a `PENDING` completion from `NtWriteFile` as unreachable; a
+   full asynchronous pipe returns exactly that, so the presenter died inside
+   the standard library the first time fastchess fell behind the engine's
+   output. A ReleaseSafe build under fastchess printed `panic: reached
+   unreachable code` into the engine log, which fastchess merges with stdout.
+   The repair generalizes the existing stdin mode query into `streamingFile`
+   and opens stdout through it, so the writer takes the asynchronous path on
+   an asynchronous handle; a query failure is fatal for the session exactly
+   as it is for stdin. Test: a Windows-only unit test creates an overlapped
+   named pipe and an anonymous pipe and checks that the detector reports the
+   first asynchronous and the second synchronous whatever the constructor
+   assumed. Process evidence: the same fastchess match with the repaired
+   ReleaseSafe and ReleaseFast builds, recorded below. One-thread behaviour is
+   untouched; `bench 6 1` still reads `359,259`.
+
 Documents: `docs/UCI.md` now states which search lines may coalesce or drop
 (root-move progress only) and which may not (completed iterations, results and
-`bestmove`), the bounded controller wait at shutdown and the `go` allocation
-diagnostic; `ARCHITECTURE.md` and `tests/uci/README.md` follow. The gates in
-the table above were re-run on `13eb275`.
+`bestmove`), the bounded controller wait at shutdown, the `go` allocation
+diagnostic and the handle-mode rule for both standard streams;
+`ARCHITECTURE.md` and `tests/uci/README.md` follow. The gates in the table
+above were re-run on `13eb275`; on `7cce340` (repair 5) the fast subsets in ReleaseSafe and ReleaseFast, the UCI process suite, lint and both-arm `bench 6 1` were re-run, and the fastchess reproduction match was repeated: 46 games at `Threads 6`, 15 disconnects for the pre-fix arm, none for the repaired ReleaseSafe and ReleaseFast builds, no panic in the merged engine log.
 
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
