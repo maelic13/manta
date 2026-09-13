@@ -1129,6 +1129,16 @@ fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
     if (!active.done.isSet()) active.done.waitUncancelable(shared.io);
     if (publish) drainSearchProgress(shared, state, active) else discardSearchProgress(shared, active);
     const last_published_iteration_nodes = active.last_published_iteration_nodes;
+    // `finish` adds the helpers' nodes to the result. Published iteration lines
+    // count the main worker only, so whether the search did work after its
+    // last published iteration is decided on the main worker's own count,
+    // captured before aggregation: a depth-limited search then never repeats
+    // its last depth, while a stopped one keeps its closing line with the
+    // combined totals, exactly as at one thread.
+    const main_worker_nodes: ?u64 = switch (active.completion) {
+        .normal => |searched| searched.nodes,
+        .perft, .perft_failed, .bench => null,
+    };
     // `finish` releases the active job, so anything the presenter still needs
     // from it is captured first.
     const bench_header_published = active.bench_header_published;
@@ -1150,7 +1160,7 @@ fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
                 var result = searched;
                 extendResultPrincipalVariation(&result, &state.game.position, &state.hash.table);
                 if (last_published_iteration_nodes == null or
-                    last_published_iteration_nodes.? != result.nodes)
+                    last_published_iteration_nodes.? != main_worker_nodes.?)
                 {
                     _ = offerLine(shared, searchInfo(
                         result,
@@ -1833,6 +1843,103 @@ test "go that cannot allocate its search reports it and leaves the engine idle" 
     try std.testing.expect(state.active != null);
     finishActive(&shared, &state, false);
     try std.testing.expect(state.active == null);
+}
+
+/// Runs one search to completion on a fresh controller and returns every line
+/// the session would present for it, in order.
+fn testSearchOutput(threads: u16, go: []const u8, lines: []Line) !usize {
+    const io = std.testing.io;
+    var state = try ControllerState.init(std.testing.allocator);
+    defer state.deinit();
+    try state.startWorker(io);
+    try state.resizeThreads(threads);
+
+    var command_storage: [command_capacity]protocol.Command = undefined;
+    var output_storage: [output_capacity]OutputEvent = undefined;
+    var command_queue = std.Io.Queue(protocol.Command).init(&command_storage);
+    var output_queue = std.Io.Queue(OutputEvent).init(&output_storage);
+    var shutdown: std.Io.Event = .unset;
+    var controller_done: std.Io.Event = .unset;
+    var presenter_done: std.Io.Event = .unset;
+    var shared: Shared = .{
+        .io = io,
+        .allocator = std.testing.allocator,
+        .version = "test",
+        .transcript_hooks = false,
+        .commands = &command_queue,
+        .output = &output_queue,
+        .shutdown = &shutdown,
+        .controller_done = &controller_done,
+        .presenter_done = &presenter_done,
+    };
+
+    handleGo(&shared, &state, go, 0);
+    try std.testing.expect(state.active != null);
+    finishActive(&shared, &state, true);
+    try std.testing.expect(state.active == null);
+
+    var count: usize = 0;
+    var buffer: [1]OutputEvent = undefined;
+    while (try output_queue.get(io, &buffer, 0) == 1) {
+        if (count == lines.len) return error.TooManyLines;
+        lines[count] = buffer[0].line;
+        count += 1;
+    }
+    return count;
+}
+
+fn isSearchDepthLine(line: []const u8) bool {
+    return std.mem.startsWith(u8, line, "info depth ") and std.mem.indexOf(u8, line, " currmove ") == null;
+}
+
+test "a depth-limited search publishes its last depth once at any thread count" {
+    // Helpers add their nodes to the result only when the job finishes, so the
+    // closing-line decision compares the main worker's own count; a search
+    // that reached its depth limit has nothing left to report.
+    for ([_]u16{ 4, 1 }) |threads| {
+        var lines: [output_capacity]Line = undefined;
+        const count = try testSearchOutput(threads, "go depth 6", &lines);
+        var depth_six: usize = 0;
+        var last_depth_six: usize = 0;
+        for (lines[0..count], 0..) |*line, index| {
+            if (isSearchDepthLine(line.slice()) and std.mem.startsWith(u8, line.slice(), "info depth 6 ")) {
+                depth_six += 1;
+                last_depth_six = index;
+            }
+        }
+        try std.testing.expectEqual(@as(usize, 1), depth_six);
+        try std.testing.expect(count != 0);
+        try std.testing.expect(last_depth_six < count - 1);
+        try std.testing.expect(std.mem.startsWith(u8, lines[count - 1].slice(), "bestmove "));
+    }
+}
+
+test "a stopped one-thread search keeps its closing line with the final totals" {
+    // A node-limited search ends inside an iteration: after the last completed
+    // depth, the closing line repeats that depth with the nodes actually
+    // searched, and `bestmove` follows. Live root-move lines may interleave.
+    var lines: [output_capacity]Line = undefined;
+    const count = try testSearchOutput(1, "go nodes 5000", &lines);
+    try std.testing.expect(count != 0);
+    try std.testing.expect(std.mem.startsWith(u8, lines[count - 1].slice(), "bestmove "));
+    var depth_lines: [2][]const u8 = undefined;
+    var found: usize = 0;
+    var index = count - 1;
+    while (index != 0 and found < depth_lines.len) {
+        index -= 1;
+        const line = lines[index].slice();
+        if (isSearchDepthLine(line)) {
+            depth_lines[found] = line;
+            found += 1;
+        }
+    }
+    try std.testing.expectEqual(depth_lines.len, found);
+    const closing = depth_lines[0];
+    const iteration = depth_lines[1];
+    const depth_end = std.mem.indexOfScalarPos(u8, iteration, "info depth ".len, ' ').?;
+    try std.testing.expect(std.mem.startsWith(u8, closing, iteration[0 .. depth_end + 1]));
+    try std.testing.expect(std.mem.indexOf(u8, closing, " nodes 5000 ") != null);
+    try std.testing.expect(std.mem.indexOf(u8, iteration, " nodes 5000 ") == null);
 }
 
 test "streaming files follow the inherited handle's I/O mode" {
