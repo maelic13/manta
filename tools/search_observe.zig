@@ -655,15 +655,16 @@ test "fixed observation suite has complete behavior-neutral accounting" {
     // PERF-006/QUAL-013: the offline observer must describe every searched
     // move and cutoff without changing legal root/PV evidence or node work.
     //
-    // This suite is a contract about the production configuration, in both
-    // directions: every accepted stage must be reached on the fixed twelve
+    // This suite is a contract about the MAN-S35 configuration, in both
+    // directions: every stage it accepted must be reached on the fixed twelve
     // cases, and every rejected or default-off candidate must stay silent.
-    // Neither half describes the Step-6.5.10 umbrella, which deliberately
-    // changes internal iterative reduction, adds a root window and narrows the
-    // tree far enough that a stage like a verified ProbCut need not appear in
-    // twelve fixed cases. The core arm's own accounting is asserted by the
-    // substrate tests and by the ticket-G attribution table; weakening the
-    // assertions here would remove the protection the accepted head has.
+    // Neither half describes the Step-6.5.10 core, which is now production and
+    // deliberately changes internal iterative reduction, adds a root window
+    // and narrows the tree far enough that a stage like a verified ProbCut need
+    // not appear in twelve fixed cases. The suite therefore runs only with
+    // `-Dselective-core=false`; the core's own accounting is asserted by the
+    // substrate tests. Re-deriving these expectations for the core is review
+    // work, and weakening them here would only hide that it has not been done.
     if (search_build_options.selective_core) return error.SkipZigTest;
     var hash = try manta.engine.runtime.HashResource.init(std.testing.allocator, 1);
     defer hash.deinit(std.testing.allocator);

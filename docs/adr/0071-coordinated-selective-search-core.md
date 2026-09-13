@@ -2,6 +2,11 @@
 
 ## Status
 
+**Accepted and production since 2026-09-13.** The registered 1T `MAN-S36` SPRT
+on the designated host accepted H1: 670 games, W/L/D `283/80/307`, `+108.68 +/- 17.86` Elo (`+170.97 +/- 26.31` nElo), LLR `2.95` on normalized `[1,5]`, LOS `100%`, draw ratio `34.93%`, pairs ratio `5.41`, pentanomial `[0,34,117,131,53]`, no anomaly of any kind. The umbrella defaults on,
+production `bench 6 1` is `359,259`, and `-Dselective-core=false` reconstructs
+the superseded MAN-S35 head at `642,336`.
+
 Accepted for implementation by maintainer decision on 2026-09-12, against
 production head `596159e` (MAN-S35, fingerprint `642,336`). It redirects the
 remainder of Phase 6.5 toward one measurable outcome: a large registered

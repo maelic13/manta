@@ -256,6 +256,9 @@ test "diagnostics enabled and disabled preserve the complete search fingerprint"
 }
 
 test "aspiration is ablatable and publishes only exact completed root evidence" {
+    // Pre-core ablation: this switch is superseded by ADR-0071's production
+    // core, which ignores it, so both arms pin the umbrella off and keep
+    // testing the accepted mechanism this test was written against.
     // SCORE-029/QUAL-014: a narrow root window changes selective search work
     // and may change its score/PV. Each arm must still publish an exact result,
     // a legal PV and a restored root, and retries must not train confidence.
@@ -283,7 +286,7 @@ test "aspiration is ablatable and publishes only exact completed root evidence" 
         var disabled_control: search.types.NeverStop = .{};
 
         const enabled = search.baseline.runWithFeatures(
-            .{ .aspiration = true },
+            .{ .selective_core = false, .aspiration = true },
             &enabled_position,
             enabled_harness.binding(),
             .{ .depth = 4 },
@@ -294,7 +297,7 @@ test "aspiration is ablatable and publishes only exact completed root evidence" 
             &enabled_counters,
         );
         const disabled = search.baseline.runWithFeatures(
-            .{ .aspiration = false },
+            .{ .selective_core = false, .aspiration = false },
             &disabled_position,
             disabled_harness.binding(),
             .{ .depth = 4 },
@@ -348,6 +351,9 @@ test "decisive root evidence is never narrowed by aspiration" {
 }
 
 test "verified null move prunes non-pawn positions and excludes pawn-only zugzwang" {
+    // Pre-core ablation: this switch is superseded by ADR-0071's production
+    // core, which ignores it, so both arms pin the umbrella off and keep
+    // testing the accepted mechanism this test was written against.
     // Null-move evidence is a lower bound only after a legal-position search
     // verifies the fail-high. Pawn-only endings are excluded because passing
     // can be worse than moving there, violating the null-move observation.
@@ -365,7 +371,7 @@ test "verified null move prunes non-pawn positions and excludes pawn-only zugzwa
     var rich_counters: search.diagnostics.Counters = .{};
     var control: search.types.NeverStop = .{};
     const rich = search.baseline.runWithFeatures(
-        .{ .null_move = true, .dynamic_lmr = false, .shallow_selectivity = false, .main_selectivity_sync = true },
+        .{ .selective_core = false, .null_move = true, .dynamic_lmr = false, .shallow_selectivity = false, .main_selectivity_sync = true },
         &rich_position,
         rich_harness.binding(),
         .{ .depth = 4 },
@@ -394,7 +400,7 @@ test "verified null move prunes non-pawn positions and excludes pawn-only zugzwa
     var pawn_harness: Harness = .{};
     var pawn_counters: search.diagnostics.Counters = .{};
     const pawn = search.baseline.runWithFeatures(
-        .{ .null_move = true, .dynamic_lmr = false, .shallow_selectivity = false, .main_selectivity_sync = true },
+        .{ .selective_core = false, .null_move = true, .dynamic_lmr = false, .shallow_selectivity = false, .main_selectivity_sync = true },
         &pawn_position,
         pawn_harness.binding(),
         .{ .depth = 6 },
@@ -456,6 +462,9 @@ test "verified null move preserves tactical and mate canaries" {
 }
 
 test "late quiet reductions are ablatable and preserve root publication contracts" {
+    // Pre-core ablation: this switch is superseded by ADR-0071's production
+    // core, which ignores it, so both arms pin the umbrella off and keep
+    // testing the accepted mechanism this test was written against.
     // A reduced fail-low is speculative only. Any alpha-raising probe must be
     // re-searched before it can affect an exact root result, cutoff, or PV.
     const fen_text = "r2qr1k1/p4ppp/1pn1bn2/2b1p3/4P3/1BN1BN2/PPP2PPP/R2QR1K1 b - - 6 10";
@@ -477,7 +486,7 @@ test "late quiet reductions are ablatable and preserve root publication contract
     var disabled_control: search.types.NeverStop = .{};
 
     const enabled = search.baseline.runWithFeatures(
-        .{ .lmr = true, .shallow_selectivity = false },
+        .{ .selective_core = false, .lmr = true, .shallow_selectivity = false },
         &enabled_position,
         enabled_harness.binding(),
         .{ .depth = 5 },
@@ -488,7 +497,7 @@ test "late quiet reductions are ablatable and preserve root publication contract
         &enabled_counters,
     );
     const disabled = search.baseline.runWithFeatures(
-        .{ .lmr = false, .shallow_selectivity = false },
+        .{ .selective_core = false, .lmr = false, .shallow_selectivity = false },
         &disabled_position,
         disabled_harness.binding(),
         .{ .depth = 5 },
@@ -516,6 +525,9 @@ test "late quiet reductions are ablatable and preserve root publication contract
 }
 
 test "qsearch SEE rejects only losing nonchecking captures" {
+    // Pre-core ablation: this switch is superseded by ADR-0071's production
+    // core, which ignores it, so both arms pin the umbrella off and keep
+    // testing the accepted mechanism this test was written against.
     // SEE is an eligibility oracle only: check evasions, promotions, and
     // checking captures retain full search authority, while every rejected
     // capture is made and unmade before its checking status is decided.
@@ -539,6 +551,7 @@ test "qsearch SEE rejects only losing nonchecking captures" {
 
     const enabled = search.baseline.runWithFeatures(
         .{
+            .selective_core = false,
             .qsearch_see = true,
             .shallow_selectivity = false,
             .search_evidence_observation = search.types.search_evidence_observation_compiled,
@@ -553,7 +566,7 @@ test "qsearch SEE rejects only losing nonchecking captures" {
         &enabled_counters,
     );
     const disabled = search.baseline.runWithFeatures(
-        .{ .qsearch_see = false, .shallow_selectivity = false },
+        .{ .selective_core = false, .qsearch_see = false, .shallow_selectivity = false },
         &disabled_position,
         disabled_harness.binding(),
         .{ .depth = 5 },
@@ -591,6 +604,9 @@ test "qsearch SEE rejects only losing nonchecking captures" {
 }
 
 test "frontier reverse futility is ablatable and keeps speculative evidence out of TT" {
+    // Pre-core ablation: this switch is superseded by ADR-0071's production
+    // core, which ignores it, so both arms pin the umbrella off and keep
+    // testing the accepted mechanism this test was written against.
     // A high static score at a depth-one zero-window node may omit ordinary
     // move expansion only as speculative lower-bound evidence. The root still
     // publishes an exact legal result, and pawn-only positions never enter the
@@ -615,6 +631,7 @@ test "frontier reverse futility is ablatable and keeps speculative evidence out 
 
     const enabled = search.baseline.runWithFeatures(
         .{
+            .selective_core = false,
             .shallow_selectivity = true,
             .reverse_futility = true,
             .quiet_futility = false,
@@ -632,6 +649,7 @@ test "frontier reverse futility is ablatable and keeps speculative evidence out 
     );
     const disabled = search.baseline.runWithFeatures(
         .{
+            .selective_core = false,
             .shallow_selectivity = true,
             .reverse_futility = false,
             .quiet_futility = false,
@@ -678,6 +696,7 @@ test "frontier reverse futility is ablatable and keeps speculative evidence out 
     var pawn_control: search.types.NeverStop = .{};
     _ = search.baseline.runWithFeatures(
         .{
+            .selective_core = false,
             .shallow_selectivity = true,
             .reverse_futility = true,
             .quiet_futility = false,
@@ -698,6 +717,9 @@ test "frontier reverse futility is ablatable and keeps speculative evidence out 
 }
 
 test "shallow selectivity family is ablatable and preserves legal root publication" {
+    // Pre-core ablation: this switch is superseded by ADR-0071's production
+    // core, which ignores it, so both arms pin the umbrella off and keep
+    // testing the accepted mechanism this test was written against.
     // Step-5.1.4.3: quiet futility, late-move pruning and main-search SEE
     // pruning share one static/improving evidence model and never manufacture
     // TT, PV or terminal authority; disabling the family restores MAN-S10.
@@ -720,7 +742,7 @@ test "shallow selectivity family is ablatable and preserves legal root publicati
     var disabled_control: search.types.NeverStop = .{};
 
     const enabled = search.baseline.runWithFeatures(
-        .{ .shallow_selectivity = true, .main_selectivity_sync = true },
+        .{ .selective_core = false, .shallow_selectivity = true, .main_selectivity_sync = true },
         &enabled_position,
         enabled_harness.binding(),
         .{ .depth = 6 },
@@ -731,7 +753,7 @@ test "shallow selectivity family is ablatable and preserves legal root publicati
         &enabled_counters,
     );
     const disabled = search.baseline.runWithFeatures(
-        .{ .shallow_selectivity = false },
+        .{ .selective_core = false, .shallow_selectivity = false },
         &disabled_position,
         disabled_harness.binding(),
         .{ .depth = 6 },
@@ -788,7 +810,7 @@ test "shallow selectivity family is ablatable and preserves legal root publicati
     var pawn_counters: search.diagnostics.Counters = .{};
     var pawn_control: search.types.NeverStop = .{};
     const pawn_result = search.baseline.runWithFeatures(
-        .{ .shallow_selectivity = true },
+        .{ .selective_core = false, .shallow_selectivity = true },
         &pawn_position,
         pawn_harness.binding(),
         .{ .depth = 6 },
@@ -1423,6 +1445,50 @@ test "cancellation during a core aspiration retry keeps the last completed itera
             );
         }
     }
+}
+
+test "production reverse futility and razoring keep speculative evidence out of TT" {
+    // The authority half of the pre-core reverse-futility ablation test, which
+    // now pins the umbrella off, restated for the production core so that
+    // pinning it does not drop the property. A static cutoff is a claim about
+    // this node's evaluation, not a searched result, so under ADR-0070 it may
+    // end its node but may never be stored as reusable table authority.
+    //
+    // The oracle is the store site by producer, as in the null-move test
+    // below: whatever branch produced it, nothing labelled
+    // `speculative_cutoff` may enter the table. Non-vacuity: reverse futility
+    // actually cut somewhere in the corpus.
+    const producer_index = @intFromEnum(search.types.Provenance.speculative_cutoff);
+    const rfp_index = @intFromEnum(search.diagnostics.PruneCause.reverse_futility);
+    var cuts: u64 = 0;
+    for (core_positions) |fen_text| {
+        var root: chess.position.PositionState = .{};
+        var position = try chess.fen.parse(fen_text, &root);
+        const original_key = position.current.key;
+        var harness: Harness = .{};
+        var storage: [4096]search.tt.Cluster = undefined;
+        var table = search.tt.Table.init(&storage);
+        var ordering: search.ordering.State = .{};
+        var counters: search.diagnostics.Counters = .{};
+        var control: search.types.NeverStop = .{};
+        const result = search.baseline.runWithFeatures(
+            .{},
+            &position,
+            harness.binding(),
+            .{ .depth = 7 },
+            &control,
+            &harness.thread,
+            &table,
+            &ordering,
+            &counters,
+        );
+        try std.testing.expectEqual(@as(u64, 0), counters.tt_stores_by_producer[producer_index]);
+        cuts += counters.prunes_by_cause[rfp_index];
+        try expectLegalPv(fen_text, result.completed.?.pv.slice());
+        try std.testing.expect(chess.state.isConsistent(&position));
+        try std.testing.expectEqual(original_key, position.current.key);
+    }
+    try std.testing.expect(cuts != 0);
 }
 
 test "an unverified core null cutoff leaves no table authority behind" {
@@ -2127,6 +2193,9 @@ test "singular exclusion cancellation restores worker and board state" {
 }
 
 test "balanced quiet outcomes feed ordering and conservative LMR confidence" {
+    // Pre-core ablation: this switch is superseded by ADR-0071's production
+    // core, which ignores it, so both arms pin the umbrella off and keep
+    // testing the accepted mechanism this test was written against.
     // A full-authority quiet cutoff rewards its move and penalizes only the
     // earlier quiet alternatives that were actually searched. Net-positive
     // history may protect a later quiet from reduction, but it never creates
@@ -2151,6 +2220,7 @@ test "balanced quiet outcomes feed ordering and conservative LMR confidence" {
 
     const candidate = search.baseline.runWithFeatures(
         .{
+            .selective_core = false,
             .balanced_history = true,
             .history_lmr = true,
             .qsearch_see = false,
@@ -2168,6 +2238,7 @@ test "balanced quiet outcomes feed ordering and conservative LMR confidence" {
     );
     const legacy = search.baseline.runWithFeatures(
         .{
+            .selective_core = false,
             .balanced_history = false,
             .history_lmr = false,
             .qsearch_see = false,

@@ -4426,14 +4426,27 @@ fn exclusionProvesAtLeast(result: NodeValue, threshold: i32) bool {
 test "depth-authority synchronization consumes only typed expectation and TT provenance" {
     // SCORE-022: missing move evidence may reduce a mature PV or cut node, but
     // check, root, exclusion and any legal TT move preserve the full horizon.
-    try std.testing.expect(internalIterativeReductionEligible(.{}, 5, 1, .principal, false, false, false));
-    try std.testing.expect(internalIterativeReductionEligible(.{ .depth_authority_sync = true }, 7, 1, .cut, false, false, false));
-    try std.testing.expect(!internalIterativeReductionEligible(.{ .depth_authority_sync = false }, 7, 1, .cut, false, false, false));
-    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .all, false, false, false));
-    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 0, .cut, false, false, false));
-    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .cut, true, false, false));
-    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .cut, false, true, false));
-    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .cut, false, false, true));
+    // That is the pre-core rule, live only with ADR-0071's umbrella off, so
+    // these cases name that configuration rather than the production default.
+    try std.testing.expect(internalIterativeReductionEligible(.{ .selective_core = false }, 5, 1, .principal, false, false, false));
+    try std.testing.expect(internalIterativeReductionEligible(.{ .selective_core = false, .depth_authority_sync = true }, 7, 1, .cut, false, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{ .selective_core = false, .depth_authority_sync = false }, 7, 1, .cut, false, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{ .selective_core = false }, 7, 1, .all, false, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{ .selective_core = false }, 7, 0, .cut, false, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{ .selective_core = false }, 7, 1, .cut, true, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{ .selective_core = false }, 7, 1, .cut, false, true, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{ .selective_core = false }, 7, 1, .cut, false, false, true));
+
+    // ADR-0071 D.4, the production rule: every expectation from depth four,
+    // with the same root, check, TT-move and exclusion exemptions.
+    inline for (.{ .principal, .cut, .all }) |expectation| {
+        try std.testing.expect(internalIterativeReductionEligible(.{}, 4, 1, expectation, false, false, false));
+        try std.testing.expect(!internalIterativeReductionEligible(.{}, 3, 1, expectation, false, false, false));
+    }
+    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 0, .all, false, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .all, true, false, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .all, false, true, false));
+    try std.testing.expect(!internalIterativeReductionEligible(.{}, 7, 1, .all, false, false, true));
 
     const chess_move = chess.move.Move.normal(.e2, .e4);
     const ordinary = score.Score.fromOrdinary(300).?;

@@ -13,9 +13,9 @@ blocked until all of Phase 6.5, including every retained candidate and evidence
 closeout below, is complete. The production
 engine combines MAN-E19 classical evaluation, MAN-S29 search parameters,
 MAN-T05 integrated clock parameters, MAN-S30 live-history move ordering,
-MAN-S34 tactical-only non-check qsearch generation and MAN-S35 complete mate
-windows.
-One-thread depth-6 bench is `642,336` nodes. The release configuration supports portable 64-bit Windows x86-64,
+MAN-S34 tactical-only non-check qsearch generation, MAN-S35 complete mate
+windows and the MAN-S36 coordinated selective-search core.
+One-thread depth-6 bench is `359,259` nodes. The release configuration supports portable 64-bit Windows x86-64,
 Linux x86-64/ARM64 and macOS x86-64/ARM64 artifacts.
 
 No coding agent may start a Phase-6.5 implementation step, Phase 7, a game
@@ -2292,6 +2292,49 @@ reconciled. H0 or the cap does not promote: one ablation cycle in the ADR's
 order is permitted, then a re-plan. After the verdict the maintainer records
 in 6.5.15 whether Phase 6.5 continues through 6.5.11 to 6.5.14 or Manta
 releases 1.1.0 on the accepted head and freezes.
+
+**6.5.10.4 record (2026-09-13): H1, promoted.** The maintainer ran the
+registered `MAN-S36` SPRT on the designated host from the prepared arms:
+candidate SHA-256
+`90563AB69AAE2048E465894E61223C97D5FA4CBA25892979136C23BA6EEFA818` (core,
+bench `359,259`) against baseline
+`63A30FD5386EAFDE9FA010A93C62F5B2D267071B90E6226999F92F4429435510` (bench
+`642,336`), both from `22419a8`. It accepted H1 after 670 games, W/L/D `283/80/307`, `+108.68 +/- 17.86` Elo (`+170.97 +/- 26.31` nElo), LLR `2.95` on normalized `[1,5]`, LOS `100%`, draw ratio `34.93%`, pairs ratio `5.41`, pentanomial `[0,34,117,131,53]`, no anomaly of any kind.
+Artifacts: `tools/results/sprt_MAN-S36_vs_MAN-S35_20260913_093208.{log,pgn,manifest.txt}`
+and the two copied engine manifests. The result sits inside PLAN's prospective
+expectation of `+90` to `+130` and agrees with both local diagnostic matches.
+
+Promotion applied as the handoff specified. `-Dselective-core` and
+`features.selective_core` default on; production `bench 6 1` is `359,259`
+(geomean EBF `4.228`, upper median `5,905`, top share `16.8%`), and
+`-Dselective-core=false` reconstructs `642,336` exactly. Every archived
+reconstruction stays pinned: `runArchived` pins the umbrella off for the
+MAN-S19-era totals, and the direct reconstructions of `799,610`, `775,451`,
+MAN-S33 and MAN-R02 pin it explicitly, because routing them through
+`runArchived` would also swap their picker and parameter vector. A new test
+pins the umbrella off to reconstruct MAN-S35 at `642,336`.
+
+Tests that read `.{}` as the pre-core head were updated by pinning, never by
+changing an assertion. Seven substrate tests ablate pre-core switches that the
+core supersedes and now ignores (MAN-R02 aspiration, the accepted LMR, qsearch
+SEE, verified null move, the shallow-selectivity family, frontier reverse
+futility, balanced history); both arms of each pin the umbrella off. The
+reverse-futility test's authority half -- speculative cutoffs never reach the
+table -- is restated for production in a new test, so pinning did not drop it.
+In `tests/search_qualification.zig` only the WAC.001 depth-3 case pins the
+umbrella off, per ADR-0071's rule that depth 3 is an off-arm property; mate in
+one, the hanging queen, KQK, KBNK and WAC.001 at depth 5 keep running on
+production. The in-file IIR test now names the pre-core rule explicitly and
+asserts ADR-0071 D.4's production rule beside it.
+
+One coverage change is recorded rather than hidden. `tools/search_observe.zig`'s
+twelve-case accounting suite describes the MAN-S35 configuration and skips
+under the umbrella, so it no longer runs in the default build; it still runs
+with `-Dselective-core=false`. Re-deriving which stages the production core must
+reach on those twelve cases is review work, not a promotion edit.
+
+Per the maintainer's direction of 2026-09-13, Phase 6.5 pauses at the Manta
+1.1.0 consolidation release; the pre-release full gates are recorded in 6.5.15.
 
 #### 6.5.11 — Fit of the accepted core (conditional, expected)
 

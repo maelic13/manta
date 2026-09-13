@@ -14,8 +14,9 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   whole Phase 6.5 candidate and evidence sequence is complete.
 - Production is the MAN-E19 HCE, MAN-S29 search fit, MAN-T05 clock fit,
   MAN-S30 live-history move ordering, MAN-S34 tactical-only non-check qsearch
-  generation and MAN-S35 complete mate windows. The deterministic one-thread
-  depth-6 fingerprint is `642,336` nodes.
+  generation, MAN-S35 complete mate windows and the MAN-S36 coordinated
+  selective-search core. The deterministic one-thread depth-6 fingerprint is
+  `359,259` nodes; `-Dselective-core=false` reconstructs MAN-S35 at `642,336`.
 - Step 6.5.4 is complete. On the designated 5950X the six-cell board ratio is
   `0.638`; depth 13 hit the frozen mate-position timeout, and routine bench 13
   exceeded 30 seconds. These are open deficits, not accepted targets.
@@ -63,9 +64,12 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   Colosseum pool (52,491 games) rates the core build `2670` against Manta 1.0.0
   `2535`, about `360` behind Rarog 2.4.0 and Basilisk 1.10.0 and `586` behind
   Stockfish 5, and shows no Manta forfeits or crashes. The registered `MAN-S36`
-  SPRT is running on the designated host since 2026-09-13. On H1 the maintainer
-  has directed a consolidation release of Manta 1.1.0; 6.5.11 to 6.5.14 stay
-  open for when development resumes, with expected gains recorded in PLAN.
+  SPRT on the designated host **accepted H1** after 670 games at
+  `+108.68 +/- 17.86` Elo (`+170.97 +/- 26.31` nElo), LLR `2.95`, with no
+  anomaly, and the core is production. Per the maintainer's direction Phase 6.5
+  now pauses at a consolidation release of Manta 1.1.0: the pre-release full
+  gates run next, then `docs/RELEASING.md`. 6.5.11 to 6.5.14 stay open for when
+  development resumes, with expected gains recorded in PLAN.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
@@ -195,7 +199,7 @@ values for Manta's contracts.
   history/TT/move-evidence model for ordering and selective search, behavior-
   neutral and default-off. Three authority repairs closed; the fourth Astra
   High review accepted the authority and lifetime boundaries.
-- [ ] **6.5.10 — Coordinated selective-search core:** One package, `MAN-S36`,
+- [x] **6.5.10 — Coordinated selective-search core:** One package, `MAN-S36`,
   per ADR-0071: informative history, full-coverage log reductions, prospective-
   depth pruning, node-level proofs and root aspiration, gated once.
   - [x] **6.5.10.1 — Complete mate windows:** `MAN-S35` non-root window clip;
@@ -204,9 +208,9 @@ values for Manta's contracts.
     branching `1.775`, depth-12 nodes `9.69 M`, local match `+117.55`.
   - [x] **6.5.10.3 — Review loop:** One authority repair (unverified null
     cutoffs no longer stored); accepted 2026-09-13.
-  - [ ] **6.5.10.4 — Registered gate and decision:** `MAN-S36` SPRT running
-    on the designated host; on H1, promote and release 1.1.0. Expected
-    `+90` to `+130`.
+  - [x] **6.5.10.4 — Registered gate and decision:** `MAN-S36` accepted H1
+    after 670 games at `+108.68 +/- 17.86` Elo, inside the expected `+90` to
+    `+130`; promoted to production at `359,259`.
 - [ ] **6.5.11 — Fit of the accepted core:** Conditional SPSA of the live
   coordinates and one rounded bake, `MAN-S37`. Expected `+20` to `+50`.
   - [ ] **6.5.11.1 — Coordinate set:** Fable freezes the live coordinates and

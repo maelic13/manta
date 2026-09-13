@@ -46,7 +46,8 @@ one identical-binary calibration before the next registered candidate.
 | Move ordering | MAN-S30 live-history staged picker | Accepted H1 over MAN-S29 after 8,752 games at `+13.19 +/- 7.28` nElo; ADR-0035 |
 | Qsearch generation | MAN-S34 tactical-only non-check generation | Accepted H1 over MAN-S30 after 1,614 games at `+59.77 +/- 16.95` nElo without anomaly; ADR-0069 |
 | Mate windows | MAN-S35 complete non-root window clip | Neutral registered gate stopped at 1,998 games (`+4.00 +/- 9.32` Elo); production by documented maintainer exception, not H1 |
-| Deterministic identity | One-thread depth-6 bench | `642,336` nodes |
+| Selective search | MAN-S36 coordinated selective-search core | Accepted H1 over MAN-S35 after 670 games at `+108.68 +/- 17.86` Elo (`+170.97 +/- 26.31` nElo) without anomaly; ADR-0071 |
+| Deterministic identity | One-thread depth-6 bench | `359,259` nodes |
 
 These measurements establish promotion decisions under their registered
 conditions. Small decisive samples, especially cumulative and 4T-versus-1T
@@ -78,6 +79,7 @@ Raw cumulative evidence is retained under
 | `MAN-S30` | Live-history staged move picker |
 | `MAN-S34` | Tactical-only non-check qsearch generation with a complete legal terminal witness |
 | `MAN-S35` | Complete non-root mate windows, retained by maintainer exception on a neutral gate |
+| `MAN-S36` | Coordinated selective-search core: informative history, log-log reductions, prospective-depth omission, node-level proofs, root aspiration and first-ply quiescence checks |
 
 Acceptance of a bundle does not establish that every included term helped.
 Frozen baselines exist only for reconstruction and do not remain runtime
@@ -111,12 +113,26 @@ ordinary non-check qsearch nodes and generates the disjoint quiet subset solely
 when needed to distinguish quiet mobility from stalemate. The trusted harness
 boundary was unchanged, so setup-only validation replaced a pilot.
 
-`MAN-S36` is registered and **not yet run**. Step 6.5.10 replaced the whole
-selective-search policy with one coordinated core designed in ADR-0071 and
-contracted by `SCORE-034`: one informative quiet history, a compile-time
-log-log reduction surface, prospective-depth move omission, node-level forward
-proofs, a root aspiration window and direct quiet checks in the first
-quiescence ply, behind one default-off umbrella with six ablation switches.
+`MAN-S36` **accepted H1 and is production.** The registered 1T SPRT on the
+designated host stopped at 670 games with W/L/D `283/80/307`,
+`+108.68 +/- 17.86` Elo (`+170.97 +/- 26.31` nElo), LLR `2.95` on normalized
+`[1,5]`, LOS `100%`, draw ratio `34.93%`, pairs ratio `5.41`, pentanomial
+`[0,34,117,131,53]` and no anomaly of any kind. Artifacts are
+`tools/results/sprt_MAN-S36_vs_MAN-S35_20260913_093208.{log,pgn,manifest.txt}`
+with the two copied engine manifests; the arms are core
+`90563AB69AAE2048E465894E61223C97D5FA4CBA25892979136C23BA6EEFA818` (bench
+`359,259`) and baseline
+`63A30FD5386EAFDE9FA010A93C62F5B2D267071B90E6226999F92F4429435510` (bench
+`642,336`). The promotion licenses the package as a whole, not any of its six
+components, which were never gated separately.
+
+Step 6.5.10 replaced the whole selective-search policy with one coordinated core
+designed in ADR-0071 and contracted by `SCORE-034`: one informative quiet
+history, a compile-time log-log reduction surface, prospective-depth move
+omission, node-level forward proofs, a root aspiration window and direct quiet
+checks in the first quiescence ply, behind one umbrella with six ablation
+switches. The umbrella now defaults on and switching it off reconstructs
+MAN-S35 exactly.
 The step was motivated by measured tree shape rather than by a feature list:
 at head `596159e` Manta needed a geometric branching factor of `2.225` per ply
 against `1.88` for the pinned classical reference, and `82.2 M` nodes at depth
@@ -137,9 +153,9 @@ Elo and then `+117.55 +/- 22.68` Elo, both with zero anomalies and every game
 ended by a rule of chess. **Those matches authorize nothing.** They are fixed
 size, have no stopping rule, ran on the development machine rather than the
 designated host, and are diagnostics that told the implementer the package was
-worth registering. Only the 1T SPRT below can promote it, and the two
-candidates one review has already repaired are a reminder that node savings and
-a local Elo estimate are not the same evidence.
+worth registering. The registered gate is what promoted it; the local
+estimates happened to land close to its `+108.68`, which is agreement, not a
+substitute.
 
 `MAN-S35` is production **by an explicit maintainer exception on a neutral gate,
 not by an H1 verdict**. The registered `[1,5]` SPRT was stopped by the maintainer
@@ -201,7 +217,7 @@ their original step labels; new numbered work lives in PLAN.
 
 | ID | Candidate and hypothesis | Registered gate | Result |
 |---|---|---|---|
-| `MAN-S36` | Phase-6.5.10 coordinated selective-search core against production MAN-S35. Manta's tree is roughly `2.2` times wider per ply where the pinned classical reference is `1.9`, and the accepted selectivity was gated one isolated mechanism at a time on heads that lacked the rest; replacing it with one coordinated system -- informative history carrying a log-log reduction surface, omission read at the depth a move will actually be searched, node-level forward proofs that trust their own margins, a failed-side root window and direct quiet checks at the first quiescence ply -- will narrow the tree enough to gain material strength at equal time without losing a forcing line. | Candidate A enables only `-Dselective-core=true` against the same-source baseline, both native ReleaseFast from commit `22419a8`; 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2` superseded by `natural-v1` game end (ADR-0071 requires no adjudication), normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed recorded at launch; completed time forfeits and every engine/protocol/affinity fault are fatal; setup-only preflight, no pilot | Registered and preflighted, not yet run |
+| `MAN-S36` | Phase-6.5.10 coordinated selective-search core against production MAN-S35. Manta's tree is roughly `2.2` times wider per ply where the pinned classical reference is `1.9`, and the accepted selectivity was gated one isolated mechanism at a time on heads that lacked the rest; replacing it with one coordinated system -- informative history carrying a log-log reduction surface, omission read at the depth a move will actually be searched, node-level forward proofs that trust their own margins, a failed-side root window and direct quiet checks at the first quiescence ply -- will narrow the tree enough to gain material strength at equal time without losing a forcing line. | Candidate A enables only `-Dselective-core=true` against the same-source baseline, both native ReleaseFast from commit `22419a8`; 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2` superseded by `natural-v1` game end (ADR-0071 requires no adjudication), normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed recorded at launch; completed time forfeits and every engine/protocol/affinity fault are fatal; setup-only preflight, no pilot | Accepted H1 after 670 games, W/L/D `283/80/307`, `+108.68 +/- 17.86` Elo (`+170.97 +/- 26.31` nElo), LLR `2.95`, LOS `100%`, draw ratio `34.93%`, pairs ratio `5.41`, pentanomial `[0,34,117,131,53]`, no anomaly; promoted to production |
 | `MAN-S35` | Phase-6.5.10.1 complete non-root mate windows against production MAN-S34. Searching every non-root node with its window clipped to the mate distances the rules still allow, rather than only returning when the requested window already lies outside them, will avoid work on unreachable scores without changing any chess verdict. | Candidate A enables only `-Dmate-windows=true`; 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed recorded at launch; completed time forfeits and every engine/protocol/affinity fault are fatal; setup-only preflight passed, no pilot | Maintainer stopped at 1,998 games, W/L/D `484/461/1053`, `+4.00 +/- 9.32` Elo (`+6.54 +/- 15.23` nElo), LLR `0.23`, seed `1079633543`, no anomaly; neutral, neither H0 nor H1. Retained in production by explicit documented maintainer exception, not by the gate |
 | `MAN-S34` | Phase-6.5.7 exact tactical-only non-check qsearch generation against production MAN-S30. Removing quiet generation/ranking that qsearch cannot consume will increase throughput without changing the searched tree or chess evidence. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `751289825`; completed time forfeits and every engine/protocol/affinity fault are fatal | Accepted H1 after 1,614 games at `+59.77 +/- 16.95` nElo (`+40.00 +/- 11.45` Elo, LLR `2.95`); no anomaly; promoted to production |
 | `MAN-S33` | Phase-6.5.5 half-depth singular exclusion horizon against production MAN-S30. A bounded shallower same-position proof will preserve useful singular decisions while spending less work on alternatives. | Candidate A, 1T `3+0.03`, Hash 64 MiB, concurrency 14, paired randomized UHO, `strength-v2`, normalized `[1,5]`, alpha/beta 0.05, 16,000-game cap, seed `1844484847` | Maintainer stopped inconclusive; supplied 6,640-game snapshot `+1.24 +/- 8.36` nElo, LLR `-0.39`; unpromoted, final artifacts pending reconciliation |

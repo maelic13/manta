@@ -781,13 +781,14 @@ pub const Features = struct {
     /// authority. Its changed qsearch values may still change the later tree,
     /// as any evaluation change can.
     correction_history: bool = false,
-    /// Step-6.5.10 `MAN-S36` coordinated selective-search core (ADR-0071),
-    /// default off until its registered gate. The umbrella owns the whole
-    /// package; the five component switches below exist for ablation
-    /// diagnosis only and are never gated separately. Each is effective only
-    /// through its accessor below, so with the umbrella off the tree is
-    /// exactly the accepted MAN-S35 head whatever the components say.
-    selective_core: bool = false,
+    /// Accepted Step-6.5.10 `MAN-S36` coordinated selective-search core
+    /// (ADR-0071), production since its registered 1T gate accepted H1. The
+    /// umbrella owns the whole package; the component switches below exist
+    /// for ablation diagnosis only and were never gated separately. Each is
+    /// effective only through its accessor, so switching the umbrella off
+    /// reconstructs the superseded MAN-S35 tree exactly, at fingerprint
+    /// `642,336`, whatever the components say.
+    selective_core: bool = true,
     /// One bounded linear history bonus and equal malus, ADR-0071 A.
     core_history: bool = true,
     /// Compile-time log-log reduction surface, ADR-0071 B.
@@ -886,24 +887,25 @@ test "production feature ledger freezes the MAN-S19 search policy" {
     try std.testing.expect(!features.depth_authority_sync);
     try std.testing.expect(!features.razoring);
 
-    // ADR-0071's umbrella is default off, and every component is inert while
-    // it is. The components themselves default on so that enabling the
-    // umbrella alone selects the whole package rather than an empty one.
-    try std.testing.expect(!features.selective_core);
-    try std.testing.expect(!features.coreHistory());
-    try std.testing.expect(!features.coreLmr());
-    try std.testing.expect(!features.coreMovePruning());
-    try std.testing.expect(!features.coreNodePruning());
-    try std.testing.expect(!features.coreAspiration());
-    try std.testing.expect(!features.coreQsChecks());
+    // MAN-S36 accepted H1, so ADR-0071's umbrella is production and the
+    // whole package is live by default: every component accessor is on.
+    try std.testing.expect(features.selective_core);
+    try std.testing.expect(features.coreHistory());
+    try std.testing.expect(features.coreLmr());
+    try std.testing.expect(features.coreMovePruning());
+    try std.testing.expect(features.coreNodePruning());
+    try std.testing.expect(features.coreAspiration());
+    try std.testing.expect(features.coreQsChecks());
 
-    const core: Features = .{ .selective_core = true };
-    try std.testing.expect(core.coreHistory());
-    try std.testing.expect(core.coreLmr());
-    try std.testing.expect(core.coreMovePruning());
-    try std.testing.expect(core.coreNodePruning());
-    try std.testing.expect(core.coreAspiration());
-    try std.testing.expect(core.coreQsChecks());
+    // Switching the umbrella off must silence every component regardless of
+    // its own field, because that is what reconstructs MAN-S35 exactly.
+    const superseded: Features = .{ .selective_core = false };
+    try std.testing.expect(!superseded.coreHistory());
+    try std.testing.expect(!superseded.coreLmr());
+    try std.testing.expect(!superseded.coreMovePruning());
+    try std.testing.expect(!superseded.coreNodePruning());
+    try std.testing.expect(!superseded.coreAspiration());
+    try std.testing.expect(!superseded.coreQsChecks());
 
     const ablated: Features = .{ .selective_core = true, .core_lmr = false };
     try std.testing.expect(ablated.coreHistory());

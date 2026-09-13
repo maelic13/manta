@@ -17,7 +17,8 @@ Reference presence suggests a hypothesis, not a promotion verdict.
 
 Production is MAN-E19 HCE, MAN-S29 fitted search, MAN-T05 clock, MAN-S30
 live-history staging, accepted MAN-S34 exact qsearch generation and accepted
-MAN-S35 complete mate windows, deterministic depth-six fingerprint `642,336`.
+MAN-S35 complete mate windows and the MAN-S36 coordinated selective-search
+core, deterministic depth-six fingerprint `359,259`.
 A disabled implementation is not an active feature. A rejected formulation is
 not a proof that its entire concept can never help, nor permission to retry.
 

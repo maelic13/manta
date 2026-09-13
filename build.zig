@@ -64,8 +64,8 @@ pub fn build(b: *std.Build) void {
     const selective_core = b.option(
         bool,
         "selective-core",
-        "Enable the Step-6.5.10 MAN-S36 coordinated selective-search core in this build",
-    ) orelse false;
+        "Keep the accepted Step-6.5.10 MAN-S36 selective-search core (false reconstructs MAN-S35)",
+    ) orelse true;
     const core_history = b.option(
         bool,
         "core-history",

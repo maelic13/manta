@@ -31,11 +31,13 @@ fn runArchived(
     ordering: *manta.search.ordering.State,
 ) bench.Report {
     // Every archived total below was recorded before Step 6.5.1b promoted the
-    // live-history staged picker and before Step 6.5.10.1 promoted complete
-    // mate windows, so faithful reconstruction restores the MAN-S19-era eager
-    // picker and the superseded crossing-only mate test alongside the MAN-S19
-    // parameter vector, and pins the Step-6.5.10 selective-search umbrella off
-    // so no archived total is restated on a head it never ran on.
+    // live-history staged picker, before Step 6.5.10.1 promoted complete mate
+    // windows and before Step 6.5.10 promoted the selective-search core, so
+    // faithful reconstruction restores the MAN-S19-era eager picker, the
+    // superseded crossing-only mate test and the pre-core search alongside the
+    // MAN-S19 parameter vector. Direct reconstructions outside this helper pin
+    // the umbrella off explicitly for the same reason: none of them may be
+    // restated on a head it never ran on.
     comptime var archived = features;
     archived.live_history_staging = false;
     archived.mate_windows = false;
@@ -103,7 +105,7 @@ test "bench repeats reset shared search state" {
     try std.testing.expectEqual(report.fingerprint_nodes, report.runs[1].nodes);
 }
 
-test "optimized safety and production modes preserve the accepted MAN-S35 fingerprint" {
+test "optimized safety and production modes preserve the accepted MAN-S36 fingerprint" {
     if (builtin.mode == .Debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
@@ -128,9 +130,38 @@ test "optimized safety and production modes preserve the accepted MAN-S35 finger
         &ordering,
     );
     try std.testing.expect(!report.cancelled and !report.failed);
-    // MAN-S30 first moved this total from `799,610` to `775,451`; MAN-S35's
-    // complete mate windows moved it again to `642,336`. It is a diagnostic
-    // tree-shape contract, not the evidence that promoted either mechanism.
+    // MAN-S30 first moved this total from `799,610` to `775,451`, MAN-S35's
+    // complete mate windows moved it to `642,336`, and MAN-S36's coordinated
+    // selective-search core moved it to `359,259`. It is a diagnostic
+    // tree-shape contract, not the evidence that promoted any of them.
+    try std.testing.expectEqual(@as(u64, 359_259), report.fingerprint_nodes);
+}
+
+test "disabling the MAN-S36 core reconstructs the superseded MAN-S35 tree" {
+    if (builtin.mode == .Debug) return;
+    // MAN-S36 accepted H1 and became production, so its umbrella now runs the
+    // other way: switching it off must rebuild MAN-S35 exactly. That keeps the
+    // promoted package ablatable as a whole and preserves the causal ledger
+    // entry for the `642,336` to `359,259` change.
+    var hash = try manta.engine.runtime.HashResource.init(
+        std.testing.allocator,
+        bench.hash_bytes / (1024 * 1024),
+    );
+    defer hash.deinit(std.testing.allocator);
+    var thread = manta.search.types.ThreadState.init();
+    var ordering: manta.search.ordering.State = .{};
+    var control: manta.search.types.NeverStop = .{};
+    var clock = IncrementingClock{};
+    const report = bench.runWithFeatures(
+        .{ .selective_core = false },
+        .{ .depth = bench.default_depth },
+        &clock,
+        &control,
+        &thread,
+        &hash.table,
+        &ordering,
+    );
+    try std.testing.expect(!report.cancelled and !report.failed);
     try std.testing.expectEqual(@as(u64, 642_336), report.fingerprint_nodes);
 }
 
@@ -213,7 +244,7 @@ test "disabling MAN-S30 staging reconstructs the archived MAN-S29 fingerprint" {
     var control: manta.search.types.NeverStop = .{};
     var clock = IncrementingClock{};
     const report = bench.runWithFeatures(
-        .{ .live_history_staging = false, .mate_windows = false },
+        .{ .live_history_staging = false, .mate_windows = false, .selective_core = false },
         .{ .depth = bench.default_depth },
         &clock,
         &control,
@@ -227,8 +258,8 @@ test "disabling MAN-S30 staging reconstructs the archived MAN-S29 fingerprint" {
 
 test "disabling MAN-S35 mate windows reconstructs the superseded MAN-S34 tree" {
     if (builtin.mode == .Debug) return;
-    // MAN-S35 is production, so the switch runs the other way: turning the
-    // complete clip off must rebuild the superseded MAN-S34 tree exactly. That
+    // MAN-S35's switch runs the other way from its promotion: turning the
+    // complete clip off, on the pre-core head, must rebuild MAN-S34 exactly. That
     // keeps the promoted mechanism independently ablatable and preserves the
     // causal ledger entry for the `775,451` to `642,336` change. The saving is
     // concentrated in the corpus positions holding a proven mate, so neither
@@ -243,7 +274,7 @@ test "disabling MAN-S35 mate windows reconstructs the superseded MAN-S34 tree" {
     var control: manta.search.types.NeverStop = .{};
     var clock = IncrementingClock{};
     const report = bench.runWithFeatures(
-        .{ .mate_windows = false },
+        .{ .mate_windows = false, .selective_core = false },
         .{ .depth = bench.default_depth },
         &clock,
         &control,
@@ -274,7 +305,7 @@ test "MAN-S33 singular exclusion horizon builds on the current production head" 
     var control: manta.search.types.NeverStop = .{};
     var clock = IncrementingClock{};
     const report = bench.runWithFeatures(
-        .{ .singular_exclusion_horizon = true, .mate_windows = false },
+        .{ .singular_exclusion_horizon = true, .mate_windows = false, .selective_core = false },
         .{ .depth = bench.default_depth },
         &clock,
         &control,
@@ -304,7 +335,7 @@ test "MAN-R02 stability aspiration builds on the MAN-S29 picker it was qualified
     var control: manta.search.types.NeverStop = .{};
     var clock = IncrementingClock{};
     const report = bench.runWithFeatures(
-        .{ .aspiration = true, .live_history_staging = false, .mate_windows = false },
+        .{ .aspiration = true, .live_history_staging = false, .mate_windows = false, .selective_core = false },
         .{ .depth = bench.default_depth },
         &clock,
         &control,
