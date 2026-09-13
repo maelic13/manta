@@ -19,23 +19,12 @@ reproducible installation check.
 
 ## Download
 
-Download Manta from the [latest GitHub Release](https://github.com/maelic13/manta/releases/latest).
-Manta 1.1.0 provides portable 64-bit binaries for:
-
-- Windows x86-64: `manta-v1.1.0-windows-x86-64.exe`
-- Linux x86-64: `manta-v1.1.0-linux-x86-64`
-- Linux ARM64: `manta-v1.1.0-linux-arm64`
-- macOS x86-64: `manta-v1.1.0-macos-x86-64`
-- macOS ARM64: `manta-v1.1.0-macos-arm64`
+- [Latest release](https://github.com/maelic13/manta/releases/latest)
+- [All releases](https://github.com/maelic13/manta/releases)
 
 Releases contain portable builds only, with no separate PEXT, AVX2, AVX-512 or
 profile-guided variants. The fastest executable for a given machine is a
 native build from source, described under [Build from source](#build-from-source).
-
-Every release also publishes `SHA256SUMS`. Verify a download against it with
-`sha256sum -c SHA256SUMS --ignore-missing` on Linux, `shasum -a 256 -c
-SHA256SUMS --ignore-missing` on macOS, or `Get-FileHash <binary> -Algorithm
-SHA256` on Windows.
 
 ## Use Manta
 
