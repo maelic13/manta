@@ -2596,7 +2596,14 @@ both-arm `bench 6 1` read `359,259` and `642,336`. One honest note: the first
 attempt at the default and off-arm suites on that head failed while another
 `zig build` was running against the same cache for a document edit; each was
 re-run alone and passed. Concurrent builds in one cache are not a valid gate
-run, and this record counts only the isolated runs. On `c3ba519` the default `zig build test` was executed a second time
+run, and this record counts only the isolated runs. The final release head `f6c2959` (addendum C) then passed the whole
+table once more, alone: `zig build test` default, `-Dselective-core=false`
+and `-Doptimize=ReleaseSafe`, `test-uci`, `lint`, both-arm `bench 6 1`. Its
+release soak, run by Fable and afterwards agreed to belong to the maintainer,
+was 100 fastchess games at `Threads 6`, `Hash 16`, `10+0.1`, concurrency 2,
+against the pre-fix core arm with crash recovery on: 39 disconnects, every one
+the pre-fix arm, none for the release build, no panic in the merged engine log
+(`tools/results/release_soak.*`). On `c3ba519` the default `zig build test` was executed a second time
 only to confirm from the step summary that test runs are not served from cache;
 it passed identically. The time, SMP lifecycle and platform gates of item 1,
 and items 2 to 4, are deferred with the maintainer direction above; the release

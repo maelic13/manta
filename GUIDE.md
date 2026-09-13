@@ -266,7 +266,9 @@ values for Manta's contracts.
   continue or release 1.1.0 and freeze. Maintainer direction of 2026-09-13:
   release 1.1.0 after the `MAN-S36` gate; the rest resumes later.
   - [x] **6.5.15.1 — Freeze and final gates:** All pre-release gates passed on
-    `c3ba519`; 1.1.0 released from that head.
+    `c3ba519` and again on the final head after the issue #2 repairs, the
+    handle-mode repair, the PV extension and the closing-line fix (PLAN
+    6.5.15.1 record and addenda A to C).
   - [ ] **6.5.15.2 — Depth curve and board cells on the designated host.**
   - [ ] **6.5.15.3 — Search and board targets recorded, met or open.**
   - [ ] **6.5.15.4 — Cumulative `MAN-C03` against Manta 1.0.0.**
