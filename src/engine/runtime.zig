@@ -611,6 +611,7 @@ fn runJob(active: *Active) void {
                 .integrated_budget = integrated_budget,
                 .params = active.time_params,
                 .legal_root_move_count = spec.legal_root_move_count,
+                .on_game_clock = spec.time_input != null and spec.time_input.? == .clock,
                 .soft_deadline_ns = if (maybe_budget) |budget_value|
                     time.deadline(spec.received_ns, budget_value.optimum_ms)
                 else
@@ -736,6 +737,7 @@ fn runHelper(active: *Active, helper: *Helper) void {
             .integrated_budget = integrated_budget,
             .params = active.time_params,
             .legal_root_move_count = spec.legal_root_move_count,
+            .on_game_clock = spec.time_input != null and spec.time_input.? == .clock,
             .soft_deadline_ns = if (maybe_budget) |budget_value|
                 time.deadline(spec.received_ns, budget_value.optimum_ms)
             else

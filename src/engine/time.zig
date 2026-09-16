@@ -221,6 +221,7 @@ pub const StopReason = enum {
     hard_deadline,
     external,
     search_complete,
+    forced_move,
 };
 
 /// One fixed-size, worker-zero-owned diagnostic snapshot. It is populated only
@@ -426,6 +427,9 @@ pub fn Control(
         integrated_budget: ?Budget = null,
         params: Params = .{},
         legal_root_move_count: u16 = 0,
+        /// True for a move on the game clock. Fixed depth, node and infinite
+        /// searches are analysis requests and keep their own stopping rules.
+        on_game_clock: bool = false,
         soft_deadline_ns: ?u64,
         hard_deadline_ns: ?u64,
         poll_countdown: u16 = 0,
@@ -502,6 +506,14 @@ pub fn Control(
                 return true;
             }
             if (!self.clockIsActive()) return false;
+            // A forced move is not a decision. Once the first iteration has
+            // produced a principal variation to publish, spending any more of
+            // the game clock on the only legal move buys nothing.
+            if (self.on_game_clock and self.legal_root_move_count == 1) {
+                self.reason = .time_limit;
+                self.recordStop(.forced_move, 0);
+                return true;
+            }
             if (self.soft_deadline_ns) |soft| {
                 const decision = if (comptime integrated_time)
                     if (self.integrated_budget) |allocation|
@@ -1179,4 +1191,47 @@ test "helper multiplier is normalized at qualified worker counts" {
     try std.testing.expectEqual(@as(u64, 1200), two.smp_permille);
     try std.testing.expectEqual(two.smp_permille, four.smp_permille);
     try std.testing.expectEqual(two.smp_permille, eight.smp_permille);
+}
+
+test "a forced move ends the search after its first iteration on a game clock" {
+    // Issue #4: with one legal move there is nothing to decide, so the clock
+    // policy publishes it instead of spending a share of the game on it.
+    var cancel = std.atomic.Value(u64).init(0);
+    var fake: FakeClock = .{};
+    const FakeControl = Control(FakeClock, false, false);
+    var forced = FakeControl{
+        .clock = &fake,
+        .cancel_epoch = &cancel,
+        .epoch = 1,
+        .legal_root_move_count = 1,
+        .on_game_clock = true,
+        .soft_deadline_ns = 100_000,
+        .hard_deadline_ns = 200_000,
+    };
+    try std.testing.expect(forced.shouldStopAfterIteration(completedIteration(1, .{}), .{}));
+
+    // A choice on the same clock keeps searching until its own deadline.
+    var choice = FakeControl{
+        .clock = &fake,
+        .cancel_epoch = &cancel,
+        .epoch = 1,
+        .legal_root_move_count = 2,
+        .on_game_clock = true,
+        .soft_deadline_ns = 100_000,
+        .hard_deadline_ns = 200_000,
+    };
+    try std.testing.expect(!choice.shouldStopAfterIteration(completedIteration(1, .{}), .{}));
+
+    // Analysis is not a move: `go infinite` and fixed limits are unaffected,
+    // and so is a forced move searched without a game clock.
+    var analysis = FakeControl{
+        .clock = &fake,
+        .cancel_epoch = &cancel,
+        .epoch = 1,
+        .legal_root_move_count = 1,
+        .on_game_clock = false,
+        .soft_deadline_ns = null,
+        .hard_deadline_ns = null,
+    };
+    try std.testing.expect(!analysis.shouldStopAfterIteration(completedIteration(1, .{}), .{}));
 }
