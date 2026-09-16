@@ -24,6 +24,10 @@ All notable user-visible changes to Manta are recorded here. The format follows
   the search; they previously showed one thread's and understated the search.
 - One move can no longer take an outsized share of a short clock, so a long
   game keeps time for its endgame instead of arriving on the increment.
+- The displayed principal variation stops where the rules end the game. Near
+  the fifty-move limit it continued into moves that would never be played,
+  which interfaces report as a principal variation continuing after the
+  fifty-move rule.
 
 ### Changed
 

@@ -2858,8 +2858,35 @@ aggregate, `MAN-C04` registered, records corrected):
 | `bench 6 1`, native ReleaseFast default | `359,045` |
 | `bench 6 1`, `-Dselective-core=false` | `642,131` |
 
+Re-run once each after the fifty-move display repair on its own commit: the
+same five gates passed -- `455/473`, `456/473` off arm, `455/473` ReleaseSafe,
+`25/25` and `27` transcript cases, `0` lint findings -- and both fingerprints
+still read `359,045` and `642,131`.
+
 Both fingerprints are the 1.1.1 values unchanged: the review repairs touch node
 reporting and the held-result line, never search.
+
+**Review follow-up (2026-09-16).** Fable's review of the six commits accepted
+them with one defect and three record gaps, repaired in `e0e5ea9`: the helper
+node mirror was never reset at the start of a search and lagged by up to a poll
+interval at its end, so a new search could add the previous one's totals to its
+first lines; the retained final line of a held ponder or `go infinite` result
+reported worker zero's count while the iteration lines reported every thread's;
+`MAN-C04` now registers the non-regression gate; and GUIDE names the release
+head rather than a branch.
+
+A second report followed from the maintainer's match: an interface warned that
+a principal variation continued after the fifty-move rule. The searched prefix
+was sound -- the search scores such a node as a draw and publishes no line
+through it -- but the table-extended display of addendum B walked on, because a
+record is keyed by the position alone and entries stored earlier in a long
+shuffle are still found once the allowance is spent. Reproduced by replaying
+the reported game: 70 published lines continued past the draw, none after the
+repair. The walk now stops at any position the rules have already ended, which
+covers the spent fifty-move allowance, a threefold and material that cannot
+mate; its test runs the same knight shuffle from a clock at `98` and at `0` and
+requires the first to stop after two plies. Display only: both fingerprints are
+unchanged.
 
 Not repaired: the K+B+N mate. Self-play from the wrong corner drew by
 repetition at `1 s` a move and mated at halfmove clock `99` at `3 s`, and

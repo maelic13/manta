@@ -1405,8 +1405,16 @@ fn extendPrincipalVariation(
         ply += 1;
     }
     while (pv.length < pv.moves.len and ply < states.len) {
-        // A repeated position would loop back through the same entries.
+        // A repeated position would loop back through the same entries. This
+        // is stricter than the threefold claim on purpose: the first repeat
+        // already means the walk is going round a cycle.
         if (position.current.repetition != 0) return;
+        // The rules may have ended the game before the table's next move. A
+        // record is keyed by the position alone, so entries stored earlier in
+        // the game -- when the halfmove clock was low -- are still found once
+        // it has run out, and following them would display a line that cannot
+        // be played.
+        if (chess.draw.isClaimableDraw(&position)) return;
         const record = table.probe(position.current.key, ply, position.current.rule50) orelse return;
         if (record.bound == .upper) return;
         const chess_move = record.chess_move;
@@ -2232,4 +2240,48 @@ test "a new search reports only its own work, never the previous search's" {
     }
     try std.testing.expect(lines != 0);
     finishActive(&shared, &state, false);
+}
+
+test "principal variation extension stops where the rules end the game" {
+    // A record carries no halfmove clock, so entries stored earlier in a long
+    // shuffle are still found once the fifty-move allowance is spent. Without
+    // a stop the displayed line runs past the draw, which is what an interface
+    // reports as a principal variation continuing after the fifty-move rule.
+    const shuffle = [_]chess.move.Move{
+        chess.move.Move.normal(.g1, .f3),
+        chess.move.Move.normal(.g8, .f6),
+        chess.move.Move.normal(.f3, .g1),
+        chess.move.Move.normal(.f6, .g8),
+    };
+
+    for ([_]u16{ 98, 0 }) |clock| {
+        var storage: [64]search.tt.Cluster = undefined;
+        var table = search.tt.Table.init(&storage);
+        var root_state: chess.position.PositionState = .{};
+        // The same knight shuffle from a position whose clock is nearly spent,
+        // and from one with the whole allowance left.
+        var root = try chess.fen.parse(
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            &root_state,
+        );
+        root.current.rule50 = clock;
+
+        var states: [shuffle.len]chess.position.PositionState = undefined;
+        var cursor = root;
+        for (shuffle, 0..) |chess_move, index| {
+            storeTableMove(&table, &cursor, chess_move, .exact);
+            chess.transition.makeMove(&cursor, chess_move, &states[index]);
+        }
+
+        var pv = search.types.PrincipalVariation.init();
+        extendPrincipalVariation(&pv, &root, &table);
+        if (clock == 98) {
+            // Two more plies spend the allowance; the line stops there instead
+            // of continuing into moves the rules no longer allow.
+            try std.testing.expectEqual(@as(u16, 2), pv.length);
+        } else {
+            // Same entries, same walk: only the clock decided the difference.
+            try std.testing.expectEqual(@as(u16, shuffle.len), pv.length);
+        }
+    }
 }

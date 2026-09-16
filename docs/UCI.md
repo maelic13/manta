@@ -449,8 +449,10 @@ depth and in depth order, for any `Threads` value. The searched principal
 variation may end at a transposition-table hit; for display it is then extended
 from the table: each appended move is the stored move of an authenticated
 non-upper-bound entry for the position reached, legal there, and the extension
-stops at the first missing entry, unusable move, repeated position or capacity
-limit. The searched prefix is unchanged and the extension carries no search
+stops at the first missing entry, unusable move, repeated position, position
+the rules have already ended -- the fifty-move allowance spent, a threefold
+reached or material that cannot mate -- or capacity limit. A displayed line
+therefore never continues past a move the game would not see played. The searched prefix is unchanged and the extension carries no search
 authority. The `ponder` move of `bestmove` is the second move of that same
 displayed line, so it may come from the table. Completed-iteration lines
 are required output: they are neither coalesced with root-move progress nor
