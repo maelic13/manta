@@ -2837,9 +2837,12 @@ reads `642,131`.
    soft-to-hard interval. Early allocation is unchanged; with `30 s` left and a
    `3 s` increment a move takes `7.1 s` instead of up to `16 s`. This shifts
    play, so the release is gated as `MAN-C04`, the registered non-regression
-   SPRT of 1.1.1 against released 1.1.0 in `EXPERIMENTS.md`. That gate covers
-   the bundle -- the six repairs and the reserve together -- and licenses no
-   single one of them; a horizon re-fit remains open with 6.5.11.3.
+   SPRT of 1.1.1 against released 1.1.0 in `EXPERIMENTS.md`, run as Rarog runs
+   its gates: the script's own defaults and one verbatim recipe,
+   `./tools/sprt.ps1 -EngineA "tools\test_engines\manta-111.exe" -EngineB "tools\test_engines\manta-110.exe" -NameA "Manta-1.1.1" -NameB "Manta-1.1.0" -Mode simplify`, with every default spelled out in the registration.
+   That gate covers the bundle -- the six repairs and the reserve together --
+   and licenses no single one of them; a horizon re-fit remains open with
+   6.5.11.3.
 
 Gates, run once each and serially on the review-repair commit (helper node
 mirror reset and exact at completion, the retained final line reporting the
