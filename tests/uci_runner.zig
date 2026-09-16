@@ -566,15 +566,15 @@ fn validTimeTelemetry(line: []const u8) bool {
 fn validRootMoveInfo(line: []const u8) bool {
     if (!std.mem.startsWith(u8, line, "info depth ")) return false;
     return std.mem.indexOf(u8, line, " currmove ") != null and
-        std.mem.indexOf(u8, line, " currmovenumber ") != null and
-        std.mem.indexOf(u8, line, " nodes ") != null and
-        std.mem.indexOf(u8, line, " time ") != null;
+        std.mem.indexOf(u8, line, " currmovenumber ") != null;
 }
 
 fn validIterationInfo(line: []const u8) bool {
     if (!std.mem.startsWith(u8, line, "info depth ")) return false;
     return std.mem.indexOf(u8, line, " score ") != null and
         std.mem.indexOf(u8, line, " nodes ") != null and
+        std.mem.indexOf(u8, line, " nps ") != null and
+        std.mem.indexOf(u8, line, " hashfull ") != null and
         std.mem.indexOf(u8, line, " time ") != null and
         (std.mem.indexOf(u8, line, " pv ") != null or
             std.mem.endsWith(u8, line, " pv"));
@@ -587,6 +587,8 @@ fn validIterationFields(value: []const u8) bool {
     return std.mem.startsWith(u8, value, "seldepth ") and
         std.mem.indexOf(u8, value, " score ") != null and
         std.mem.indexOf(u8, value, " nodes ") != null and
+        std.mem.indexOf(u8, value, " nps ") != null and
+        std.mem.indexOf(u8, value, " hashfull ") != null and
         std.mem.indexOf(u8, value, " time ") != null and
         (std.mem.indexOf(u8, value, " pv ") != null or std.mem.endsWith(u8, value, " pv"));
 }

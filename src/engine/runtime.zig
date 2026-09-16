@@ -85,6 +85,10 @@ pub const IterationProgress = struct {
     completed: search.types.CompletedIteration,
     tablebase_hits: u64,
     observed_ns: u64,
+    /// Work of every searching thread at the moment this iteration completed.
+    /// `completed.nodes` stays worker zero's own count, which the search and
+    /// the clock policy reason about; this is what the interface is shown.
+    aggregate_nodes: u64,
 };
 
 pub const SearchProgress = union(enum) {
@@ -213,6 +217,12 @@ pub const Finished = struct {
 
 pub const WorkerState = struct {
     search: search.types.ThreadState = search.types.ThreadState.init(),
+    /// A mirror of `search.nodes` that other threads may read. The search
+    /// counts nodes in an ordinary field on its own hot path; this copy is
+    /// refreshed while the search polls, so the controller can report the work
+    /// of every thread while they are still running. It lags by at most one
+    /// poll interval, which is a display detail, never search evidence.
+    published_nodes: std.atomic.Value(u64) = .init(0),
     // SAFETY: perft initializes a state slot before each transition reads it;
     // ordinary search never accesses this array.
     perft_states: [chess.types.max_ply]chess.position.PositionState = undefined,
@@ -250,6 +260,9 @@ pub const Active = struct {
     helper_positions: []chess.position.Position,
     helper_root_states: []chess.position.PositionState,
     helper_count: usize,
+    /// Controller-owned helper storage, borrowed for this search so worker
+    /// zero can total the published node counts when it publishes a line.
+    helpers: []Helper = &.{},
     helper_stop: std.atomic.Value(bool) = .init(false),
     /// Helpers publish only a bounded count of completed ordinary root
     /// instability events. No move, score, PV or result crosses this boundary.
@@ -479,6 +492,7 @@ pub fn start(
         .helper_positions = helper_positions,
         .helper_root_states = helper_states,
         .helper_count = helper_count,
+        .helpers = controller.helpers[0..helper_count],
         .remaining_workers = .init(helper_count + 1),
         .controller_wake = controller_wake,
         .done = &controller.completion_done,
@@ -561,6 +575,10 @@ fn helperLoop(controller: *Controller, helper: *Helper) void {
         workerFinished(active);
     }
 }
+
+/// How often a helper refreshes its readable node count. The interval matches
+/// the clock poll, so publishing costs one relaxed store per poll.
+const node_publish_interval: u16 = time.poll_interval_nodes;
 
 fn workerFinished(active: *Active) void {
     if (active.remaining_workers.fetchSub(1, .acq_rel) == 1) {
@@ -732,6 +750,7 @@ fn runHelper(active: *Active, helper: *Helper) void {
     var control = Control{
         .active = active,
         .node_limit = spec.limits.nodes,
+        .worker = &helper.worker,
         .timing = .{
             .clock = &clock,
             .cancel_epoch = active.cancel_epoch,
@@ -886,6 +905,7 @@ fn SearchControl(
                 .completed = completed,
                 .tablebase_hits = self.active.worker.search.tablebase_hits,
                 .observed_ns = monotonicNs(self.active.io),
+                .aggregate_nodes = aggregateNodes(self.active),
             } });
         }
 
@@ -963,8 +983,19 @@ fn HelperSearchControl(
         active: *Active,
         node_limit: ?u64,
         timing: time.Control(Clock, root_confidence_time, integrated_time),
+        worker: *WorkerState,
+        publish_countdown: u16 = 0,
 
         pub inline fn shouldStop(self: *@This()) bool {
+            // Refresh the readable copy of this helper's work while polling.
+            // One relaxed store per interval keeps the hot path's ordinary
+            // counter untouched and lets worker zero report every thread.
+            if (self.publish_countdown == 0) {
+                self.worker.published_nodes.store(self.worker.search.nodes, .monotonic);
+                self.publish_countdown = node_publish_interval;
+            } else {
+                self.publish_countdown -= 1;
+            }
             return self.active.helper_stop.load(.acquire) or self.timing.shouldStop();
         }
 
@@ -987,6 +1018,15 @@ fn HelperSearchControl(
             return claimAggregateNode(self.active, self.node_limit);
         }
     };
+}
+
+/// Worker zero's own count plus the last published count of every helper.
+/// Helpers refresh theirs while they poll, so this trails their true totals by
+/// at most one poll interval and never runs ahead of work actually done.
+fn aggregateNodes(active: *const Active) u64 {
+    var total = active.worker.search.nodes;
+    for (active.helpers) |*helper| total +|= helper.worker.published_nodes.load(.monotonic);
+    return total;
 }
 
 fn claimAggregateNode(active: *Active, limit: ?u64) bool {
@@ -1073,6 +1113,7 @@ fn testIteration(depth: u16) IterationProgress {
         },
         .tablebase_hits = 0,
         .observed_ns = depth,
+        .aggregate_nodes = depth,
     };
 }
 

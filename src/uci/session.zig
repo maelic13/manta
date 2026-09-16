@@ -12,6 +12,9 @@ const command_capacity = 64;
 const output_capacity = 64;
 const max_output_bytes = 4096;
 const shutdown_flush_ms = 250;
+/// A search shorter than this reports no root-move progress: the interface has
+/// nothing to do with a move it is told about for a few milliseconds.
+const root_move_report_ms = 3000;
 /// How long shutdown waits for the controller to observe `quit` before
 /// cancelling it. A controller blocked on a full output queue behind an
 /// interface that stopped reading would otherwise never return.
@@ -1104,13 +1107,15 @@ fn drainSearchProgress(shared: *Shared, state: *ControllerState, active: *Runtim
     while (active.progress.take(shared.io)) |progress| switch (progress) {
         // A root move is a superseding sample and may be dropped under load.
         .root_move => |root_move| {
-            _ = tryOfferInfoLine(shared, rootMoveInfo(
-                root_move.depth,
-                root_move.chess_move,
-                root_move.number,
-                root_move.nodes,
-                elapsedMilliseconds(spec.received_ns, root_move.observed_ns),
-            ));
+            // Root-move progress is only worth showing once a search is long
+            // enough for the interface to sit on one move for a while.
+            if (elapsedMilliseconds(spec.received_ns, root_move.observed_ns) >= root_move_report_ms) {
+                _ = tryOfferInfoLine(shared, rootMoveInfo(
+                    root_move.depth,
+                    root_move.chess_move,
+                    root_move.number,
+                ));
+            }
         },
         // A completed iteration is the depth's score and principal variation;
         // it waits for presenter capacity like any required line.
@@ -1121,6 +1126,8 @@ fn drainSearchProgress(shared: *Shared, state: *ControllerState, active: *Runtim
                 completed,
                 iteration.tablebase_hits,
                 elapsedMilliseconds(spec.received_ns, iteration.observed_ns),
+                iteration.aggregate_nodes,
+                state.hash.table.hashfull(),
             ))) return;
             active.last_published_iteration_nodes = iteration.completed.nodes;
         },
@@ -1138,7 +1145,7 @@ fn publishRetainedInfo(shared: *Shared, state: *ControllerState, active: *Runtim
     const spec = active.job.normal;
     var result = active.completion.normal;
     extendResultPrincipalVariation(&result, &state.game.position, &state.hash.table);
-    publishFinalSearchInfoIfNeeded(shared, active, spec, result);
+    publishFinalSearchInfoIfNeeded(shared, active, spec, result, state.hash.table.hashfull());
     active.completion_waiting = true;
 }
 
@@ -1183,6 +1190,7 @@ fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
                     _ = offerLine(shared, searchInfo(
                         result,
                         elapsedMilliseconds(spec.received_ns, monotonicNs(shared.io)),
+                        state.hash.table.hashfull(),
                     ));
                 }
                 if (finished.time_telemetry) |telemetry|
@@ -1224,12 +1232,14 @@ fn publishFinalSearchInfoIfNeeded(
     active: *Runtime.Active,
     spec: SearchSpec,
     result: Runtime.SearchResult,
+    hashfull: u16,
 ) void {
     if (active.last_published_iteration_nodes != null and
         active.last_published_iteration_nodes.? == result.nodes) return;
     _ = offerLine(shared, searchInfo(
         result,
         elapsedMilliseconds(spec.received_ns, monotonicNs(shared.io)),
+        hashfull,
     ));
     active.last_published_iteration_nodes = result.nodes;
 }
@@ -1343,17 +1353,11 @@ fn publishBestMove(shared: *Shared, result: Runtime.SearchResult) void {
     }
 }
 
-fn rootMoveInfo(
-    depth: u16,
-    chess_move: chess.move.Move,
-    number: u16,
-    nodes: u64,
-    elapsed_ms: u64,
-) Line {
+fn rootMoveInfo(depth: u16, chess_move: chess.move.Move, number: u16) Line {
     const text = chess.notation.format(chess_move) catch @panic("root progress contains a non-chess move");
     return lineFmt(
-        "info depth {d} currmove {s} currmovenumber {d} nodes {d} time {d}",
-        .{ depth, text.slice(), number, nodes, elapsed_ms },
+        "info depth {d} currmove {s} currmovenumber {d}",
+        .{ depth, text.slice(), number },
     );
 }
 
@@ -1404,10 +1408,15 @@ fn extendResultPrincipalVariation(
     if (result.completed) |*completed| extendPrincipalVariation(&completed.pv, root, table);
 }
 
+/// `displayed_nodes` is the work of every searching thread. The iteration
+/// itself keeps worker zero's own count, which the search and the clock policy
+/// reason about, so only the reported figure changes with thread count.
 fn completedIterationInfo(
     completed: search.types.CompletedIteration,
     tablebase_hits: u64,
     elapsed_ms: u64,
+    displayed_nodes: u64,
+    hashfull: u16,
 ) Line {
     std.debug.assert(completed.pv.length != 0);
     return searchInfo(.{
@@ -1415,24 +1424,29 @@ fn completedIterationInfo(
         .evidence = completed.evidence,
         .completed = completed,
         .termination = .depth_limit,
-        .nodes = completed.nodes,
+        .nodes = displayed_nodes,
         .tablebase_hits = tablebase_hits,
         .selective_depth = completed.selective_depth,
-    }, elapsed_ms);
+    }, elapsed_ms, hashfull);
 }
 
-fn searchInfo(result: Runtime.SearchResult, elapsed_ms: u64) Line {
+/// Fields follow the order interfaces are used to reading: depth, seldepth,
+/// score, then the counters, then the line itself. `hashfull` is permille of
+/// table occupancy. `tbhits` is emitted only when tablebases actually
+/// contributed, so a deployment without them shows the same fields as before.
+fn searchInfo(result: Runtime.SearchResult, elapsed_ms: u64, hashfull: u16) Line {
     const completed_depth: u16 = if (result.completed) |completed| completed.depth else 0;
+    const nps = if (elapsed_ms == 0) result.nodes *| 1000 else (result.nodes *| 1000) / elapsed_ms;
     if (result.best_move == null) {
         if (result.evidence.value.isMate()) {
             return lineFmt(
-                "info depth {d} score mate {d} nodes {d} time {d}",
-                .{ completed_depth, mateMoves(result.evidence.value), result.nodes, elapsed_ms },
+                "info depth {d} score mate {d} nodes {d} nps {d} hashfull {d} time {d}",
+                .{ completed_depth, mateMoves(result.evidence.value), result.nodes, nps, hashfull, elapsed_ms },
             );
         }
         return lineFmt(
-            "info depth {d} score cp {d} nodes {d} time {d}",
-            .{ completed_depth, result.evidence.value.raw(), result.nodes, elapsed_ms },
+            "info depth {d} score cp {d} nodes {d} nps {d} hashfull {d} time {d}",
+            .{ completed_depth, result.evidence.value.raw(), result.nodes, nps, hashfull, elapsed_ms },
         );
     }
 
@@ -1450,13 +1464,11 @@ fn searchInfo(result: Runtime.SearchResult, elapsed_ms: u64) Line {
         .lower => writer.writeAll(" lowerbound") catch @panic("search info exceeds its fixed buffer"),
         .upper => writer.writeAll(" upperbound") catch @panic("search info exceeds its fixed buffer"),
     }
-    const nps = if (elapsed_ms == 0) result.nodes *| 1000 else (result.nodes *| 1000) / elapsed_ms;
-    writer.print(" nodes {d} time {d} nps {d}", .{ result.nodes, elapsed_ms, nps }) catch @panic("search info exceeds its fixed buffer");
-    // `tbhits` is emitted only when tablebases actually contributed, so a
-    // deployment without them produces byte-identical output to before.
+    writer.print(" nodes {d} nps {d} hashfull {d}", .{ result.nodes, nps, hashfull }) catch @panic("search info exceeds its fixed buffer");
     if (result.tablebase_hits != 0) {
         writer.print(" tbhits {d}", .{result.tablebase_hits}) catch @panic("search info exceeds its fixed buffer");
     }
+    writer.print(" time {d}", .{elapsed_ms}) catch @panic("search info exceeds its fixed buffer");
     writer.writeAll(" pv") catch @panic("search info exceeds its fixed buffer");
     if (result.completed) |completed| {
         for (completed.pv.slice()) |chess_move| {
@@ -1747,11 +1759,11 @@ test "setoption registry normalizes names and enforces active ranges" {
 }
 
 test "live root information has the bounded UCI field contract" {
-    // UCI-001/FUNC-004: reporting formats a legal encoded root move and the
-    // same bounded node/time snapshot without touching the position.
-    const line = rootMoveInfo(4, chess.move.Move.normal(.e2, .e4), 3, 99, 7);
+    // UCI-001/FUNC-004: reporting formats a legal encoded root move and its
+    // ordinal without touching the position.
+    const line = rootMoveInfo(4, chess.move.Move.normal(.e2, .e4), 3);
     try std.testing.expectEqualStrings(
-        "info depth 4 currmove e2e4 currmovenumber 3 nodes 99 time 7",
+        "info depth 4 currmove e2e4 currmovenumber 3",
         line.slice(),
     );
 }

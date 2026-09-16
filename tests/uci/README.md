@@ -36,9 +36,9 @@ The harness substitutes these typed placeholders:
 | `{{POSITIVE_U64}}` | One positive unsigned decimal 64-bit value. |
 | `{{DECIMAL}}` | One finite non-negative decimal value. |
 | `{{EMPTY}}` | One empty output line. |
-| `{{ROOT_MOVE_INFO}}` | One syntactically valid live root-move line with legal UCI move text and bounded numeric fields. |
+| `{{ROOT_MOVE_INFO}}` | One syntactically valid live root-move line: `info depth <D> currmove <legal move> currmovenumber <N>`. |
 | `{{ITERATION_INFO}}` | One completed-iteration score/depth/PV line satisfying the ordinary search-info contract. |
-| `{{ITERATION_FIELDS}}` | The fields after `info depth <D> ` in one completed-iteration line, from `seldepth` through the PV. A transcript spells the depth literally, as in `info depth 3 {{ITERATION_FIELDS}}`. |
+| `{{ITERATION_FIELDS}}` | The fields after `info depth <D> ` in one completed-iteration line: `seldepth`, `score`, `nodes`, `nps`, `hashfull`, `time` and the PV. A transcript spells the depth literally, as in `info depth 3 {{ITERATION_FIELDS}}`. |
 | `{{SEARCH_INFO}}` | One valid root-move or completed-iteration line. Root-move lines may coalesce or drop under load; every completed iteration reaches the interface, so the placeholder matches whichever arrives first. |
 | `{{BESTMOVE_LINE}}` | One legal `bestmove`, with an optional legal `ponder` continuation. |
 | `{{PONDER}}` | Either nothing or one ` ponder <legal UCI move>` continuation. |

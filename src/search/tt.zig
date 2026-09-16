@@ -176,6 +176,23 @@ pub const Table = struct {
         return if (victim_record.generation == self.generation) .evicted_current else .evicted_stale;
     }
 
+    /// Occupancy in permille, estimated from a bounded sample so the answer
+    /// costs the same on a 1 MB table and a 1 TB one. Diagnostic only: no
+    /// search decision reads it.
+    pub fn hashfull(self: *const Table) u16 {
+        // The widths are explicit: `@min` against a literal infers a type from
+        // the bound it proves, and `sampled_clusters * ways` overflows it.
+        const sampled_clusters: usize = @min(self.clusters.len, 250);
+        var occupied: usize = 0;
+        for (self.clusters[0..sampled_clusters]) |*cluster| {
+            for (&cluster.entries) |*entry| {
+                if (entry.guard.load(.monotonic) != 0) occupied += 1;
+            }
+        }
+        const sampled_entries: usize = sampled_clusters * @as(usize, ways);
+        return @intCast((occupied * 1000) / sampled_entries);
+    }
+
     fn index(self: *const Table, key: chess.types.Key) usize {
         return @intCast(key % self.clusters.len);
     }
@@ -494,4 +511,18 @@ test "a stored mate the fifty-move rule forbids is not published as mate distanc
     // An ordinary score carries no distance and is never demoted.
     const ordinary = score.Score.fromOrdinary(120).?;
     try std.testing.expectEqual(ordinary.raw(), scoreFromTableWithClock(ordinary, 4, 99).raw());
+}
+
+test "sampled occupancy is a permille of the sampled ways" {
+    // Both ends are pinned because the denominator is easy to get wrong: a
+    // full sample must read exactly `1000`, never more.
+    var storage: [2]Cluster = undefined;
+    var table = Table.init(&storage);
+    try std.testing.expectEqual(@as(u16, 0), table.hashfull());
+
+    var key: u64 = 1;
+    while (key <= @as(u64, ways) * storage.len) : (key += 1) {
+        _ = table.store(key, chess.move.Move.normal(.a2, .a3), score.Score.zero, null, 3, .exact, .full_search, 0);
+    }
+    try std.testing.expectEqual(@as(u16, 1000), table.hashfull());
 }
