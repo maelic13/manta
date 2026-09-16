@@ -1145,7 +1145,18 @@ fn publishRetainedInfo(shared: *Shared, state: *ControllerState, active: *Runtim
     const spec = active.job.normal;
     var result = active.completion.normal;
     extendResultPrincipalVariation(&result, &state.game.position, &state.hash.table);
-    publishFinalSearchInfoIfNeeded(shared, active, spec, result, state.hash.table.hashfull());
+    // The completion carries worker zero's count, while the iteration lines
+    // already reported every thread's. Publishing the raw completion here
+    // would end a multi-thread search on a line lower than the one before it.
+    // The search is finished, so the aggregate is exact.
+    publishFinalSearchInfoIfNeeded(
+        shared,
+        active,
+        spec,
+        result,
+        Runtime.aggregateNodes(active),
+        state.hash.table.hashfull(),
+    );
     active.completion_waiting = true;
 }
 
@@ -1227,17 +1238,24 @@ fn timeTelemetryInfo(telemetry: engine.time.Telemetry) Line {
     );
 }
 
+/// `displayed_nodes` is what the line reports; `result.nodes` stays worker
+/// zero's count, which decides whether this line is a repeat of the last
+/// published iteration and is what gets remembered. At one thread the two are
+/// the same value, so single-thread output is unchanged.
 fn publishFinalSearchInfoIfNeeded(
     shared: *Shared,
     active: *Runtime.Active,
     spec: SearchSpec,
     result: Runtime.SearchResult,
+    displayed_nodes: u64,
     hashfull: u16,
 ) void {
     if (active.last_published_iteration_nodes != null and
         active.last_published_iteration_nodes.? == result.nodes) return;
+    var displayed = result;
+    displayed.nodes = displayed_nodes;
     _ = offerLine(shared, searchInfo(
-        result,
+        displayed,
         elapsedMilliseconds(spec.received_ns, monotonicNs(shared.io)),
         hashfull,
     ));
@@ -2153,4 +2171,65 @@ test "principal variation extension stops at a repeated position" {
     extendPrincipalVariation(&pv, &root, &table);
     try std.testing.expectEqual(@as(u16, cycle.len), pv.length);
     for (cycle, pv.slice()) |expected, actual| try std.testing.expectEqual(expected, actual);
+}
+
+test "a new search reports only its own work, never the previous search's" {
+    // The helpers publish a readable copy of their node counts while they
+    // poll. Left over from an earlier search, that copy would be added to the
+    // first lines of the next one, which report before any helper has polled.
+    const io = std.testing.io;
+    var state = try ControllerState.init(std.testing.allocator);
+    defer state.deinit();
+    try state.startWorker(io);
+    try state.resizeThreads(4);
+
+    var command_storage: [command_capacity]protocol.Command = undefined;
+    var output_storage: [output_capacity]OutputEvent = undefined;
+    var command_queue = std.Io.Queue(protocol.Command).init(&command_storage);
+    var output_queue = std.Io.Queue(OutputEvent).init(&output_storage);
+    var shutdown: std.Io.Event = .unset;
+    var controller_done: std.Io.Event = .unset;
+    var presenter_done: std.Io.Event = .unset;
+    var shared: Shared = .{
+        .io = io,
+        .allocator = std.testing.allocator,
+        .version = "test",
+        .transcript_hooks = false,
+        .commands = &command_queue,
+        .output = &output_queue,
+        .shutdown = &shutdown,
+        .controller_done = &controller_done,
+        .presenter_done = &presenter_done,
+    };
+
+    const stale: u64 = 1_000_000_000;
+    for (state.helpers) |*helper| helper.worker.published_nodes.store(stale, .monotonic);
+
+    handleGo(&shared, &state, "go depth 8", 0);
+    try std.testing.expect(state.active != null);
+    const active = &state.active.?;
+    if (!active.done.isSet()) active.done.waitUncancelable(io);
+
+    // Every helper has published its final count, so the total is exact.
+    var expected = active.worker.search.nodes;
+    for (state.helpers) |*helper| expected += helper.worker.search.nodes;
+    try std.testing.expectEqual(expected, Runtime.aggregateNodes(active));
+    try std.testing.expect(expected < stale);
+
+    // No published line carried the stale work either.
+    drainSearchProgress(&shared, &state, active);
+    var buffer: [1]OutputEvent = undefined;
+    var lines: usize = 0;
+    while (try output_queue.get(io, &buffer, 0) == 1) {
+        const text = buffer[0].line.slice();
+        if (!std.mem.startsWith(u8, text, "info depth ")) continue;
+        const nodes_at = std.mem.indexOf(u8, text, " nodes ") orelse continue;
+        const rest = text[nodes_at + " nodes ".len ..];
+        const end = std.mem.indexOfScalar(u8, rest, ' ') orelse rest.len;
+        const reported = try std.fmt.parseInt(u64, rest[0..end], 10);
+        try std.testing.expect(reported < stale);
+        lines += 1;
+    }
+    try std.testing.expect(lines != 0);
+    finishActive(&shared, &state, false);
 }

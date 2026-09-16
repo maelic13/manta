@@ -2836,8 +2836,27 @@ reads `642,131`.
    lies above it, floored at twice the optimum so a nearly spent clock keeps a
    soft-to-hard interval. Early allocation is unchanged; with `30 s` left and a
    `3 s` increment a move takes `7.1 s` instead of up to `16 s`. This shifts
-   play and has **no gate behind it**; a horizon re-fit remains open with
-   6.5.11.3.
+   play, so the release is gated as `MAN-C04`, the registered non-regression
+   SPRT of 1.1.1 against released 1.1.0 in `EXPERIMENTS.md`. That gate covers
+   the bundle -- the six repairs and the reserve together -- and licenses no
+   single one of them; a horizon re-fit remains open with 6.5.11.3.
+
+Gates, run once each and serially on the review-repair commit (helper node
+mirror reset and exact at completion, the retained final line reporting the
+aggregate, `MAN-C04` registered, records corrected):
+
+| Gate | Outcome |
+| --- | --- |
+| `zig build test` (default) | Pass: 53/53 steps, 454/472 tests, 18 skipped; transcript 27 cases |
+| `zig build test -Dselective-core=false` | Pass: 53/53 steps, 455/472 tests, 17 skipped |
+| `zig build test -Doptimize=ReleaseSafe` | Pass: 53/53 steps, 454/472 tests, 18 skipped |
+| `zig build test-uci` | Pass: 24/24 tests, transcript 27 cases |
+| `zig build lint` | Pass: 0 errors, 0 warnings across 53 files |
+| `bench 6 1`, native ReleaseFast default | `359,045` |
+| `bench 6 1`, `-Dselective-core=false` | `642,131` |
+
+Both fingerprints are the 1.1.1 values unchanged: the review repairs touch node
+reporting and the held-result line, never search.
 
 Not repaired: the K+B+N mate. Self-play from the wrong corner drew by
 repetition at `1 s` a move and mated at halfmove clock `99` at `3 s`, and

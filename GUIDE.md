@@ -82,12 +82,14 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   every gate passed again on the final head. 6.5.11 to 6.5.14 and
   6.5.15.2 to 6.5.15.4 stay open for when development resumes, with expected
   gains recorded in PLAN.
-- Manta 1.1.1 is prepared on `dev` as a bugfix release: the issue #4 repairs
-  (a stored root verdict that drew a won game, forced moves spending the clock,
+- Manta 1.1.1 is prepared as a bugfix release on the release head: the issue #4
+  repairs (a stored root verdict that drew a won game, forced moves spending the clock,
   mate-settled depth reporting, `go infinite` answering unasked, helper work
   missing from `nodes`/`nps`, Stockfish-shaped information lines and a clock
-  reserve for later moves). PLAN 6.5.15.1 addendum D records them. The K+B+N
-  mate reported in the same issue is technique and stays open.
+  reserve for later moves). PLAN 6.5.15.1 addendum D records them and
+  `MAN-C04` registers the non-regression gate the maintainer runs against the
+  released 1.1.0. The K+B+N mate reported in the same issue is technique and
+  stays open.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 

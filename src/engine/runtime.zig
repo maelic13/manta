@@ -510,6 +510,12 @@ pub fn start(
         controller.active.?.job.normal.limits.tablebase_use_rule_fifty = controller.syzygy_fifty_move_rule;
         if (helper_count != 0) controller.active.?.table.nextGeneration();
     }
+    // The mirrors still hold the previous search's totals. Clear them before
+    // the wakes: a helper refreshes its own only on its first poll, so until
+    // then worker zero would add stale work to the depth-1 and depth-2 lines.
+    for (controller.helpers[0..helper_count]) |*helper| {
+        helper.worker.published_nodes.store(0, .monotonic);
+    }
     for (controller.helpers[0..helper_count]) |*helper| helper.wake.post(io);
     controller.worker_wake.post(io);
     return epoch;
@@ -572,6 +578,10 @@ fn helperLoop(controller: *Controller, helper: *Helper) void {
         if (helper.shutdown.load(.acquire)) return;
         const active = &controller.active.?;
         runHelper(active, helper);
+        // The last poll can be up to one interval short of the work actually
+        // done. Publishing here, before the completion is visible, makes the
+        // aggregate exact for every line drawn once `done` is set.
+        helper.worker.published_nodes.store(helper.worker.search.nodes, .monotonic);
         workerFinished(active);
     }
 }
@@ -1021,9 +1031,11 @@ fn HelperSearchControl(
 }
 
 /// Worker zero's own count plus the last published count of every helper.
-/// Helpers refresh theirs while they poll, so this trails their true totals by
-/// at most one poll interval and never runs ahead of work actually done.
-fn aggregateNodes(active: *const Active) u64 {
+/// Helpers refresh theirs while they poll, so during a search this trails
+/// their true totals by at most one poll interval and never runs ahead of work
+/// actually done. Once `done` is set every helper has published its final
+/// count, so the total is then exact.
+pub fn aggregateNodes(active: *const Active) u64 {
     var total = active.worker.search.nodes;
     for (active.helpers) |*helper| total +|= helper.worker.published_nodes.load(.monotonic);
     return total;
