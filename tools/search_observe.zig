@@ -222,6 +222,7 @@ fn validate(
     const lookup_outcomes = counters.tt_lookups_by_outcome;
     const authenticated = lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.depth_rejected)] +
         lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.bound_rejected)] +
+        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.root_refused)] +
         lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.usable)];
     if (authenticated != sum(counters.tt_probes_by_bound) or
         lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.usable)] !=

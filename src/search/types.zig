@@ -694,6 +694,17 @@ pub const Features = struct {
     /// window. Switching it off reconstructs that superseded tree at
     /// fingerprint `775,451` for archived diagnostics.
     mate_windows: bool = true,
+    /// Issue #4 repair, production since 1.1.1. A table record is keyed by the
+    /// position alone and carries neither the repetition history nor the
+    /// halfmove clock of the visit that stored it. Every interior node
+    /// re-derives those facts before probing, because the draw test precedes
+    /// the probe, but the root publishes a move without searching anything, so
+    /// a verdict stored when a position had occurred twice was replayed once
+    /// the same position completed a threefold: a won game was drawn that way.
+    /// Production keeps the stored root move for ordering and refuses the
+    /// stored verdict. Switching this off restores the 1.1.0 root, which every
+    /// archived fingerprint was recorded on.
+    root_table_refusal: bool = true,
     /// Step-6.5.5 singular-exclusion-horizon candidate. The same-position
     /// search still excludes exactly the legal ordinary TT move and alone
     /// decides whether that move extends; this switch only replaces the

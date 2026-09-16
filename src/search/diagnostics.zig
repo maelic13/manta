@@ -72,6 +72,8 @@ pub const TableLookup = enum {
     illegal_move,
     depth_rejected,
     bound_rejected,
+    /// Authenticated at the root, where a stored verdict is never taken.
+    root_refused,
     usable,
 };
 
