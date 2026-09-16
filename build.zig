@@ -101,6 +101,11 @@ pub fn build(b: *std.Build) void {
         "singular-exclusion-horizon",
         "Enable the Step-6.5.5 singular-exclusion-horizon candidate in this build",
     ) orelse false;
+    const pv_table_refusal = b.option(
+        bool,
+        "pv-table-refusal",
+        "Enable the candidate that refuses stored verdicts at every principal node",
+    ) orelse false;
     const qsearch_tactical_generation = b.option(
         bool,
         "qsearch-tactical-generation",
@@ -159,6 +164,7 @@ pub fn build(b: *std.Build) void {
     search_build_options.addOption(bool, "nonroot_check_extension", nonroot_check_extension);
     search_build_options.addOption(bool, "mate_windows", mate_windows);
     search_build_options.addOption(bool, "singular_exclusion_horizon", singular_exclusion_horizon);
+    search_build_options.addOption(bool, "pv_table_refusal", pv_table_refusal);
     search_build_options.addOption(bool, "qsearch_tactical_generation", qsearch_tactical_generation);
     search_build_options.addOption(bool, "selective_core", selective_core);
     search_build_options.addOption(bool, "core_history", core_history);
@@ -325,6 +331,7 @@ pub fn build(b: *std.Build) void {
     transcript_search_build_options.addOption(bool, "nonroot_check_extension", nonroot_check_extension);
     transcript_search_build_options.addOption(bool, "mate_windows", mate_windows);
     transcript_search_build_options.addOption(bool, "singular_exclusion_horizon", singular_exclusion_horizon);
+    transcript_search_build_options.addOption(bool, "pv_table_refusal", pv_table_refusal);
     transcript_search_build_options.addOption(bool, "qsearch_tactical_generation", qsearch_tactical_generation);
     transcript_search_build_options.addOption(bool, "selective_core", selective_core);
     transcript_search_build_options.addOption(bool, "core_history", core_history);

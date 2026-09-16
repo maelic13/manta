@@ -2908,6 +2908,23 @@ step of wrong-corner distance and `8` per step of king approach, a far shallower
 gradient than engines that convert it reliably. Recorded as a strength item for
 a later phase, not a 1.1.1 repair.
 
+**6.5.15.1 addendum E (2026-09-16): principal-node table refusal, `MAN-S37`.**
+The fifty-move display repair raised the structural question behind it. Manta
+takes exact table cutoffs at principal nodes below the root, so a principal
+line can end at a record instead of at searched evidence; the table-extended
+display of addendum B exists to cover that, and it is how a history-interaction
+fault reached the interface twice. The pinned classical reference declines
+stored verdicts at principal nodes, which is why its published line is always
+one it walked. The maintainer asked for that shape as a measured candidate
+rather than an imitation, so `features.pv_table_refusal` (default off,
+`-Dpv-table-refusal`) extends the 1.1.1 root refusal to every principal node in
+the main search and in quiescence. Production is untouched: both fingerprints
+stay `359,045` and `642,131`. The candidate arm reads `355,879`, spends `0.995`
+of the baseline's nodes to depth 13 across five positions and reaches the same
+mean depth in a fixed 1.5 seconds, so it is close to cost-free and only games
+can decide it. Registered as `MAN-S37`; if it accepts, the display extension
+can be removed rather than guarded.
+
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
 6.5.15 closeout. Their surviving content is owned by the steps above; their

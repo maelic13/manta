@@ -72,8 +72,9 @@ pub const TableLookup = enum {
     illegal_move,
     depth_rejected,
     bound_rejected,
-    /// Authenticated at the root, where a stored verdict is never taken.
-    root_refused,
+    /// Authenticated at a node that refuses stored verdicts: the root always,
+    /// and every principal node when `pv_table_refusal` is on.
+    cutoff_refused,
     usable,
 };
 

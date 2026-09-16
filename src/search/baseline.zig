@@ -1038,7 +1038,7 @@ fn negamaxNode(
     var table_evidence = if (exclusion_node)
         TableEvidence{}
     else
-        probeTable(features.root_table_refusal, context, value, depth, ply, alpha_initial, beta);
+        probeTable(refusesTableVerdict(features, ply, pv_node), context, value, depth, ply, alpha_initial, beta);
     if (comptime features.tt_rule_fifty_guard) {
         if (value.current.rule50 >= tt_rule_fifty_guard_clock)
             table_evidence.facts.cutoff_authorized = false;
@@ -3176,7 +3176,15 @@ fn quiescenceNode(
             .static_eval,
         );
 
-    const table_evidence = probeTable(features.root_table_refusal, context, value, 0, ply, alpha_initial, beta);
+    const table_evidence = probeTable(
+        refusesTableVerdict(features, ply, pv_node),
+        context,
+        value,
+        0,
+        ply,
+        alpha_initial,
+        beta,
+    );
     if (comptime features.search_evidence_observation)
         context.thread.search_evidence.observeTt(table_evidence.facts);
     if (table_evidence.cutoff) |cutoff|
@@ -3639,8 +3647,39 @@ const TableEvidence = struct {
     facts: types.TtFacts = .{},
 };
 
+test "which nodes decline a stored verdict is decided by the two switches" {
+    // The root always declines: it publishes without searching. A principal
+    // node declines only under the candidate, and a node searched with a null
+    // window never does -- that is where the table pays for itself.
+    const production: types.Features = .{};
+    try std.testing.expect(refusesTableVerdict(production, 0, true));
+    try std.testing.expect(!refusesTableVerdict(production, 3, true));
+    try std.testing.expect(!refusesTableVerdict(production, 3, false));
+
+    const candidate: types.Features = .{ .pv_table_refusal = true };
+    try std.testing.expect(refusesTableVerdict(candidate, 0, true));
+    try std.testing.expect(refusesTableVerdict(candidate, 3, true));
+    try std.testing.expect(!refusesTableVerdict(candidate, 3, false));
+
+    // With the root repair off, a production root still searches every node
+    // for itself only when the candidate is on.
+    const pre_repair: types.Features = .{ .root_table_refusal = false };
+    try std.testing.expect(!refusesTableVerdict(pre_repair, 0, true));
+    const pre_repair_candidate: types.Features = .{ .root_table_refusal = false, .pv_table_refusal = true };
+    try std.testing.expect(refusesTableVerdict(pre_repair_candidate, 0, true));
+}
+
+/// Which nodes decline a stored verdict and keep only the stored move. The
+/// root always does, because it publishes without searching. A principal node
+/// does when the candidate switch is on, so the published line is searched
+/// rather than assembled from records.
+fn refusesTableVerdict(comptime features: types.Features, ply: usize, pv_node: bool) bool {
+    if (features.root_table_refusal and ply == 0) return true;
+    return features.pv_table_refusal and pv_node;
+}
+
 fn probeTable(
-    comptime refuse_root: bool,
+    refuse_cutoff: bool,
     context: anytype,
     value: *const chess.position.Position,
     depth: u16,
@@ -3683,13 +3722,12 @@ fn probeTable(
     // test above runs first. The root cannot: it publishes a move without
     // searching anything, so a verdict stored when this position had occurred
     // twice would be replayed when the same position now completes a
-    // threefold. The root therefore takes the stored move for ordering and
-    // never the stored verdict.
-    const root_refused = refuse_root and ply == 0;
-    const usable = sufficient_depth and usable_bound and !root_refused;
+    // threefold. A refusing node therefore takes the stored move for ordering
+    // and never the stored verdict.
+    const usable = sufficient_depth and usable_bound and !refuse_cutoff;
     context.observer.ttProbe(record.producer, record.bound, usable);
-    context.observer.ttLookup(if (root_refused)
-        .root_refused
+    context.observer.ttLookup(if (refuse_cutoff)
+        .cutoff_refused
     else if (!sufficient_depth)
         .depth_rejected
     else if (!usable_bound)

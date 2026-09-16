@@ -77,6 +77,7 @@ fn observe(
             .core_aspiration = search_build_options.core_aspiration,
             .core_qs_checks = search_build_options.core_qs_checks,
             .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
+            .pv_table_refusal = search_build_options.pv_table_refusal,
             .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
         },
         &position,
@@ -226,7 +227,7 @@ fn validate(
     const lookup_outcomes = counters.tt_lookups_by_outcome;
     const authenticated = lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.depth_rejected)] +
         lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.bound_rejected)] +
-        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.root_refused)] +
+        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.cutoff_refused)] +
         lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.usable)];
     if (authenticated != sum(counters.tt_probes_by_bound) or
         lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.usable)] !=
@@ -355,6 +356,7 @@ fn compareDisabled(
             .core_aspiration = search_build_options.core_aspiration,
             .core_qs_checks = search_build_options.core_qs_checks,
             .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
+            .pv_table_refusal = search_build_options.pv_table_refusal,
             .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
         },
         &position,

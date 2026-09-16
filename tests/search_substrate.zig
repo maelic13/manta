@@ -66,7 +66,7 @@ test "warm transposition evidence preserves the exact root result" {
     try std.testing.expectEqual(search.types.Provenance.full_search, warm.evidence.provenance);
     try std.testing.expect(second_counters.tt_usable_by_producer[@intFromEnum(search.types.Provenance.full_search)] != 0);
     try std.testing.expect(second_counters.tt_lookups_by_outcome[
-        @intFromEnum(search.diagnostics.TableLookup.root_refused)
+        @intFromEnum(search.diagnostics.TableLookup.cutoff_refused)
     ] != 0);
 }
 
