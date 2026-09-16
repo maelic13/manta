@@ -6,6 +6,43 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-16
+
+### Fixed
+
+- A won game is no longer drawn by repetition. Returning to a position it had
+  already searched, the engine replayed that earlier decision without looking
+  again, walked into a threefold and reported a winning score while doing it.
+  Reported in issue #4.
+- The only legal move is played at once instead of being thought about.
+  Reported in issue #4.
+- A proven mate ends the search, instead of repeating the same line once per
+  remaining ply and reporting depths that describe no work.
+- `go infinite` no longer answers with `bestmove` before `stop` asks for it,
+  even when the search has nothing left to examine.
+- With more than one thread, `nodes` and `nps` count every thread's work during
+  the search; they previously showed one thread's and understated the search.
+- One move can no longer take an outsized share of a short clock, so a long
+  game keeps time for its endgame instead of arriving on the increment.
+- The displayed principal variation stops where the rules end the game. Near
+  the fifty-move limit it continued into moves that would never be played,
+  which interfaces report as a principal variation continuing after the
+  fifty-move rule.
+
+### Changed
+
+- Principal variations are lines the search actually walked. Manta used to end
+  a line wherever it met a stored position and then pad the display from its
+  own tables; now every principal node is searched for itself. On a warm table
+  at depth 12 the searched line grew from about two moves to the full depth,
+  and the padding is gone. Playing strength is unchanged; the searched line was
+  the point.
+- Search information follows the field order interfaces expect:
+  `depth`, `seldepth`, `score`, `nodes`, `nps`, `hashfull`, `tbhits`, `time`,
+  `pv`. Table occupancy (`hashfull`) is new. Lines reporting the move being
+  searched are trimmed to `currmove` and `currmovenumber`, and appear only once
+  a search has run for three seconds.
+
 ## [1.1.0] - 2026-09-13
 
 ### Changed
@@ -71,6 +108,7 @@ All notable user-visible changes to Manta are recorded here. The format follows
 - Portable 64-bit release builds for Windows x86-64, Linux x86-64, Linux ARM64,
   macOS x86-64 and macOS ARM64.
 
-[Unreleased]: https://github.com/maelic13/manta/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/maelic13/manta/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/maelic13/manta/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/maelic13/manta/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/maelic13/manta/releases/tag/v1.0.0

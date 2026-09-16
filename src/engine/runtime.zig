@@ -66,6 +66,10 @@ pub const SearchSpec = struct {
     time_input: ?time.Input,
     received_ns: u64,
     ponder: bool = false,
+    /// `go infinite`. The search still ends when nothing is left to search --
+    /// a proven mate, or the ply ceiling -- but the result is published only
+    /// when the interface asks for it.
+    infinite: bool = false,
 };
 pub const SearchResult = search.types.Result;
 
@@ -81,6 +85,10 @@ pub const IterationProgress = struct {
     completed: search.types.CompletedIteration,
     tablebase_hits: u64,
     observed_ns: u64,
+    /// Work of every searching thread at the moment this iteration completed.
+    /// `completed.nodes` stays worker zero's own count, which the search and
+    /// the clock policy reason about; this is what the interface is shown.
+    aggregate_nodes: u64,
 };
 
 pub const SearchProgress = union(enum) {
@@ -209,6 +217,12 @@ pub const Finished = struct {
 
 pub const WorkerState = struct {
     search: search.types.ThreadState = search.types.ThreadState.init(),
+    /// A mirror of `search.nodes` that other threads may read. The search
+    /// counts nodes in an ordinary field on its own hot path; this copy is
+    /// refreshed while the search polls, so the controller can report the work
+    /// of every thread while they are still running. It lags by at most one
+    /// poll interval, which is a display detail, never search evidence.
+    published_nodes: std.atomic.Value(u64) = .init(0),
     // SAFETY: perft initializes a state slot before each transition reads it;
     // ordinary search never accesses this array.
     perft_states: [chess.types.max_ply]chess.position.PositionState = undefined,
@@ -246,6 +260,9 @@ pub const Active = struct {
     helper_positions: []chess.position.Position,
     helper_root_states: []chess.position.PositionState,
     helper_count: usize,
+    /// Controller-owned helper storage, borrowed for this search so worker
+    /// zero can total the published node counts when it publishes a line.
+    helpers: []Helper = &.{},
     helper_stop: std.atomic.Value(bool) = .init(false),
     /// Helpers publish only a bounded count of completed ordinary root
     /// instability events. No move, score, PV or result crosses this boundary.
@@ -259,7 +276,10 @@ pub const Active = struct {
     /// bench report, so the summary block does not repeat it.
     bench_header_published: bool = false,
     last_published_iteration_nodes: ?u64 = null,
-    ponder_completion_waiting: bool = false,
+    /// Set once a finished search that must not publish yet -- a ponder
+    /// without its `ponderhit`, or `go infinite` without its `stop` -- has
+    /// emitted its final information line.
+    completion_waiting: bool = false,
     /// Controller-owned storage keeps this event alive until every persistent
     /// worker has returned from its completion signal.
     done: *std.Io.Event,
@@ -472,6 +492,7 @@ pub fn start(
         .helper_positions = helper_positions,
         .helper_root_states = helper_states,
         .helper_count = helper_count,
+        .helpers = controller.helpers[0..helper_count],
         .remaining_workers = .init(helper_count + 1),
         .controller_wake = controller_wake,
         .done = &controller.completion_done,
@@ -488,6 +509,12 @@ pub fn start(
         controller.active.?.job.normal.limits.tablebase_probe_limit = controller.syzygy_probe_limit;
         controller.active.?.job.normal.limits.tablebase_use_rule_fifty = controller.syzygy_fifty_move_rule;
         if (helper_count != 0) controller.active.?.table.nextGeneration();
+    }
+    // The mirrors still hold the previous search's totals. Clear them before
+    // the wakes: a helper refreshes its own only on its first poll, so until
+    // then worker zero would add stale work to the depth-1 and depth-2 lines.
+    for (controller.helpers[0..helper_count]) |*helper| {
+        helper.worker.published_nodes.store(0, .monotonic);
     }
     for (controller.helpers[0..helper_count]) |*helper| helper.wake.post(io);
     controller.worker_wake.post(io);
@@ -551,9 +578,17 @@ fn helperLoop(controller: *Controller, helper: *Helper) void {
         if (helper.shutdown.load(.acquire)) return;
         const active = &controller.active.?;
         runHelper(active, helper);
+        // The last poll can be up to one interval short of the work actually
+        // done. Publishing here, before the completion is visible, makes the
+        // aggregate exact for every line drawn once `done` is set.
+        helper.worker.published_nodes.store(helper.worker.search.nodes, .monotonic);
         workerFinished(active);
     }
 }
+
+/// How often a helper refreshes its readable node count. The interval matches
+/// the clock poll, so publishing costs one relaxed store per poll.
+const node_publish_interval: u16 = time.poll_interval_nodes;
 
 fn workerFinished(active: *Active) void {
     if (active.remaining_workers.fetchSub(1, .acq_rel) == 1) {
@@ -611,6 +646,7 @@ fn runJob(active: *Active) void {
                 .integrated_budget = integrated_budget,
                 .params = active.time_params,
                 .legal_root_move_count = spec.legal_root_move_count,
+                .on_game_clock = spec.time_input != null and spec.time_input.? == .clock,
                 .soft_deadline_ns = if (maybe_budget) |budget_value|
                     time.deadline(spec.received_ns, budget_value.optimum_ms)
                 else
@@ -724,6 +760,7 @@ fn runHelper(active: *Active, helper: *Helper) void {
     var control = Control{
         .active = active,
         .node_limit = spec.limits.nodes,
+        .worker = &helper.worker,
         .timing = .{
             .clock = &clock,
             .cancel_epoch = active.cancel_epoch,
@@ -736,6 +773,7 @@ fn runHelper(active: *Active, helper: *Helper) void {
             .integrated_budget = integrated_budget,
             .params = active.time_params,
             .legal_root_move_count = spec.legal_root_move_count,
+            .on_game_clock = spec.time_input != null and spec.time_input.? == .clock,
             .soft_deadline_ns = if (maybe_budget) |budget_value|
                 time.deadline(spec.received_ns, budget_value.optimum_ms)
             else
@@ -789,6 +827,7 @@ fn executeSearch(
         .core_aspiration = search_build_options.core_aspiration,
         .core_qs_checks = search_build_options.core_qs_checks,
         .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
+        .pv_table_refusal = search_build_options.pv_table_refusal,
         .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
         .search_evidence_observation = search_build_options.search_evidence_observation,
     };
@@ -877,6 +916,7 @@ fn SearchControl(
                 .completed = completed,
                 .tablebase_hits = self.active.worker.search.tablebase_hits,
                 .observed_ns = monotonicNs(self.active.io),
+                .aggregate_nodes = aggregateNodes(self.active),
             } });
         }
 
@@ -954,8 +994,19 @@ fn HelperSearchControl(
         active: *Active,
         node_limit: ?u64,
         timing: time.Control(Clock, root_confidence_time, integrated_time),
+        worker: *WorkerState,
+        publish_countdown: u16 = 0,
 
         pub inline fn shouldStop(self: *@This()) bool {
+            // Refresh the readable copy of this helper's work while polling.
+            // One relaxed store per interval keeps the hot path's ordinary
+            // counter untouched and lets worker zero report every thread.
+            if (self.publish_countdown == 0) {
+                self.worker.published_nodes.store(self.worker.search.nodes, .monotonic);
+                self.publish_countdown = node_publish_interval;
+            } else {
+                self.publish_countdown -= 1;
+            }
             return self.active.helper_stop.load(.acquire) or self.timing.shouldStop();
         }
 
@@ -978,6 +1029,17 @@ fn HelperSearchControl(
             return claimAggregateNode(self.active, self.node_limit);
         }
     };
+}
+
+/// Worker zero's own count plus the last published count of every helper.
+/// Helpers refresh theirs while they poll, so during a search this trails
+/// their true totals by at most one poll interval and never runs ahead of work
+/// actually done. Once `done` is set every helper has published its final
+/// count, so the total is then exact.
+pub fn aggregateNodes(active: *const Active) u64 {
+    var total = active.worker.search.nodes;
+    for (active.helpers) |*helper| total +|= helper.worker.published_nodes.load(.monotonic);
+    return total;
 }
 
 fn claimAggregateNode(active: *Active, limit: ?u64) bool {
@@ -1064,6 +1126,7 @@ fn testIteration(depth: u16) IterationProgress {
         },
         .tablebase_hits = 0,
         .observed_ns = depth,
+        .aggregate_nodes = depth,
     };
 }
 

@@ -694,6 +694,38 @@ pub const Features = struct {
     /// window. Switching it off reconstructs that superseded tree at
     /// fingerprint `775,451` for archived diagnostics.
     mate_windows: bool = true,
+    /// Issue #4 repair, production since 1.1.1. A table record is keyed by the
+    /// position alone and carries neither the repetition history nor the
+    /// halfmove clock of the visit that stored it. Every interior node
+    /// re-derives those facts before probing, because the draw test precedes
+    /// the probe, but the root publishes a move without searching anything, so
+    /// a verdict stored when a position had occurred twice was replayed once
+    /// the same position completed a threefold: a won game was drawn that way.
+    /// Production keeps the stored root move for ordering and refuses the
+    /// stored verdict. Switching this off restores the 1.1.0 root, which every
+    /// archived fingerprint was recorded on.
+    root_table_refusal: bool = true,
+    /// Issue #4 repair, production since 1.1.1. A proven mate no further away
+    /// than the iteration that found it cannot be shortened or refuted by a
+    /// deeper one, because the rules bound what any continuation can still
+    /// produce. Iterating on regardless republished the same line once per
+    /// remaining ply and reported a depth that described no work. Switching
+    /// this off restores the 1.1.0 loop, which every archived fingerprint was
+    /// recorded on.
+    settled_mate_stop: bool = true,
+    /// `MAN-S37`, production since the maintainer's decision of 2026-09-16. A
+    /// principal-variation node takes no stored verdict: it is searched for
+    /// itself, so the line it publishes is one the search walked rather than
+    /// one assembled from records. The root refuses for the same reason under
+    /// `root_table_refusal`; this extends the refusal to every principal node
+    /// in the main search and in quiescence, which is the shape the pinned
+    /// classical reference uses. Its registered `[-5,0]` gate did not resolve
+    /// -- `-1.42 +/- 10.11` Elo over 2,442 games -- and it was retained by
+    /// explicit maintainer decision on measured reporting grounds: the
+    /// searched line at depth 12 on a warm table went from about two plies to
+    /// the full depth, which removed the table-walk display entirely. Switching
+    /// it off restores the 1.1.1 tree at fingerprint `359,045`.
+    pv_table_refusal: bool = true,
     /// Step-6.5.5 singular-exclusion-horizon candidate. The same-position
     /// search still excludes exactly the legal ordinary TT move and alone
     /// decides whether that move extends; this switch only replaces the

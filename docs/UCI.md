@@ -422,25 +422,35 @@ Scores use the root side's perspective. Centipawn and mate values obey
 root uses `score mate 0`. Bound tags are emitted only when the score is actually
 a lower or upper bound.
 
+Search lines carry their fields in this order:
+
+```text
+info depth <D> seldepth <S> score <cp|mate> <V> [lowerbound|upperbound] nodes <N> nps <N> hashfull <PERMILLE> [tbhits <N>] time <MS> pv <moves>
+```
+
+`nodes` and `nps` count the work of every searching thread, so they grow with
+`Threads`; `hashfull` is table occupancy in permille, sampled rather than
+counted. `tbhits` appears only when tablebases contributed.
+
 During search, live root-move progress may emit:
 
 ```text
-info depth <D> currmove <legal-root-move> currmovenumber <N> nodes <N> time <MS>
+info depth <D> currmove <legal-root-move> currmovenumber <N>
 ```
 
-Root-move lines are the only search output that may coalesce or drop: a newer
-sample replaces a pending one, and a line is discarded rather than waiting when
-the output queue is full.
+These appear only once a search has run for three seconds, since a move
+reported for a few milliseconds tells an interface nothing. Root-move lines are
+the only search output that may coalesce or drop: a newer sample replaces a
+pending one, and a line is discarded rather than waiting when the output queue
+is full.
 
 Each fully completed iteration emits the ordinary score/depth/PV line, once per
-depth and in depth order, for any `Threads` value. The searched principal
-variation may end at a transposition-table hit; for display it is then extended
-from the table: each appended move is the stored move of an authenticated
-non-upper-bound entry for the position reached, legal there, and the extension
-stops at the first missing entry, unusable move, repeated position or capacity
-limit. The searched prefix is unchanged and the extension carries no search
-authority. The `ponder` move of `bestmove` is the second move of that same
-displayed line, so it may come from the table. Completed-iteration lines
+depth and in depth order, for any `Threads` value. The published line is the
+line the search walked: a principal node takes no stored verdict, so the
+variation is searched evidence rather than a walk through stored records, and
+it ends only where the search ended -- at its horizon, at a proven mate, or
+where the rules end the game. The `ponder` move of `bestmove` is the second
+move of that same searched line. Completed-iteration lines
 are required output: they are neither coalesced with root-move progress nor
 dropped when the output queue is full, and they wait for presenter capacity.
 The worker-side record of completed iterations is bounded; if more than it
@@ -449,7 +459,7 @@ the newest always survives. A completed result and its required `bestmove` are
 not droppable. Partial or aborted iterations never manufacture PV, score or
 bound authority.
 
-Completed-iteration lines count the main worker's nodes. A search that did not
+A search that did not
 end at its depth limit -- stopped, timed or node-limited inside an iteration --
 emits one closing line before `bestmove` that repeats its last completed depth
 and PV with the combined nodes, time and `nps` of all threads, or a depth-0

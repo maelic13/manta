@@ -128,6 +128,7 @@ pub fn run(
             .core_aspiration = search_build_options.core_aspiration,
             .core_qs_checks = search_build_options.core_qs_checks,
             .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
+            .pv_table_refusal = search_build_options.pv_table_refusal,
             .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
             .search_evidence_observation = search_build_options.search_evidence_observation,
         },

@@ -113,6 +113,11 @@
     Build the default-off Step-6.5.5 singular-exclusion-horizon candidate arm.
     It changes only the depth of the same-position exclusion probe.
 
+.PARAMETER PvTableRefusal
+    Accepted MAN-S37 principal-node verdict refusal, on by default, so a
+    published line is searched rather than assembled from table records. Pass
+    -PvTableRefusal:$false to reconstruct the 1.1.1 tree.
+
 .PARAMETER QsearchTacticalGeneration
     Keep the accepted Step-6.5.7 tactical-only non-check qsearch path. It
     defaults on; pass -QsearchTacticalGeneration:$false to reconstruct MAN-S30.
@@ -157,6 +162,7 @@ param(
     [switch]$MateWindows,
     [switch]$SelectiveCore,
     [switch]$SingularExclusionHorizon,
+    [switch]$PvTableRefusal,
     [switch]$QsearchTacticalGeneration,
     [switch]$BuildOnly,
     [int]$BenchDepth = 6,
@@ -193,6 +199,12 @@ $nonrootCheckExtensionEnabled = if ($PSBoundParameters.ContainsKey("NonrootCheck
 
 $selectiveCoreEnabled = if ($PSBoundParameters.ContainsKey("SelectiveCore")) {
     [bool]$SelectiveCore
+} else {
+    $true
+}
+
+$pvTableRefusalEnabled = if ($PSBoundParameters.ContainsKey("PvTableRefusal")) {
+    [bool]$PvTableRefusal
 } else {
     $true
 }
@@ -237,6 +249,7 @@ function Write-EngineManifest {
         [Parameter(Mandatory)][bool]$MateWindows,
         [Parameter(Mandatory)][bool]$SelectiveCore,
         [Parameter(Mandatory)][bool]$SingularExclusionHorizon,
+        [Parameter(Mandatory)][bool]$PvTableRefusal,
         [Parameter(Mandatory)][bool]$QsearchTacticalGeneration,
         [switch]$SkipBench
     )
@@ -281,6 +294,7 @@ function Write-EngineManifest {
         mate_windows = $MateWindows
         selective_core = $SelectiveCore
         singular_exclusion_horizon = $SingularExclusionHorizon
+        pv_table_refusal = $PvTableRefusal
         qsearch_tactical_generation = $QsearchTacticalGeneration
         search_spsa_bake    = $false
         git_sha            = $sha
@@ -334,9 +348,11 @@ try {
     $selectiveCoreText = $selectiveCoreEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dselective-core=$selectiveCoreText"
     if ($SingularExclusionHorizon) { $buildArgs += "-Dsingular-exclusion-horizon=true" }
+    $pvTableRefusalText = $pvTableRefusalEnabled.ToString().ToLowerInvariant()
+    $buildArgs += "-Dpv-table-refusal=$pvTableRefusalText"
     $qsearchTacticalGenerationText = $qsearchTacticalGenerationEnabled.ToString().ToLowerInvariant()
     $buildArgs += "-Dqsearch-tactical-generation=$qsearchTacticalGenerationText"
-    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($mateWindowsEnabled) { '' } else { '-crossing-mate-test' })$(if ($selectiveCoreEnabled) { '' } else { '-no-selective-core' })$(if ($SingularExclusionHorizon) { '-singular-exclusion-horizon' } else { '' })$(if ($qsearchTacticalGenerationEnabled) { '-qsearch-tacticals' } else { '-full-qsearch-generation' })"
+    $flavor = "$(if ($Portable) { 'portable' } else { 'native' })$(if ($Pgo) { '-pgo' } else { '' })$(if ($Tune) { '-tune' } else { '' })$(if ($RootConfidenceTime) { '-root-confidence-time' } else { '' })$(if ($integratedTimeEnabled) { '-integrated-time' } else { '-untuned-time' })$(if ($StabilityAspiration) { '-stability-aspiration' } else { '' })$(if ($liveHistoryStagingEnabled) { '-live-history-staging' } else { '-eager-picker' })$(if ($nonrootCheckExtensionEnabled) { '' } else { '-no-check-extension' })$(if ($mateWindowsEnabled) { '' } else { '-crossing-mate-test' })$(if ($selectiveCoreEnabled) { '' } else { '-no-selective-core' })$(if ($SingularExclusionHorizon) { '-singular-exclusion-horizon' } else { '' })$(if ($pvTableRefusalEnabled) { '' } else { '-no-pv-table-refusal' })$(if ($qsearchTacticalGenerationEnabled) { '-qsearch-tacticals' } else { '-full-qsearch-generation' })"
 
     Write-Host ""
     Write-Host "Building Manta ($flavor) - suffix: $Suffix"
@@ -374,6 +390,7 @@ try {
         -MateWindows $mateWindowsEnabled `
         -SelectiveCore $selectiveCoreEnabled `
         -SingularExclusionHorizon ([bool]$SingularExclusionHorizon) `
+        -PvTableRefusal $pvTableRefusalEnabled `
         -QsearchTacticalGeneration $qsearchTacticalGenerationEnabled -SkipBench:$BuildOnly
     Write-Host ""
     Write-Host "Done: $dest"

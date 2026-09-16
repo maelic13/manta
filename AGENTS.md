@@ -182,8 +182,21 @@ operational boundary change, so the instrument owes one identical-binary
 calibration before the next registered candidate, and results measured before
 it are not comparable with results measured after it.
 
-Use the harness and SPSA tooling that `EXPERIMENTS.md` and `PLAN.md` name as
-current. Do not substitute a parked or unqualified harness silently.
+Run gates the way Rarog runs them, because the harness is Rarog's. Register
+the gate in `EXPERIMENTS.md` before any game with one verbatim `tools/sprt.ps1`
+recipe that relies on the script's defaults (`3+0.03`, Hash 64, Threads 1,
+physical cores minus two with affinity, UHO in random order, game end by the
+rules of chess, 16,000-game cap) and names only what differs, then spell those
+defaults out in the row so it reproduces without the script. Pick the bracket
+by `-Mode`: `gainer` (`[3,10]`) to demand a material gain, `simplify`
+(`[-5,0]`) for a non-regression or cleanup, `calibrate` for an identical-binary
+null, `fixed -Games N` for a direction check or a diagnostic that decides
+nothing. Explicit `-Elo0`/`-Elo1` are for a bracket the modes do not offer, and
+the reason is written into the registration. Bounds, cap, book and game end
+never change after games are seen. The maintainer launches every match; a
+coding agent prepares arms, manifests and the recipe. Use the harness and SPSA
+tooling that `EXPERIMENTS.md` and `PLAN.md` name as current. Do not substitute
+a parked or unqualified harness silently.
 `net_trainer` owns engine-agnostic NNUE data, training, export, format and
 conformance tooling. Do not fork, vendor or independently reimplement
 third-party shared tooling in Manta.

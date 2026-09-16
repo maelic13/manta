@@ -14,6 +14,11 @@ pub const integrated_minimum_depth: u16 = 4;
 
 const permille: u64 = 1000;
 const minimum_dynamic_factor: u64 = 350;
+/// Share of the clock above the credited increment that one move's absolute
+/// maximum may reach. A safety reserve, not a fitted coefficient: it binds only
+/// when the allocation would let a single move swallow the rest of the game,
+/// and never cuts a move below the increment it earns back.
+const maximum_reserve_share_permille: u64 = 250;
 const maximum_dynamic_factor: u64 = 2200;
 const ponder_credit_permille: u64 = 750;
 
@@ -153,9 +158,24 @@ pub fn budgetWithParams(
             const future_reserve = overhead_ms *| future_moves;
             const pool = projected -| future_reserve;
             const optimum = @min(usable, @max(pool / horizon, 1));
+            // The increment is spendable in full: it returns after the move.
+            // Above it, one move may reach only a share of what is left, so a
+            // long game cannot arrive in its endgame with nothing but the
+            // increment. The fitted ratio still applies below this ceiling.
+            // The floor keeps a soft-to-hard interval at every clock: on a
+            // nearly spent clock there is no future to protect, and collapsing
+            // the interval would remove the room an unstable root needs.
+            const reserve_cap = @max(
+                optimum *| 2,
+                credited_increment +|
+                    scalePermille(usable -| credited_increment, maximum_reserve_share_permille),
+            );
             const maximum = @min(
                 usable,
-                scalePermille(optimum, @intCast(params.maximum_ratio)),
+                @min(
+                    scalePermille(optimum, @intCast(params.maximum_ratio)),
+                    @max(optimum, reserve_cap),
+                ),
             );
             break :blk .{
                 .optimum_ms = optimum,
@@ -221,6 +241,7 @@ pub const StopReason = enum {
     hard_deadline,
     external,
     search_complete,
+    forced_move,
 };
 
 /// One fixed-size, worker-zero-owned diagnostic snapshot. It is populated only
@@ -426,6 +447,9 @@ pub fn Control(
         integrated_budget: ?Budget = null,
         params: Params = .{},
         legal_root_move_count: u16 = 0,
+        /// True for a move on the game clock. Fixed depth, node and infinite
+        /// searches are analysis requests and keep their own stopping rules.
+        on_game_clock: bool = false,
         soft_deadline_ns: ?u64,
         hard_deadline_ns: ?u64,
         poll_countdown: u16 = 0,
@@ -502,6 +526,14 @@ pub fn Control(
                 return true;
             }
             if (!self.clockIsActive()) return false;
+            // A forced move is not a decision. Once the first iteration has
+            // produced a principal variation to publish, spending any more of
+            // the game clock on the only legal move buys nothing.
+            if (self.on_game_clock and self.legal_root_move_count == 1) {
+                self.reason = .time_limit;
+                self.recordStop(.forced_move, 0);
+                return true;
+            }
             if (self.soft_deadline_ns) |soft| {
                 const decision = if (comptime integrated_time)
                     if (self.integrated_budget) |allocation|
@@ -631,10 +663,13 @@ test "movetime and clock budgets preserve overhead and hard ordering" {
     try std.testing.expectEqual(Budget{ .optimum_ms = 90, .maximum_ms = 90 }, budget(.{ .movetime_ms = 100 }, 10, 10));
     try std.testing.expectEqual(Budget{ .optimum_ms = 0, .maximum_ms = 0 }, budget(.{ .movetime_ms = 5 }, 10, 10));
     const clock = budget(.{ .clock = .{ .remaining_ms = 1010, .increment_ms = 32, .moves_to_go = 10 } }, 10, 10);
+    // The 1.1.1 reserve binds here: ten moves share one second, so one of them
+    // may not take half of it. The fitted ratio still sets the ceiling
+    // whenever the clock is long relative to a move's share.
     const expected_clock: Budget = if (search_build_options.integrated_time)
-        .{ .optimum_ms = 117, .maximum_ms = 502 }
+        .{ .optimum_ms = 117, .maximum_ms = 270 }
     else
-        .{ .optimum_ms = 118, .maximum_ms = 472 };
+        .{ .optimum_ms = 118, .maximum_ms = 271 };
     try std.testing.expectEqual(expected_clock, clock);
     try std.testing.expect(clock.maximum_ms <= 990);
 }
@@ -948,8 +983,10 @@ test "ordinary clocks reserve scheduling latency independently of movetime" {
         Budget{ .optimum_ms = 90, .maximum_ms = 90 },
         budget(.{ .movetime_ms = 100 }, 10, 40),
     );
+    // Two moves on 50 usable milliseconds: the reserve's floor keeps a
+    // soft-to-hard interval rather than the whole remaining clock.
     try std.testing.expectEqual(
-        Budget{ .optimum_ms = 20, .maximum_ms = 50 },
+        Budget{ .optimum_ms = 20, .maximum_ms = 40 },
         budget(.{ .clock = .{ .remaining_ms = 100, .moves_to_go = 2 } }, 10, 40),
     );
 }
@@ -1179,4 +1216,68 @@ test "helper multiplier is normalized at qualified worker counts" {
     try std.testing.expectEqual(@as(u64, 1200), two.smp_permille);
     try std.testing.expectEqual(two.smp_permille, four.smp_permille);
     try std.testing.expectEqual(two.smp_permille, eight.smp_permille);
+}
+
+test "a forced move ends the search after its first iteration on a game clock" {
+    // Issue #4: with one legal move there is nothing to decide, so the clock
+    // policy publishes it instead of spending a share of the game on it.
+    var cancel = std.atomic.Value(u64).init(0);
+    var fake: FakeClock = .{};
+    const FakeControl = Control(FakeClock, false, false);
+    var forced = FakeControl{
+        .clock = &fake,
+        .cancel_epoch = &cancel,
+        .epoch = 1,
+        .legal_root_move_count = 1,
+        .on_game_clock = true,
+        .soft_deadline_ns = 100_000,
+        .hard_deadline_ns = 200_000,
+    };
+    try std.testing.expect(forced.shouldStopAfterIteration(completedIteration(1, .{}), .{}));
+
+    // A choice on the same clock keeps searching until its own deadline.
+    var choice = FakeControl{
+        .clock = &fake,
+        .cancel_epoch = &cancel,
+        .epoch = 1,
+        .legal_root_move_count = 2,
+        .on_game_clock = true,
+        .soft_deadline_ns = 100_000,
+        .hard_deadline_ns = 200_000,
+    };
+    try std.testing.expect(!choice.shouldStopAfterIteration(completedIteration(1, .{}), .{}));
+
+    // Analysis is not a move: `go infinite` and fixed limits are unaffected,
+    // and so is a forced move searched without a game clock.
+    var analysis = FakeControl{
+        .clock = &fake,
+        .cancel_epoch = &cancel,
+        .epoch = 1,
+        .legal_root_move_count = 1,
+        .on_game_clock = false,
+        .soft_deadline_ns = null,
+        .hard_deadline_ns = null,
+    };
+    try std.testing.expect(!analysis.shouldStopAfterIteration(completedIteration(1, .{}), .{}));
+}
+
+test "one move's maximum keeps a reserve without cutting into the increment" {
+    // Issue #4 follow-up: the fitted ratio is untouched early, when the clock
+    // is long relative to one move's share.
+    const opening = budget(.{ .clock = .{ .remaining_ms = 300_000, .increment_ms = 3_000, .game_ply = 0 } }, 10, 10);
+    try std.testing.expect(opening.maximum_ms == scalePermille(opening.optimum_ms, maximum_ratio_default));
+
+    // Late in the same game the ratio would let one move take most of what is
+    // left; the reserve binds instead, and the move still gets its increment.
+    const endgame = budget(.{ .clock = .{ .remaining_ms = 30_000, .increment_ms = 3_000, .game_ply = 120 } }, 10, 10);
+    try std.testing.expect(endgame.maximum_ms < scalePermille(endgame.optimum_ms, maximum_ratio_default));
+    try std.testing.expect(endgame.maximum_ms > 3_000);
+    try std.testing.expect(endgame.maximum_ms * 2 < 30_000);
+
+    // A move is never held below the increment it earns back, even on a clock
+    // that is almost spent.
+    const scramble = budget(.{ .clock = .{ .remaining_ms = 5_000, .increment_ms = 3_000, .game_ply = 150 } }, 10, 10);
+    try std.testing.expect(scramble.maximum_ms >= scalePermille(3_000, increment_credit_default));
+    try std.testing.expect(scramble.maximum_ms <= 4_980);
+    try std.testing.expect(scramble.optimum_ms <= scramble.maximum_ms);
 }

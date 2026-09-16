@@ -12,6 +12,9 @@ const command_capacity = 64;
 const output_capacity = 64;
 const max_output_bytes = 4096;
 const shutdown_flush_ms = 250;
+/// A search shorter than this reports no root-move progress: the interface has
+/// nothing to do with a move it is told about for a few milliseconds.
+const root_move_report_ms = 3000;
 /// How long shutdown waits for the controller to observe `quit` before
 /// cancelling it. A controller blocked on a full output queue behind an
 /// interface that stopped reading would otherwise never return.
@@ -297,11 +300,15 @@ fn controller(shared: *Shared, state: *ControllerState) !void {
                 // A first drain can race between those two publications, so
                 // take the now-stable slot once more before final reporting.
                 drainSearchProgress(shared, state, active);
-                if (isWaitingPonder(active, shared)) {
-                    publishRetainedPonderInfo(shared, state, active);
+                if (isWaitingPonder(active, shared) or isWaitingInfinite(active, shared)) {
+                    publishRetainedInfo(shared, state, active);
                 } else {
+                    // No `continue` here: the wake that reached this loop may
+                    // be the one posted with a queued command -- the `stop`
+                    // that released a held search is exactly that case -- and
+                    // skipping the read below would leave the controller one
+                    // command behind for the rest of the session.
                     finishActive(shared, state, true);
-                    continue;
                 }
             }
         }
@@ -708,6 +715,7 @@ fn validateGo(
         .time_input = time_input,
         .received_ns = received_ns,
         .ponder = fields.ponder,
+        .infinite = fields.infinite,
     } } };
 }
 
@@ -1040,6 +1048,17 @@ fn isWaitingPonder(active: *const Runtime.Active, shared: *const Shared) bool {
     return isPonderJob(active.job) and shared.ponderhit_epoch.load(.acquire) != active.epoch;
 }
 
+/// `go infinite` ends only on `stop` or `quit`. The search itself can run out
+/// of work -- a proven mate settles every remaining iteration -- but the
+/// engine may not answer with `bestmove` before it is asked.
+fn isWaitingInfinite(active: *const Runtime.Active, shared: *const Shared) bool {
+    const infinite = switch (active.job) {
+        .normal => |spec| spec.infinite,
+        .perft, .bench => false,
+    };
+    return infinite and shared.cancel_epoch.load(.acquire) != active.epoch;
+}
+
 /// Emits each completed bench position as soon as the worker reports it.
 /// A long bench is otherwise silent for its whole run, which gives the user no
 /// way to tell a slow corpus from a hung engine.
@@ -1088,23 +1107,25 @@ fn drainSearchProgress(shared: *Shared, state: *ControllerState, active: *Runtim
     while (active.progress.take(shared.io)) |progress| switch (progress) {
         // A root move is a superseding sample and may be dropped under load.
         .root_move => |root_move| {
-            _ = tryOfferInfoLine(shared, rootMoveInfo(
-                root_move.depth,
-                root_move.chess_move,
-                root_move.number,
-                root_move.nodes,
-                elapsedMilliseconds(spec.received_ns, root_move.observed_ns),
-            ));
+            // Root-move progress is only worth showing once a search is long
+            // enough for the interface to sit on one move for a while.
+            if (elapsedMilliseconds(spec.received_ns, root_move.observed_ns) >= root_move_report_ms) {
+                _ = tryOfferInfoLine(shared, rootMoveInfo(
+                    root_move.depth,
+                    root_move.chess_move,
+                    root_move.number,
+                ));
+            }
         },
         // A completed iteration is the depth's score and principal variation;
         // it waits for presenter capacity like any required line.
         .iteration => |iteration| {
-            var completed = iteration.completed;
-            extendPrincipalVariation(&completed.pv, &state.game.position, &state.hash.table);
             if (!offerLine(shared, completedIterationInfo(
-                completed,
+                iteration.completed,
                 iteration.tablebase_hits,
                 elapsedMilliseconds(spec.received_ns, iteration.observed_ns),
+                iteration.aggregate_nodes,
+                state.hash.table.hashfull(),
             ))) return;
             active.last_published_iteration_nodes = iteration.completed.nodes;
         },
@@ -1115,13 +1136,25 @@ fn discardSearchProgress(shared: *Shared, active: *Runtime.Active) void {
     while (active.progress.take(shared.io)) |_| {}
 }
 
-fn publishRetainedPonderInfo(shared: *Shared, state: *ControllerState, active: *Runtime.Active) void {
-    if (active.ponder_completion_waiting) return;
+/// Publishes the final information line for a finished search whose
+/// `bestmove` is withheld until the interface asks for it.
+fn publishRetainedInfo(shared: *Shared, state: *ControllerState, active: *Runtime.Active) void {
+    if (active.completion_waiting) return;
     const spec = active.job.normal;
-    var result = active.completion.normal;
-    extendResultPrincipalVariation(&result, &state.game.position, &state.hash.table);
-    publishFinalSearchInfoIfNeeded(shared, active, spec, result);
-    active.ponder_completion_waiting = true;
+    const result = active.completion.normal;
+    // The completion carries worker zero's count, while the iteration lines
+    // already reported every thread's. Publishing the raw completion here
+    // would end a multi-thread search on a line lower than the one before it.
+    // The search is finished, so the aggregate is exact.
+    publishFinalSearchInfoIfNeeded(
+        shared,
+        active,
+        spec,
+        result,
+        Runtime.aggregateNodes(active),
+        state.hash.table.hashfull(),
+    );
+    active.completion_waiting = true;
 }
 
 fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
@@ -1154,17 +1187,14 @@ fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
         switch (finished.completion) {
             .normal => |searched| {
                 const spec = finished.job.normal;
-                // The game root and the table outlive the job, so the final
-                // line and the ponder move see the same extended variation
-                // the iteration lines did.
-                var result = searched;
-                extendResultPrincipalVariation(&result, &state.game.position, &state.hash.table);
+                const result = searched;
                 if (last_published_iteration_nodes == null or
                     last_published_iteration_nodes.? != main_worker_nodes.?)
                 {
                     _ = offerLine(shared, searchInfo(
                         result,
                         elapsedMilliseconds(spec.received_ns, monotonicNs(shared.io)),
+                        state.hash.table.hashfull(),
                     ));
                 }
                 if (finished.time_telemetry) |telemetry|
@@ -1201,17 +1231,26 @@ fn timeTelemetryInfo(telemetry: engine.time.Telemetry) Line {
     );
 }
 
+/// `displayed_nodes` is what the line reports; `result.nodes` stays worker
+/// zero's count, which decides whether this line is a repeat of the last
+/// published iteration and is what gets remembered. At one thread the two are
+/// the same value, so single-thread output is unchanged.
 fn publishFinalSearchInfoIfNeeded(
     shared: *Shared,
     active: *Runtime.Active,
     spec: SearchSpec,
     result: Runtime.SearchResult,
+    displayed_nodes: u64,
+    hashfull: u16,
 ) void {
     if (active.last_published_iteration_nodes != null and
         active.last_published_iteration_nodes.? == result.nodes) return;
+    var displayed = result;
+    displayed.nodes = displayed_nodes;
     _ = offerLine(shared, searchInfo(
-        result,
+        displayed,
         elapsedMilliseconds(spec.received_ns, monotonicNs(shared.io)),
+        hashfull,
     ));
     active.last_published_iteration_nodes = result.nodes;
 }
@@ -1325,71 +1364,23 @@ fn publishBestMove(shared: *Shared, result: Runtime.SearchResult) void {
     }
 }
 
-fn rootMoveInfo(
-    depth: u16,
-    chess_move: chess.move.Move,
-    number: u16,
-    nodes: u64,
-    elapsed_ms: u64,
-) Line {
+fn rootMoveInfo(depth: u16, chess_move: chess.move.Move, number: u16) Line {
     const text = chess.notation.format(chess_move) catch @panic("root progress contains a non-chess move");
     return lineFmt(
-        "info depth {d} currmove {s} currmovenumber {d} nodes {d} time {d}",
-        .{ depth, text.slice(), number, nodes, elapsed_ms },
+        "info depth {d} currmove {s} currmovenumber {d}",
+        .{ depth, text.slice(), number },
     );
 }
 
-/// Extends a searched principal variation from the transposition table, for
-/// display only. Selective search may end a principal line at a table hit, so
-/// an iteration that resolved from memory carries one move where the
-/// interface expects the line the score stands on. Each appended move is the
-/// stored move of an authenticated non-upper-bound entry for the position
-/// reached, legal there, and the walk stops at the first missing entry,
-/// unusable move, repeated position or capacity limit. The searched prefix is
-/// never changed, no search decision reads the result, and the table is read
-/// through the same lock-free authenticated probe the workers use, so a live
-/// search may run concurrently.
-fn extendPrincipalVariation(
-    pv: *search.types.PrincipalVariation,
-    root: *const chess.position.Position,
-    table: *const search.tt.Table,
-) void {
-    // SAFETY: `states[ply]` is written by `makeMove` before the walk reads it
-    // through `position.current`, and only the first `ply` entries are used.
-    var states: [chess.types.max_ply]chess.position.PositionState = undefined;
-    var position = root.*;
-    var ply: usize = 0;
-    for (pv.slice()) |chess_move| {
-        if (ply == states.len or !chess.movegen.isLegal(&position, chess_move)) return;
-        chess.transition.makeMove(&position, chess_move, &states[ply]);
-        ply += 1;
-    }
-    while (pv.length < pv.moves.len and ply < states.len) {
-        // A repeated position would loop back through the same entries.
-        if (position.current.repetition != 0) return;
-        const record = table.probe(position.current.key, ply, position.current.rule50) orelse return;
-        if (record.bound == .upper) return;
-        const chess_move = record.chess_move;
-        if (!chess.movegen.isLegal(&position, chess_move)) return;
-        chess.transition.makeMove(&position, chess_move, &states[ply]);
-        ply += 1;
-        pv.moves[pv.length] = chess_move;
-        pv.length += 1;
-    }
-}
-
-fn extendResultPrincipalVariation(
-    result: *Runtime.SearchResult,
-    root: *const chess.position.Position,
-    table: *const search.tt.Table,
-) void {
-    if (result.completed) |*completed| extendPrincipalVariation(&completed.pv, root, table);
-}
-
+/// `displayed_nodes` is the work of every searching thread. The iteration
+/// itself keeps worker zero's own count, which the search and the clock policy
+/// reason about, so only the reported figure changes with thread count.
 fn completedIterationInfo(
     completed: search.types.CompletedIteration,
     tablebase_hits: u64,
     elapsed_ms: u64,
+    displayed_nodes: u64,
+    hashfull: u16,
 ) Line {
     std.debug.assert(completed.pv.length != 0);
     return searchInfo(.{
@@ -1397,24 +1388,29 @@ fn completedIterationInfo(
         .evidence = completed.evidence,
         .completed = completed,
         .termination = .depth_limit,
-        .nodes = completed.nodes,
+        .nodes = displayed_nodes,
         .tablebase_hits = tablebase_hits,
         .selective_depth = completed.selective_depth,
-    }, elapsed_ms);
+    }, elapsed_ms, hashfull);
 }
 
-fn searchInfo(result: Runtime.SearchResult, elapsed_ms: u64) Line {
+/// Fields follow the order interfaces are used to reading: depth, seldepth,
+/// score, then the counters, then the line itself. `hashfull` is permille of
+/// table occupancy. `tbhits` is emitted only when tablebases actually
+/// contributed, so a deployment without them shows the same fields as before.
+fn searchInfo(result: Runtime.SearchResult, elapsed_ms: u64, hashfull: u16) Line {
     const completed_depth: u16 = if (result.completed) |completed| completed.depth else 0;
+    const nps = if (elapsed_ms == 0) result.nodes *| 1000 else (result.nodes *| 1000) / elapsed_ms;
     if (result.best_move == null) {
         if (result.evidence.value.isMate()) {
             return lineFmt(
-                "info depth {d} score mate {d} nodes {d} time {d}",
-                .{ completed_depth, mateMoves(result.evidence.value), result.nodes, elapsed_ms },
+                "info depth {d} score mate {d} nodes {d} nps {d} hashfull {d} time {d}",
+                .{ completed_depth, mateMoves(result.evidence.value), result.nodes, nps, hashfull, elapsed_ms },
             );
         }
         return lineFmt(
-            "info depth {d} score cp {d} nodes {d} time {d}",
-            .{ completed_depth, result.evidence.value.raw(), result.nodes, elapsed_ms },
+            "info depth {d} score cp {d} nodes {d} nps {d} hashfull {d} time {d}",
+            .{ completed_depth, result.evidence.value.raw(), result.nodes, nps, hashfull, elapsed_ms },
         );
     }
 
@@ -1432,13 +1428,11 @@ fn searchInfo(result: Runtime.SearchResult, elapsed_ms: u64) Line {
         .lower => writer.writeAll(" lowerbound") catch @panic("search info exceeds its fixed buffer"),
         .upper => writer.writeAll(" upperbound") catch @panic("search info exceeds its fixed buffer"),
     }
-    const nps = if (elapsed_ms == 0) result.nodes *| 1000 else (result.nodes *| 1000) / elapsed_ms;
-    writer.print(" nodes {d} time {d} nps {d}", .{ result.nodes, elapsed_ms, nps }) catch @panic("search info exceeds its fixed buffer");
-    // `tbhits` is emitted only when tablebases actually contributed, so a
-    // deployment without them produces byte-identical output to before.
+    writer.print(" nodes {d} nps {d} hashfull {d}", .{ result.nodes, nps, hashfull }) catch @panic("search info exceeds its fixed buffer");
     if (result.tablebase_hits != 0) {
         writer.print(" tbhits {d}", .{result.tablebase_hits}) catch @panic("search info exceeds its fixed buffer");
     }
+    writer.print(" time {d}", .{elapsed_ms}) catch @panic("search info exceeds its fixed buffer");
     writer.writeAll(" pv") catch @panic("search info exceeds its fixed buffer");
     if (result.completed) |completed| {
         for (completed.pv.slice()) |chess_move| {
@@ -1729,11 +1723,11 @@ test "setoption registry normalizes names and enforces active ranges" {
 }
 
 test "live root information has the bounded UCI field contract" {
-    // UCI-001/FUNC-004: reporting formats a legal encoded root move and the
-    // same bounded node/time snapshot without touching the position.
-    const line = rootMoveInfo(4, chess.move.Move.normal(.e2, .e4), 3, 99, 7);
+    // UCI-001/FUNC-004: reporting formats a legal encoded root move and its
+    // ordinal without touching the position.
+    const line = rootMoveInfo(4, chess.move.Move.normal(.e2, .e4), 3);
     try std.testing.expectEqualStrings(
-        "info depth 4 currmove e2e4 currmovenumber 3 nodes 99 time 7",
+        "info depth 4 currmove e2e4 currmovenumber 3",
         line.slice(),
     );
 }
@@ -2036,91 +2030,63 @@ test "streaming files follow the inherited handle's I/O mode" {
     try std.testing.expect(!synchronous_write.flags.nonblocking);
 }
 
-fn storeTableMove(
-    table: *search.tt.Table,
-    position: *const chess.position.Position,
-    chess_move: chess.move.Move,
-    bound: search.types.Bound,
-) void {
-    _ = table.store(
-        position.current.key,
-        chess_move,
-        score.Score.zero,
-        null,
-        4,
-        bound,
-        .full_search,
-        0,
-    );
-}
+test "a new search reports only its own work, never the previous search's" {
+    // The helpers publish a readable copy of their node counts while they
+    // poll. Left over from an earlier search, that copy would be added to the
+    // first lines of the next one, which report before any helper has polled.
+    const io = std.testing.io;
+    var state = try ControllerState.init(std.testing.allocator);
+    defer state.deinit();
+    try state.startWorker(io);
+    try state.resizeThreads(4);
 
-test "a principal variation ending in a table hit is extended by legal stored moves only" {
-    var storage: [64]search.tt.Cluster = undefined;
-    var table = search.tt.Table.init(&storage);
-    var root_state: chess.position.PositionState = .{};
-    const root = try chess.fen.parseStart(&root_state);
-
-    // Walk the intended line once to store an entry for each position on it:
-    // startpos -> e2e4 (searched) -> e7e5 -> g1f3 -> then an illegal move.
-    var states: [4]chess.position.PositionState = undefined;
-    var cursor = root;
-    const e2e4 = chess.move.Move.normal(.e2, .e4);
-    const e7e5 = chess.move.Move.normal(.e7, .e5);
-    const g1f3 = chess.move.Move.normal(.g1, .f3);
-    chess.transition.makeMove(&cursor, e2e4, &states[0]);
-    storeTableMove(&table, &cursor, e7e5, .exact);
-    chess.transition.makeMove(&cursor, e7e5, &states[1]);
-    storeTableMove(&table, &cursor, g1f3, .lower);
-    chess.transition.makeMove(&cursor, g1f3, &states[2]);
-    // A stored move the position cannot play ends the walk without being shown.
-    storeTableMove(&table, &cursor, chess.move.Move.normal(.e1, .e8), .exact);
-
-    var pv = search.types.PrincipalVariation.init();
-    pv.moves[0] = e2e4;
-    pv.length = 1;
-    extendPrincipalVariation(&pv, &root, &table);
-    try std.testing.expectEqual(@as(u16, 3), pv.length);
-    try std.testing.expectEqual(e2e4, pv.moves[0]);
-    try std.testing.expectEqual(e7e5, pv.moves[1]);
-    try std.testing.expectEqual(g1f3, pv.moves[2]);
-
-    // An upper bound carries no trustworthy move and ends the walk.
-    var upper_pv = search.types.PrincipalVariation.init();
-    storeTableMove(&table, &root, g1f3, .upper);
-    extendPrincipalVariation(&upper_pv, &root, &table);
-    try std.testing.expectEqual(@as(u16, 0), upper_pv.length);
-
-    // A searched prefix the root cannot play is left alone rather than walked.
-    var illegal_pv = search.types.PrincipalVariation.init();
-    illegal_pv.moves[0] = chess.move.Move.normal(.e1, .e8);
-    illegal_pv.length = 1;
-    extendPrincipalVariation(&illegal_pv, &root, &table);
-    try std.testing.expectEqual(@as(u16, 1), illegal_pv.length);
-}
-
-test "principal variation extension stops at a repeated position" {
-    var storage: [64]search.tt.Cluster = undefined;
-    var table = search.tt.Table.init(&storage);
-    var root_state: chess.position.PositionState = .{};
-    const root = try chess.fen.parseStart(&root_state);
-
-    // Knights out and back: every position on the cycle stores the next move,
-    // so without a repetition stop the walk would run to capacity.
-    const cycle = [_]chess.move.Move{
-        chess.move.Move.normal(.g1, .f3),
-        chess.move.Move.normal(.g8, .f6),
-        chess.move.Move.normal(.f3, .g1),
-        chess.move.Move.normal(.f6, .g8),
+    var command_storage: [command_capacity]protocol.Command = undefined;
+    var output_storage: [output_capacity]OutputEvent = undefined;
+    var command_queue = std.Io.Queue(protocol.Command).init(&command_storage);
+    var output_queue = std.Io.Queue(OutputEvent).init(&output_storage);
+    var shutdown: std.Io.Event = .unset;
+    var controller_done: std.Io.Event = .unset;
+    var presenter_done: std.Io.Event = .unset;
+    var shared: Shared = .{
+        .io = io,
+        .allocator = std.testing.allocator,
+        .version = "test",
+        .transcript_hooks = false,
+        .commands = &command_queue,
+        .output = &output_queue,
+        .shutdown = &shutdown,
+        .controller_done = &controller_done,
+        .presenter_done = &presenter_done,
     };
-    var states: [4]chess.position.PositionState = undefined;
-    var cursor = root;
-    for (cycle, 0..) |chess_move, index| {
-        storeTableMove(&table, &cursor, chess_move, .exact);
-        chess.transition.makeMove(&cursor, chess_move, &states[index]);
-    }
 
-    var pv = search.types.PrincipalVariation.init();
-    extendPrincipalVariation(&pv, &root, &table);
-    try std.testing.expectEqual(@as(u16, cycle.len), pv.length);
-    for (cycle, pv.slice()) |expected, actual| try std.testing.expectEqual(expected, actual);
+    const stale: u64 = 1_000_000_000;
+    for (state.helpers) |*helper| helper.worker.published_nodes.store(stale, .monotonic);
+
+    handleGo(&shared, &state, "go depth 8", 0);
+    try std.testing.expect(state.active != null);
+    const active = &state.active.?;
+    if (!active.done.isSet()) active.done.waitUncancelable(io);
+
+    // Every helper has published its final count, so the total is exact.
+    var expected = active.worker.search.nodes;
+    for (state.helpers) |*helper| expected += helper.worker.search.nodes;
+    try std.testing.expectEqual(expected, Runtime.aggregateNodes(active));
+    try std.testing.expect(expected < stale);
+
+    // No published line carried the stale work either.
+    drainSearchProgress(&shared, &state, active);
+    var buffer: [1]OutputEvent = undefined;
+    var lines: usize = 0;
+    while (try output_queue.get(io, &buffer, 0) == 1) {
+        const text = buffer[0].line.slice();
+        if (!std.mem.startsWith(u8, text, "info depth ")) continue;
+        const nodes_at = std.mem.indexOf(u8, text, " nodes ") orelse continue;
+        const rest = text[nodes_at + " nodes ".len ..];
+        const end = std.mem.indexOfScalar(u8, rest, ' ') orelse rest.len;
+        const reported = try std.fmt.parseInt(u64, rest[0..end], 10);
+        try std.testing.expect(reported < stale);
+        lines += 1;
+    }
+    try std.testing.expect(lines != 0);
+    finishActive(&shared, &state, false);
 }

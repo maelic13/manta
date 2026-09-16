@@ -60,8 +60,14 @@ test "warm transposition evidence preserves the exact root result" {
     try expectLegalPv(chess.fen.start_position, cold.completed.?.pv.slice());
     try expectLegalPv(chess.fen.start_position, warm.completed.?.pv.slice());
     try std.testing.expect(warm.nodes < cold.nodes);
-    try std.testing.expectEqual(search.types.Provenance.tt_exact, warm.evidence.provenance);
+    // The warm run is cheaper because interior nodes cut, not because the root
+    // replayed a stored verdict: the root derives its own, since a record
+    // carries neither repetition history nor halfmove clock.
+    try std.testing.expectEqual(search.types.Provenance.full_search, warm.evidence.provenance);
     try std.testing.expect(second_counters.tt_usable_by_producer[@intFromEnum(search.types.Provenance.full_search)] != 0);
+    try std.testing.expect(second_counters.tt_lookups_by_outcome[
+        @intFromEnum(search.diagnostics.TableLookup.cutoff_refused)
+    ] != 0);
 }
 
 test "TT cutoffs cannot splice a stale sibling continuation into the PV" {
@@ -1384,7 +1390,12 @@ test "core aspiration retains a completed result across window retries" {
         );
         const completed = result.completed.?;
         try std.testing.expectEqual(search.types.Bound.exact, completed.evidence.bound);
-        try std.testing.expectEqual(@as(u16, 8), completed.depth);
+        // The requested depth is reached unless a settled mate ended the
+        // search first: no deeper iteration can shorten or refute that.
+        if (completed.depth != 8) {
+            try std.testing.expect(completed.depth < 8);
+            try std.testing.expect(completed.evidence.value.isMate());
+        }
         try expectLegalPv(fen_text, completed.pv.slice());
         try std.testing.expect(chess.movegen.isLegal(&position, result.best_move.?));
         try std.testing.expect(chess.state.isConsistent(&position));
@@ -1866,8 +1877,11 @@ test "MAN-S31 preserves root extension and removes only interior check increment
         var harness: Harness = .{};
         var counters: search.diagnostics.Counters = .{};
         var control: search.types.NeverStop = .{};
+        // The settled-mate stop is pinned off: this test counts root entries
+        // per completed iteration, and a mate that ends the loop early would
+        // measure the stopping rule instead of the extension producer.
         const result = search.baseline.runWithFeatures(
-            .{ .nonroot_check_extension = false },
+            .{ .nonroot_check_extension = false, .settled_mate_stop = false },
             &position,
             harness.binding(),
             .{ .depth = 2 },
@@ -2064,7 +2078,10 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
     var candidate_control: search.types.NeverStop = .{};
     var disabled_control: search.types.NeverStop = .{};
     const result = search.baseline.runRestrictedWithFeatures(
-        .{ .shallow_selectivity = false },
+        // Pre-MAN-S37 tree: these counts were measured where principal nodes
+        // still consumed stored verdicts, and the contract under test is the
+        // exclusion probe, not which nodes cut.
+        .{ .shallow_selectivity = false, .pv_table_refusal = false },
         &position,
         harness.binding(),
         .{ .depth = 7 },
@@ -2076,7 +2093,7 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
         &.{only},
     );
     const candidate = search.baseline.runRestrictedWithFeatures(
-        .{ .singular_exclusion_horizon = true, .shallow_selectivity = false },
+        .{ .singular_exclusion_horizon = true, .shallow_selectivity = false, .pv_table_refusal = false },
         &candidate_position,
         candidate_harness.binding(),
         .{ .depth = 7 },
@@ -2088,7 +2105,7 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
         &.{candidate_only},
     );
     const disabled = search.baseline.runRestrictedWithFeatures(
-        .{ .singular_extension = false, .shallow_selectivity = false },
+        .{ .singular_extension = false, .shallow_selectivity = false, .pv_table_refusal = false },
         &disabled_position,
         disabled_harness.binding(),
         .{ .depth = 7 },
@@ -3044,4 +3061,75 @@ test "cancelled search records an incomplete outcome without publishing it" {
     const outcome = harness.thread.search_evidence.snapshot().outcome.?;
     try std.testing.expect(!outcome.complete);
     try std.testing.expectEqual(@as(?search.types.OutcomeAttribution, null), outcome.attribution);
+}
+
+test "a root verdict is never taken from the transposition table" {
+    // Issue #4: while a position has occurred twice, repeating it is simply
+    // the position's own value, so a search stores the repeating move as the
+    // root's best. The same board then completes a threefold. A record is
+    // keyed by the position and carries neither the repetition history nor the
+    // halfmove clock of the visit that stored it, so replaying that verdict at
+    // the root -- the one node that publishes a move without searching -- drew
+    // a won game. The record below is written directly, which is what the
+    // earlier search leaves behind, so the test states the precondition
+    // instead of depending on how another search happens to fill the table.
+    const before_shuffle = "7k/8/7p/3r2p1/r4p2/5N1P/6PK/1R6 w - - 0 43";
+    const shuffle = [_][]const u8{ "b1b8", "h8g7", "b8b7", "g7f8", "b7b8", "f8g7", "b8b7", "g7f8", "b7b8" };
+    const repeating_move = "f8g7";
+    // Above the searched depth, as in the game: this root is in check, so its
+    // iterations search one ply deeper than they ask for.
+    const stored_depth = 20;
+    const search_depth = 12;
+
+    inline for (.{ false, true }) |refuse_root| {
+        var storage: [4096]search.tt.Cluster = undefined;
+        var table = search.tt.Table.init(&storage);
+        var heuristics: search.ordering.State = .{};
+        var observer: search.diagnostics.Disabled = .{};
+        // SAFETY: history.build initializes every state and move slot it exposes.
+        var states: [10]chess.position.PositionState = undefined;
+        var moves: [9]chess.move.Move = undefined;
+        var game = try chess.history.build(before_shuffle, &shuffle, &states, &moves);
+
+        const repeat = try chess.notation.parseLegal(&game.position, repeating_move);
+        _ = table.store(
+            game.position.current.key,
+            repeat,
+            manta.score.Score.fromOrdinary(500).?,
+            null,
+            stored_depth,
+            .exact,
+            .full_search,
+            0,
+        );
+
+        var harness: Harness = .{};
+        var control: search.types.NeverStop = .{};
+        const result = search.baseline.runWithFeatures(
+            // MAN-S37's principal refusal also covers the root, so it is
+            // pinned off here: this test is about the root switch itself.
+            .{ .root_table_refusal = refuse_root, .pv_table_refusal = false },
+            &game.position,
+            harness.binding(),
+            .{ .depth = search_depth },
+            &control,
+            &harness.thread,
+            &table,
+            &heuristics,
+            &observer,
+        );
+        try std.testing.expect(chess.movegen.isLegal(&game.position, result.best_move.?));
+        const played = try chess.notation.format(result.best_move.?);
+        if (refuse_root) {
+            // The root searches for itself, so the side to move keeps the win
+            // instead of completing the threefold.
+            try std.testing.expect(!std.mem.eql(u8, repeating_move, played.slice()));
+            try std.testing.expect(result.evidence.value.raw() > 100);
+        } else {
+            // The 1.1.0 root replays the stale verdict, draws the won game and
+            // reports the stored winning score while doing it.
+            try std.testing.expectEqualStrings(repeating_move, played.slice());
+            try std.testing.expectEqual(@as(i32, 500), result.evidence.value.raw());
+        }
+    }
 }

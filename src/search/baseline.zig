@@ -522,6 +522,15 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
         observer.iteration(depth, result.best_move.?, completed.evidence);
         if (@hasDecl(@TypeOf(control.*), "completedIteration"))
             control.completedIteration(completed);
+        // A proven mate no closer than this iteration searched cannot be
+        // improved by a deeper one: the rules bound what any continuation can
+        // still produce. Without this the loop runs to `max_ply`, republishing
+        // the same line once per remaining depth and reporting a depth that
+        // describes no work.
+        if (features.settled_mate_stop and provenMateSettled(completed)) {
+            result.termination = .depth_limit;
+            return result;
+        }
         if (@hasDecl(@TypeOf(control.*), "shouldStopAfterIteration") and
             control.shouldStopAfterIteration(completed))
         {
@@ -533,6 +542,15 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
         }
     }
     return result;
+}
+
+/// True when the iteration proved a mate whose distance the iteration already
+/// searched, so no deeper iteration can shorten or refute it.
+fn provenMateSettled(completed: types.CompletedIteration) bool {
+    if (completed.evidence.bound != .exact) return false;
+    const distance = completed.evidence.value.mateDistance() orelse return false;
+    const plies: i32 = @intCast(completed.depth);
+    return @abs(distance) <= plies;
 }
 
 /// One pawn is a scale-derived uncertainty unit rather than an imported or
@@ -1020,7 +1038,7 @@ fn negamaxNode(
     var table_evidence = if (exclusion_node)
         TableEvidence{}
     else
-        probeTable(context, value, depth, ply, alpha_initial, beta);
+        probeTable(refusesTableVerdict(features, ply, pv_node), context, value, depth, ply, alpha_initial, beta);
     if (comptime features.tt_rule_fifty_guard) {
         if (value.current.rule50 >= tt_rule_fifty_guard_clock)
             table_evidence.facts.cutoff_authorized = false;
@@ -3158,7 +3176,15 @@ fn quiescenceNode(
             .static_eval,
         );
 
-    const table_evidence = probeTable(context, value, 0, ply, alpha_initial, beta);
+    const table_evidence = probeTable(
+        refusesTableVerdict(features, ply, pv_node),
+        context,
+        value,
+        0,
+        ply,
+        alpha_initial,
+        beta,
+    );
     if (comptime features.search_evidence_observation)
         context.thread.search_evidence.observeTt(table_evidence.facts);
     if (table_evidence.cutoff) |cutoff|
@@ -3621,7 +3647,41 @@ const TableEvidence = struct {
     facts: types.TtFacts = .{},
 };
 
+test "which nodes decline a stored verdict is decided by the two switches" {
+    // Production declines at the root, which publishes without searching, and
+    // at every principal node, so a published line is one the search walked. A
+    // node searched with a null window always takes the verdict: that is where
+    // the table pays for itself.
+    const production: types.Features = .{};
+    try std.testing.expect(refusesTableVerdict(production, 0, true));
+    try std.testing.expect(refusesTableVerdict(production, 3, true));
+    try std.testing.expect(!refusesTableVerdict(production, 3, false));
+
+    // The 1.1.1 tree refused only at the root.
+    const before_s37: types.Features = .{ .pv_table_refusal = false };
+    try std.testing.expect(refusesTableVerdict(before_s37, 0, true));
+    try std.testing.expect(!refusesTableVerdict(before_s37, 3, true));
+    try std.testing.expect(!refusesTableVerdict(before_s37, 3, false));
+
+    // With the root repair off the root still refuses, because a root is a
+    // principal node and the principal refusal covers it.
+    const pre_repair: types.Features = .{ .root_table_refusal = false };
+    try std.testing.expect(refusesTableVerdict(pre_repair, 0, true));
+    const pre_repair_only: types.Features = .{ .root_table_refusal = false, .pv_table_refusal = false };
+    try std.testing.expect(!refusesTableVerdict(pre_repair_only, 0, true));
+}
+
+/// Which nodes decline a stored verdict and keep only the stored move. The
+/// root always does, because it publishes without searching. A principal node
+/// does when the candidate switch is on, so the published line is searched
+/// rather than assembled from records.
+fn refusesTableVerdict(comptime features: types.Features, ply: usize, pv_node: bool) bool {
+    if (features.root_table_refusal and ply == 0) return true;
+    return features.pv_table_refusal and pv_node;
+}
+
 fn probeTable(
+    refuse_cutoff: bool,
     context: anytype,
     value: *const chess.position.Position,
     depth: u16,
@@ -3658,9 +3718,19 @@ fn probeTable(
         .lower => record.value.raw() >= beta,
         .upper => record.value.raw() <= alpha,
     };
-    const usable = sufficient_depth and usable_bound;
+    // A record is keyed by the position alone and carries neither the
+    // repetition history nor the halfmove clock of the visit that stored it.
+    // Every other node re-derives those facts before probing, because the draw
+    // test above runs first. The root cannot: it publishes a move without
+    // searching anything, so a verdict stored when this position had occurred
+    // twice would be replayed when the same position now completes a
+    // threefold. A refusing node therefore takes the stored move for ordering
+    // and never the stored verdict.
+    const usable = sufficient_depth and usable_bound and !refuse_cutoff;
     context.observer.ttProbe(record.producer, record.bound, usable);
-    context.observer.ttLookup(if (!sufficient_depth)
+    context.observer.ttLookup(if (refuse_cutoff)
+        .cutoff_refused
+    else if (!sufficient_depth)
         .depth_rejected
     else if (!usable_bound)
         .bound_rejected

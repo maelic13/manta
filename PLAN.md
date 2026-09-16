@@ -16,7 +16,7 @@ engine combines MAN-E19 classical evaluation, MAN-S29 search parameters,
 MAN-T05 integrated clock parameters, MAN-S30 live-history move ordering,
 MAN-S34 tactical-only non-check qsearch generation, MAN-S35 complete mate
 windows and the MAN-S36 coordinated selective-search core.
-One-thread depth-6 bench is `359,259` nodes. The release configuration supports portable 64-bit Windows x86-64,
+One-thread depth-6 bench is `359,045` nodes. The release configuration supports portable 64-bit Windows x86-64,
 Linux x86-64/ARM64 and macOS x86-64/ARM64 artifacts.
 
 No coding agent may start a Phase-6.5 implementation step, Phase 7, a game
@@ -2767,7 +2767,216 @@ counter readable while helpers run. Gates: `zig build test-uci`,
 `zig build test-fast` in ReleaseFast and ReleaseSafe and `zig build lint`
 passed on `d2826d9`; native ReleaseFast `bench 6 1` reads `359,259` by default
 and `642,336` with `-Dselective-core=false`, and the default build reports
-`Manta 1.1.0`.
+`Manta 1.1.0`. The deferred aggregated-node reporting was implemented in 1.1.1
+(addendum D below); it needed no atomic on the search's hot path.
+
+**6.5.15.1 addendum D (2026-09-16): issue #4 repairs, released as 1.1.1.**
+GitHub issue #4 reported games played with 1.1.0 at `5m+3s`: a won game drawn
+by repetition while the engine displayed `+5.05`, time spent on forced moves,
+and an unreliable K+B+N mate. Analysis of the reporter's PGN reproduced the
+first two and confirmed the third; the maintainer also reported node and NPS
+figures that looked like one thread's under `Threads 6`. The patch archive
+attached to the issue was neither downloaded nor applied. All repairs carry a
+compile-time switch, so every archived fingerprint is reconstructed by pinning
+the 1.1.1 switches off; production reads `359,045` and `-Dselective-core=false`
+reads `642,131`.
+
+1. **A stored root verdict drew a won game** (`src/search/tt.zig` key contract,
+   `src/search/baseline.zig`). A record is keyed by the position alone and
+   carries neither repetition history nor halfmove clock. Every interior node
+   re-derives both, because the draw test precedes the probe, but the root
+   publishes a move without searching, so the verdict stored while a position
+   had occurred twice was replayed once the same position completed a
+   threefold. Reproduced from the reporter's game: the decisive search returned
+   the repeating move after **18 nodes** at depth 18, reporting the stale
+   winning score -- exactly the `+5.05` in the PGN, and the reason the engine
+   repeated at every opportunity. `features.root_table_refusal` (default on)
+   keeps the stored move for ordering and refuses the stored verdict. The test
+   writes the poisoned record directly and runs both arms: the off arm replays
+   it and draws, the production arm searches and keeps the win.
+2. **Forced moves spent the clock** (`src/engine/time.zig`). The clock policy
+   only scaled a forced move's allocation to `350` permille, so a position with
+   one legal move took 2.5 to 3.9 seconds. `on_game_clock` plus a
+   `legal_root_move_count == 1` check now ends the search after its first
+   iteration, which still yields a line to ponder on. Measured: 0.000 s.
+   Fixed-depth, node-limited and infinite searches are analysis and unaffected.
+3. **Depth reporting and `go infinite`** (`src/search/baseline.zig`,
+   `src/uci/session.zig`). A proven mate settled every remaining iteration, so
+   the loop ran to the ply ceiling: 255 near-identical lines ending at
+   `depth 255`, which the reporter's PGN shows as `+M5/255`.
+   `features.settled_mate_stop` ends the loop once the proven distance is no
+   further than the iteration that found it. That exposed a protocol fault the
+   old spam had hidden: a `go infinite` search which runs out of work answered
+   with `bestmove` unasked. Infinite searches now hold their result until
+   `stop`, reusing the ponder retention path, and a transcript case pins it.
+   Releasing a held search also revealed that the controller consumed the wake
+   posted with a queued command and then skipped the command read, leaving it
+   one command behind for the rest of the session; that `continue` is gone.
+4. **Reported nodes and NPS ignored the helpers** (`src/engine/runtime.zig`).
+   Iteration lines carried worker zero's count, so `Threads 6` displayed about
+   `1.15 M` NPS -- one thread's. Each worker now mirrors its own counter into
+   an atomic while it polls, one relaxed store per `1024` nodes, and worker
+   zero totals them when it publishes. The search and the clock policy still
+   read the ordinary per-thread counter, so the hot path and the fingerprint
+   are untouched. `Threads 6` now reports about `6.2 M` NPS.
+5. **Information format** (`src/uci/session.zig`). Fields follow the order
+   interfaces expect -- `depth`, `seldepth`, `score`, `nodes`, `nps`,
+   `hashfull`, `tbhits`, `time`, `pv` -- with table occupancy added. Root-move
+   lines are trimmed to `currmove`/`currmovenumber` and appear only after three
+   seconds. `Table.hashfull` samples 250 clusters; its first version read above
+   `1000` permille because `@min(len, 250)` infers a type from the bound it
+   proves and `sampled_clusters * ways` overflowed it, which its test now pins
+   at both ends.
+6. **Clock reserve** (`src/engine/time.zig`). Measured at `300+3` from move
+   one: optimum `10.9 s`, hard maximum `46.7 s`, and a sudden-death horizon
+   that contracts from 36 moves to 20, which is why the reporter's games
+   reached their endgames on the increment. The maintainer chose a safety
+   change only: the fitted `MAN-T05` constants are untouched, and one move's
+   absolute maximum may now reach the credited increment plus a quarter of what
+   lies above it, floored at twice the optimum so a nearly spent clock keeps a
+   soft-to-hard interval. Early allocation is unchanged; with `30 s` left and a
+   `3 s` increment a move takes `7.1 s` instead of up to `16 s`. This shifts
+   play, so the release is gated as `MAN-C04`, the registered non-regression
+   SPRT of 1.1.1 against released 1.1.0 in `EXPERIMENTS.md`, run as Rarog runs
+   its gates: the script's own defaults and one verbatim recipe,
+   `./tools/sprt.ps1 -EngineA "tools\test_engines\manta-111.exe" -EngineB "tools\test_engines\manta-110.exe" -NameA "Manta-1.1.1" -NameB "Manta-1.1.0" -Mode simplify`, with every default spelled out in the registration.
+   That gate covers the bundle -- the six repairs and the reserve together --
+   and licenses no single one of them; a horizon re-fit remains open with
+   6.5.11.3.
+
+Gates, run once each and serially on the review-repair commit (helper node
+mirror reset and exact at completion, the retained final line reporting the
+aggregate, `MAN-C04` registered, records corrected):
+
+| Gate | Outcome |
+| --- | --- |
+| `zig build test` (default) | Pass: 53/53 steps, 454/472 tests, 18 skipped; transcript 27 cases |
+| `zig build test -Dselective-core=false` | Pass: 53/53 steps, 455/472 tests, 17 skipped |
+| `zig build test -Doptimize=ReleaseSafe` | Pass: 53/53 steps, 454/472 tests, 18 skipped |
+| `zig build test-uci` | Pass: 24/24 tests, transcript 27 cases |
+| `zig build lint` | Pass: 0 errors, 0 warnings across 53 files |
+| `bench 6 1`, native ReleaseFast default | `359,045` |
+| `bench 6 1`, `-Dselective-core=false` | `642,131` |
+
+Re-run once each on the `1.2.0` release head (MAN-S37 promoted, the table-walk
+display removed, the project-version test wired into the gates): `454/472`,
+`455/472` off arm, `454/472` ReleaseSafe, `22/22` UCI and `27` transcript cases,
+`0` lint findings; `bench 6 1` reads `355,879` by default, `648,735` with
+`-Dselective-core=false` and `359,045` with `-Dpv-table-refusal=false`, and the
+build reports `Manta 1.2.0`.
+
+Re-run once each after the fifty-move display repair on its own commit: the
+same five gates passed -- `455/473`, `456/473` off arm, `455/473` ReleaseSafe,
+`25/25` and `27` transcript cases, `0` lint findings -- and both fingerprints
+still read `359,045` and `642,131`.
+
+Both fingerprints are the 1.1.1 values unchanged: the review repairs touch node
+reporting and the held-result line, never search.
+
+**Review follow-up (2026-09-16).** Fable's review of the six commits accepted
+them with one defect and three record gaps, repaired in `e0e5ea9`: the helper
+node mirror was never reset at the start of a search and lagged by up to a poll
+interval at its end, so a new search could add the previous one's totals to its
+first lines; the retained final line of a held ponder or `go infinite` result
+reported worker zero's count while the iteration lines reported every thread's;
+`MAN-C04` now registers the non-regression gate; and GUIDE names the release
+head rather than a branch.
+
+A second report followed from the maintainer's match: an interface warned that
+a principal variation continued after the fifty-move rule. The searched prefix
+was sound -- the search scores such a node as a draw and publishes no line
+through it -- but the table-extended display of addendum B walked on, because a
+record is keyed by the position alone and entries stored earlier in a long
+shuffle are still found once the allowance is spent. Reproduced by replaying
+the reported game: 70 published lines continued past the draw, none after the
+repair. The walk now stops at any position the rules have already ended, which
+covers the spent fifty-move allowance, a threefold and material that cannot
+mate; its test runs the same knight shuffle from a clock at `98` and at `0` and
+requires the first to stop after two plies. Display only: both fingerprints are
+unchanged.
+
+**`MAN-C04` verdict (2026-09-16): H1 accepted.** The registered non-regression
+gate ran on the 5950X from the release head arm and accepted H1 after 3,026
+games: W/L/D `908/780/1338`, `+14.71 +/- 8.58` Elo, `+21.24 +/- 12.38` nElo,
+LLR `2.96` on `[-5,0]`, LOS `99.96%`, pentanomial `[76,332,599,400,106]`, 33
+minutes. The bracket was designed to refuse a loss, so the gain it also shows
+is direction, not a sized claim. The optional 4T check played 400 games at
+`+5.21 +/- 24.11` Elo with no faults. Both logs are clean for the candidate:
+all 1,138 fastchess warnings -- every one `PV continues after fifty-move rule`
+-- came from 1.1.0, the version carrying that defect, and neither log holds an
+illegal move, forfeit, disconnection or timeout. 1.1.1 is therefore cleared for
+its tag by its own registered evidence.
+
+**`MAN-C05` verdict (2026-09-16): H1 accepted.** The shipping head was gated as
+one bundle against the released 1.1.0 and accepted H1 after 2,760 games:
+W/L/D `874/744/1142`, `+16.38 +/- 9.09` Elo, `+23.38 +/- 12.96` nElo, LLR
+`2.95`, LOS `99.98%`, pentanomial `[72,297,544,363,104]`. Every one of the 884
+fastchess warnings came from 1.1.0, none from the candidate, and neither side
+recorded an illegal move, forfeit, disconnection or timeout. 1.2.0 is cleared
+to tag.
+
+**Harness note, same run.** fastchess printed the verdict and then did not
+exit, leaving 13 games in flight and all 28 engine processes alive. Both sides
+of every stuck game were idle at zero CPU, so no search was hung; the release
+binary was checked separately and answered 24 clock searches with interleaved
+`stop` commands and exited on `quit` with code 0. The `MAN-C04` run showed the
+same 13-in-flight pattern at its verdict and did exit, so this is fastchess
+shutdown behaviour with games in flight, not an engine fault. Because the
+script never reached its post-run steps, that run's artifacts are the fastchess
+log and PGN without the copied engine manifests.
+
+Not repaired: the K+B+N mate. Self-play from the wrong corner drew by
+repetition at `1 s` a move and mated at halfmove clock `99` at `3 s`, and
+clearing the table between moves barely changed it, so it is technique rather
+than the table defect above. `endgame_kbnk` drives the weak king with `22` per
+step of wrong-corner distance and `8` per step of king approach, a far shallower
+gradient than engines that convert it reliably. Recorded as a strength item for
+a later phase, not a 1.1.1 repair.
+
+**6.5.15.1 addendum E (2026-09-16): principal-node table refusal, `MAN-S37`.**
+The fifty-move display repair raised the structural question behind it. Manta
+takes exact table cutoffs at principal nodes below the root, so a principal
+line can end at a record instead of at searched evidence; the table-extended
+display of addendum B exists to cover that, and it is how a history-interaction
+fault reached the interface twice. The pinned classical reference declines
+stored verdicts at principal nodes, which is why its published line is always
+one it walked. The maintainer asked for that shape as a measured candidate
+rather than an imitation, so `features.pv_table_refusal` (default off,
+`-Dpv-table-refusal`) extends the 1.1.1 root refusal to every principal node in
+the main search and in quiescence. Production is untouched: both fingerprints
+stay `359,045` and `642,131`. The candidate arm reads `355,879`, spends `0.995`
+of the baseline's nodes to depth 13 across five positions and reaches the same
+mean depth in a fixed 1.5 seconds, so it is close to cost-free and only games
+can decide it. Registered as `MAN-S37`.
+
+**`MAN-S37` verdict (2026-09-16): unresolved, retained by maintainer decision.**
+The gate ran 2,442 games at `-1.42 +/- 10.11` Elo, LLR `0.06`: indistinguishable,
+and a true value in the middle of `[-5,0]` cannot resolve that bracket in a
+sensible number of games. The maintainer stopped it and retained the mechanism
+on reporting grounds, which were measured rather than asserted: over five
+positions at depth 12 on a warm table the searched line went from 10 plies
+across five iterations to 68, with every line at least as long as its depth,
+where production had five of five lines shorter. The table-walk display is
+therefore deleted, not merely guarded -- with it goes the mechanism behind two
+interface faults -- and `bestmove` still carried a ponder move in 70 of 70
+self-play moves. Production fingerprints move to `355,879` and `648,735`; the
+1.1.1 tree is `-Dpv-table-refusal=false` at `359,045`, and every archived
+reconstruction pins the switch off. This is an explicit maintainer decision on
+a non-H1 gate, recorded as the `MAN-S35` exception was and precedent for
+nothing else.
+
+**Version.** The release carries a promoted search mechanism and a changed
+information format, so it ships as `1.2.0` rather than as the prepared `1.1.1`
+patch; `MAN-C05` re-gates the shipping head against released 1.1.0, because
+`MAN-C04` measured a head that predates `MAN-S37`.
+
+**Project-version test gap, found while bumping.** `build_support/version.zig`
+was in no test root: `build-version-tests` compiles `zig_version.zig`, the
+toolchain check. Its assertion had gone stale at the 1.1.1 bump -- it still
+required `patch == 0` -- and no gate noticed. The file now has its own test
+artifact in `check`, `test-fast` and the serial `test` list, and its assertions
+no longer hard-code the components: the version must parse, carry no
+prerelease or build metadata, and render back exactly as written.
 
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and

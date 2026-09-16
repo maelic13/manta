@@ -191,6 +191,7 @@ fn measure(
             .core_aspiration = search_build_options.core_aspiration,
             .core_qs_checks = search_build_options.core_qs_checks,
             .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
+            .pv_table_refusal = search_build_options.pv_table_refusal,
             .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
         },
         &position,
@@ -204,12 +205,14 @@ fn measure(
     );
     const elapsed_ns = clock.nowNs() -| started_ns;
 
-    // The sweep is only worth reading if the search actually finished the
-    // requested depth from a restored root, and if the charge partition still
-    // accounts for every visited node.
+    // The sweep is only worth reading if the search actually finished its work
+    // from a restored root, and if the charge partition still accounts for
+    // every visited node. A settled mate ends the loop before the requested
+    // depth: the rules bound what a deeper iteration could add, so that row
+    // still describes a complete tree and is reported at the depth it reached.
     if (!chess.state.isConsistent(&position)) return error.PositionNotRestored;
     const completed = result.completed orelse return error.MissingCompletedIteration;
-    if (completed.depth != depth) return error.IncompleteDepth;
+    if (completed.depth != depth and !completed.evidence.value.isMate()) return error.IncompleteDepth;
     if (result.best_move == null) return error.MissingBestMove;
     if (counters.context_nodes != result.nodes) return error.NodeAccounting;
     if (sum(&counters.nodes_by_charge) != counters.context_nodes) return error.ChargeAccounting;
@@ -227,7 +230,7 @@ fn measure(
     const first_index = @intFromEnum(search.diagnostics.FailHighBucket.first);
     return .{
         .position = index,
-        .depth = depth,
+        .depth = completed.depth,
         .nodes = result.nodes,
         .main_nodes = counters.main_nodes,
         .quiescence_nodes = counters.quiescence_nodes,

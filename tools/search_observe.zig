@@ -77,6 +77,7 @@ fn observe(
             .core_aspiration = search_build_options.core_aspiration,
             .core_qs_checks = search_build_options.core_qs_checks,
             .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
+            .pv_table_refusal = search_build_options.pv_table_refusal,
             .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
         },
         &position,
@@ -102,7 +103,11 @@ fn validate(
     const best = result.best_move orelse return error.MissingBestMove;
     if (!chess.movegen.isLegal(position, best)) return error.IllegalBestMove;
     const completed = result.completed orelse return error.MissingCompletedIteration;
-    if (completed.depth != case.depth or counters.completed_depth != case.depth)
+    // A settled mate ends the loop before the requested depth: no deeper
+    // iteration can shorten or refute it, so the accounting below still
+    // describes the complete tree the search ran.
+    if (completed.depth != counters.completed_depth) return error.IncompleteDepth;
+    if (completed.depth != case.depth and !completed.evidence.value.isMate())
         return error.IncompleteDepth;
     try validatePv(case.fen, completed.pv.slice());
     if (result.nodes != counters.main_nodes + counters.quiescence_nodes)
@@ -222,6 +227,7 @@ fn validate(
     const lookup_outcomes = counters.tt_lookups_by_outcome;
     const authenticated = lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.depth_rejected)] +
         lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.bound_rejected)] +
+        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.cutoff_refused)] +
         lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.usable)];
     if (authenticated != sum(counters.tt_probes_by_bound) or
         lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.usable)] !=
@@ -350,6 +356,7 @@ fn compareDisabled(
             .core_aspiration = search_build_options.core_aspiration,
             .core_qs_checks = search_build_options.core_qs_checks,
             .singular_exclusion_horizon = search_build_options.singular_exclusion_horizon,
+            .pv_table_refusal = search_build_options.pv_table_refusal,
             .qsearch_tactical_generation = search_build_options.qsearch_tactical_generation,
         },
         &position,
