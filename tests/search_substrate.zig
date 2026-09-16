@@ -1390,7 +1390,12 @@ test "core aspiration retains a completed result across window retries" {
         );
         const completed = result.completed.?;
         try std.testing.expectEqual(search.types.Bound.exact, completed.evidence.bound);
-        try std.testing.expectEqual(@as(u16, 8), completed.depth);
+        // The requested depth is reached unless a settled mate ended the
+        // search first: no deeper iteration can shorten or refute that.
+        if (completed.depth != 8) {
+            try std.testing.expect(completed.depth < 8);
+            try std.testing.expect(completed.evidence.value.isMate());
+        }
         try expectLegalPv(fen_text, completed.pv.slice());
         try std.testing.expect(chess.movegen.isLegal(&position, result.best_move.?));
         try std.testing.expect(chess.state.isConsistent(&position));
@@ -1872,8 +1877,11 @@ test "MAN-S31 preserves root extension and removes only interior check increment
         var harness: Harness = .{};
         var counters: search.diagnostics.Counters = .{};
         var control: search.types.NeverStop = .{};
+        // The settled-mate stop is pinned off: this test counts root entries
+        // per completed iteration, and a mate that ends the loop early would
+        // measure the stopping rule instead of the extension producer.
         const result = search.baseline.runWithFeatures(
-            .{ .nonroot_check_extension = false },
+            .{ .nonroot_check_extension = false, .settled_mate_stop = false },
             &position,
             harness.binding(),
             .{ .depth = 2 },

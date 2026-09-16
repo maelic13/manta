@@ -705,6 +705,14 @@ pub const Features = struct {
     /// stored verdict. Switching this off restores the 1.1.0 root, which every
     /// archived fingerprint was recorded on.
     root_table_refusal: bool = true,
+    /// Issue #4 repair, production since 1.1.1. A proven mate no further away
+    /// than the iteration that found it cannot be shortened or refuted by a
+    /// deeper one, because the rules bound what any continuation can still
+    /// produce. Iterating on regardless republished the same line once per
+    /// remaining ply and reported a depth that described no work. Switching
+    /// this off restores the 1.1.0 loop, which every archived fingerprint was
+    /// recorded on.
+    settled_mate_stop: bool = true,
     /// Step-6.5.5 singular-exclusion-horizon candidate. The same-position
     /// search still excludes exactly the legal ordinary TT move and alone
     /// decides whether that move extends; this switch only replaces the

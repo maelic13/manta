@@ -297,11 +297,15 @@ fn controller(shared: *Shared, state: *ControllerState) !void {
                 // A first drain can race between those two publications, so
                 // take the now-stable slot once more before final reporting.
                 drainSearchProgress(shared, state, active);
-                if (isWaitingPonder(active, shared)) {
-                    publishRetainedPonderInfo(shared, state, active);
+                if (isWaitingPonder(active, shared) or isWaitingInfinite(active, shared)) {
+                    publishRetainedInfo(shared, state, active);
                 } else {
+                    // No `continue` here: the wake that reached this loop may
+                    // be the one posted with a queued command -- the `stop`
+                    // that released a held search is exactly that case -- and
+                    // skipping the read below would leave the controller one
+                    // command behind for the rest of the session.
                     finishActive(shared, state, true);
-                    continue;
                 }
             }
         }
@@ -708,6 +712,7 @@ fn validateGo(
         .time_input = time_input,
         .received_ns = received_ns,
         .ponder = fields.ponder,
+        .infinite = fields.infinite,
     } } };
 }
 
@@ -1040,6 +1045,17 @@ fn isWaitingPonder(active: *const Runtime.Active, shared: *const Shared) bool {
     return isPonderJob(active.job) and shared.ponderhit_epoch.load(.acquire) != active.epoch;
 }
 
+/// `go infinite` ends only on `stop` or `quit`. The search itself can run out
+/// of work -- a proven mate settles every remaining iteration -- but the
+/// engine may not answer with `bestmove` before it is asked.
+fn isWaitingInfinite(active: *const Runtime.Active, shared: *const Shared) bool {
+    const infinite = switch (active.job) {
+        .normal => |spec| spec.infinite,
+        .perft, .bench => false,
+    };
+    return infinite and shared.cancel_epoch.load(.acquire) != active.epoch;
+}
+
 /// Emits each completed bench position as soon as the worker reports it.
 /// A long bench is otherwise silent for its whole run, which gives the user no
 /// way to tell a slow corpus from a hung engine.
@@ -1115,13 +1131,15 @@ fn discardSearchProgress(shared: *Shared, active: *Runtime.Active) void {
     while (active.progress.take(shared.io)) |_| {}
 }
 
-fn publishRetainedPonderInfo(shared: *Shared, state: *ControllerState, active: *Runtime.Active) void {
-    if (active.ponder_completion_waiting) return;
+/// Publishes the final information line for a finished search whose
+/// `bestmove` is withheld until the interface asks for it.
+fn publishRetainedInfo(shared: *Shared, state: *ControllerState, active: *Runtime.Active) void {
+    if (active.completion_waiting) return;
     const spec = active.job.normal;
     var result = active.completion.normal;
     extendResultPrincipalVariation(&result, &state.game.position, &state.hash.table);
     publishFinalSearchInfoIfNeeded(shared, active, spec, result);
-    active.ponder_completion_waiting = true;
+    active.completion_waiting = true;
 }
 
 fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {

@@ -66,6 +66,10 @@ pub const SearchSpec = struct {
     time_input: ?time.Input,
     received_ns: u64,
     ponder: bool = false,
+    /// `go infinite`. The search still ends when nothing is left to search --
+    /// a proven mate, or the ply ceiling -- but the result is published only
+    /// when the interface asks for it.
+    infinite: bool = false,
 };
 pub const SearchResult = search.types.Result;
 
@@ -259,7 +263,10 @@ pub const Active = struct {
     /// bench report, so the summary block does not repeat it.
     bench_header_published: bool = false,
     last_published_iteration_nodes: ?u64 = null,
-    ponder_completion_waiting: bool = false,
+    /// Set once a finished search that must not publish yet -- a ponder
+    /// without its `ponderhit`, or `go infinite` without its `stop` -- has
+    /// emitted its final information line.
+    completion_waiting: bool = false,
     /// Controller-owned storage keeps this event alive until every persistent
     /// worker has returned from its completion signal.
     done: *std.Io.Event,

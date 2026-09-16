@@ -102,7 +102,11 @@ fn validate(
     const best = result.best_move orelse return error.MissingBestMove;
     if (!chess.movegen.isLegal(position, best)) return error.IllegalBestMove;
     const completed = result.completed orelse return error.MissingCompletedIteration;
-    if (completed.depth != case.depth or counters.completed_depth != case.depth)
+    // A settled mate ends the loop before the requested depth: no deeper
+    // iteration can shorten or refute it, so the accounting below still
+    // describes the complete tree the search ran.
+    if (completed.depth != counters.completed_depth) return error.IncompleteDepth;
+    if (completed.depth != case.depth and !completed.evidence.value.isMate())
         return error.IncompleteDepth;
     try validatePv(case.fen, completed.pv.slice());
     if (result.nodes != counters.main_nodes + counters.quiescence_nodes)

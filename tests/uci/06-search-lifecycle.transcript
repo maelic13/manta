@@ -44,3 +44,20 @@
 ! silence 100ms
 < quit
 ! exit 0 within 1000ms
+
+---
+
+# A search that runs out of work under `go infinite` still waits for `stop`.
+# The mate is proven in a few plies, so every later iteration is settled and
+# the engine has nothing left to search; it may still not answer on its own.
+@phase 6.3
+> Manta {{VERSION}} by Miloslav Macurek
+< position fen 7k/8/6K1/8/8/8/8/6Q1 w - - 0 1
+< go infinite
+! allow-info begin
+! silence 300ms
+< stop
+> {{BESTMOVE_LINE}}
+! allow-info end
+< quit
+! exit 0 within 1000ms

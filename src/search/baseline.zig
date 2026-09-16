@@ -522,6 +522,15 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
         observer.iteration(depth, result.best_move.?, completed.evidence);
         if (@hasDecl(@TypeOf(control.*), "completedIteration"))
             control.completedIteration(completed);
+        // A proven mate no closer than this iteration searched cannot be
+        // improved by a deeper one: the rules bound what any continuation can
+        // still produce. Without this the loop runs to `max_ply`, republishing
+        // the same line once per remaining depth and reporting a depth that
+        // describes no work.
+        if (features.settled_mate_stop and provenMateSettled(completed)) {
+            result.termination = .depth_limit;
+            return result;
+        }
         if (@hasDecl(@TypeOf(control.*), "shouldStopAfterIteration") and
             control.shouldStopAfterIteration(completed))
         {
@@ -533,6 +542,15 @@ pub fn runRestrictedWorkerWithTablebaseAndParams(
         }
     }
     return result;
+}
+
+/// True when the iteration proved a mate whose distance the iteration already
+/// searched, so no deeper iteration can shorten or refute it.
+fn provenMateSettled(completed: types.CompletedIteration) bool {
+    if (completed.evidence.bound != .exact) return false;
+    const distance = completed.evidence.value.mateDistance() orelse return false;
+    const plies: i32 = @intCast(completed.depth);
+    return @abs(distance) <= plies;
 }
 
 /// One pawn is a scale-derived uncertainty unit rather than an imported or
