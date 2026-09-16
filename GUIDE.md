@@ -93,8 +93,10 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   published line is searched rather than assembled from table records; its gate
   was unresolved at `-1.42 +/- 10.11` Elo and the maintainer retained it on
   measured reporting grounds. That made the release a minor one, `1.2.0`, and
-  `MAN-C05` re-gates the shipping head against 1.1.0. The one-thread depth-6
-  fingerprint is `355,879`. The K+B+N mate reported in the same issue is technique and
+  `MAN-C05` accepted H1 for the shipping head against released 1.1.0 after
+  2,760 games at `+16.38 +/- 9.09` Elo, with no engine fault from the
+  candidate, so 1.2.0 is cleared to tag. The one-thread depth-6 fingerprint is
+  `355,879`. The K+B+N mate reported in the same issue is technique and
   stays open.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.

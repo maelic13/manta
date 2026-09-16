@@ -2907,6 +2907,24 @@ all 1,138 fastchess warnings -- every one `PV continues after fifty-move rule`
 illegal move, forfeit, disconnection or timeout. 1.1.1 is therefore cleared for
 its tag by its own registered evidence.
 
+**`MAN-C05` verdict (2026-09-16): H1 accepted.** The shipping head was gated as
+one bundle against the released 1.1.0 and accepted H1 after 2,760 games:
+W/L/D `874/744/1142`, `+16.38 +/- 9.09` Elo, `+23.38 +/- 12.96` nElo, LLR
+`2.95`, LOS `99.98%`, pentanomial `[72,297,544,363,104]`. Every one of the 884
+fastchess warnings came from 1.1.0, none from the candidate, and neither side
+recorded an illegal move, forfeit, disconnection or timeout. 1.2.0 is cleared
+to tag.
+
+**Harness note, same run.** fastchess printed the verdict and then did not
+exit, leaving 13 games in flight and all 28 engine processes alive. Both sides
+of every stuck game were idle at zero CPU, so no search was hung; the release
+binary was checked separately and answered 24 clock searches with interleaved
+`stop` commands and exited on `quit` with code 0. The `MAN-C04` run showed the
+same 13-in-flight pattern at its verdict and did exit, so this is fastchess
+shutdown behaviour with games in flight, not an engine fault. Because the
+script never reached its post-run steps, that run's artifacts are the fastchess
+log and PGN without the copied engine manifests.
+
 Not repaired: the K+B+N mate. Self-play from the wrong corner drew by
 repetition at `1 s` a move and mated at halfmove clock `99` at `3 s`, and
 clearing the table between moves barely changed it, so it is technique rather
