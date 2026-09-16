@@ -87,8 +87,9 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   mate-settled depth reporting, `go infinite` answering unasked, helper work
   missing from `nodes`/`nps`, Stockfish-shaped information lines and a clock
   reserve for later moves). PLAN 6.5.15.1 addendum D records them and
-  `MAN-C04` registers the non-regression gate the maintainer runs against the
-  released 1.1.0. The K+B+N mate reported in the same issue is technique and
+  `MAN-C04` accepted H1 against the released 1.1.0 after 3,026 games at
+  `+14.71 +/- 8.58` Elo with no engine fault from the candidate, so the release
+  is cleared to tag. The K+B+N mate reported in the same issue is technique and
   stays open.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.

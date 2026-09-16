@@ -2888,6 +2888,18 @@ mate; its test runs the same knight shuffle from a clock at `98` and at `0` and
 requires the first to stop after two plies. Display only: both fingerprints are
 unchanged.
 
+**`MAN-C04` verdict (2026-09-16): H1 accepted.** The registered non-regression
+gate ran on the 5950X from the release head arm and accepted H1 after 3,026
+games: W/L/D `908/780/1338`, `+14.71 +/- 8.58` Elo, `+21.24 +/- 12.38` nElo,
+LLR `2.96` on `[-5,0]`, LOS `99.96%`, pentanomial `[76,332,599,400,106]`, 33
+minutes. The bracket was designed to refuse a loss, so the gain it also shows
+is direction, not a sized claim. The optional 4T check played 400 games at
+`+5.21 +/- 24.11` Elo with no faults. Both logs are clean for the candidate:
+all 1,138 fastchess warnings -- every one `PV continues after fifty-move rule`
+-- came from 1.1.0, the version carrying that defect, and neither log holds an
+illegal move, forfeit, disconnection or timeout. 1.1.1 is therefore cleared for
+its tag by its own registered evidence.
+
 Not repaired: the K+B+N mate. Self-play from the wrong corner drew by
 repetition at `1 s` a move and mated at halfmove clock `99` at `3 s`, and
 clearing the table between moves barely changed it, so it is technique rather
