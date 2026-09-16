@@ -44,6 +44,7 @@ fn runArchived(
     archived.selective_core = false;
     archived.root_table_refusal = false;
     archived.settled_mate_stop = false;
+    archived.pv_table_refusal = false;
     return bench.runWithFeaturesAndParams(
         archived,
         spec,
@@ -134,12 +135,11 @@ test "optimized safety and production modes preserve the accepted MAN-S36 finger
     try std.testing.expect(!report.cancelled and !report.failed);
     // MAN-S30 first moved this total from `799,610` to `775,451`, MAN-S35's
     // complete mate windows moved it to `642,336`, MAN-S36's coordinated
-    // selective-search core moved it to `359,259`, and the 1.1.1 repairs moved
-    // it to `359,045`: the root table refusal costs a few nodes, and settled
-    // mates stop deepening instead of re-proving themselves to the ply
-    // ceiling. It is a diagnostic tree-shape contract, not the evidence that
+    // selective-search core moved it to `359,259`, the 1.1.1 repairs moved it
+    // to `359,045`, and MAN-S37's principal-node verdict refusal moved it to
+    // `355,879`. It is a diagnostic tree-shape contract, not the evidence that
     // promoted any of them.
-    try std.testing.expectEqual(@as(u64, 359_045), report.fingerprint_nodes);
+    try std.testing.expectEqual(@as(u64, 355_879), report.fingerprint_nodes);
 }
 
 test "disabling the MAN-S36 core reconstructs the superseded MAN-S35 tree" {
@@ -150,7 +150,8 @@ test "disabling the MAN-S36 core reconstructs the superseded MAN-S35 tree" {
     // entry for the `642,336` to `359,259` change. The two 1.1.1 repairs are
     // pinned off with it: neither belongs to the umbrella, so a build with
     // `-Dselective-core=false` carries them and reads `642,131` instead. This
-    // test states the archived MAN-S35 identity, not that build.
+    // test states the archived MAN-S35 identity, not that build, which reads
+    // `648,735` once MAN-S37 is carried into it.
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -161,7 +162,12 @@ test "disabling the MAN-S36 core reconstructs the superseded MAN-S35 tree" {
     var control: manta.search.types.NeverStop = .{};
     var clock = IncrementingClock{};
     const report = bench.runWithFeatures(
-        .{ .selective_core = false, .root_table_refusal = false, .settled_mate_stop = false },
+        .{
+            .selective_core = false,
+            .root_table_refusal = false,
+            .settled_mate_stop = false,
+            .pv_table_refusal = false,
+        },
         .{ .depth = bench.default_depth },
         &clock,
         &control,
@@ -258,6 +264,7 @@ test "disabling MAN-S30 staging reconstructs the archived MAN-S29 fingerprint" {
             .selective_core = false,
             .root_table_refusal = false,
             .settled_mate_stop = false,
+            .pv_table_refusal = false,
         },
         .{ .depth = bench.default_depth },
         &clock,
@@ -293,6 +300,7 @@ test "disabling MAN-S35 mate windows reconstructs the superseded MAN-S34 tree" {
             .selective_core = false,
             .root_table_refusal = false,
             .settled_mate_stop = false,
+            .pv_table_refusal = false,
         },
         .{ .depth = bench.default_depth },
         &clock,
@@ -330,6 +338,7 @@ test "MAN-S33 singular exclusion horizon builds on the current production head" 
             .selective_core = false,
             .root_table_refusal = false,
             .settled_mate_stop = false,
+            .pv_table_refusal = false,
         },
         .{ .depth = bench.default_depth },
         &clock,
@@ -367,6 +376,7 @@ test "MAN-R02 stability aspiration builds on the MAN-S29 picker it was qualified
             .selective_core = false,
             .root_table_refusal = false,
             .settled_mate_stop = false,
+            .pv_table_refusal = false,
         },
         .{ .depth = bench.default_depth },
         &clock,

@@ -1120,10 +1120,8 @@ fn drainSearchProgress(shared: *Shared, state: *ControllerState, active: *Runtim
         // A completed iteration is the depth's score and principal variation;
         // it waits for presenter capacity like any required line.
         .iteration => |iteration| {
-            var completed = iteration.completed;
-            extendPrincipalVariation(&completed.pv, &state.game.position, &state.hash.table);
             if (!offerLine(shared, completedIterationInfo(
-                completed,
+                iteration.completed,
                 iteration.tablebase_hits,
                 elapsedMilliseconds(spec.received_ns, iteration.observed_ns),
                 iteration.aggregate_nodes,
@@ -1143,8 +1141,7 @@ fn discardSearchProgress(shared: *Shared, active: *Runtime.Active) void {
 fn publishRetainedInfo(shared: *Shared, state: *ControllerState, active: *Runtime.Active) void {
     if (active.completion_waiting) return;
     const spec = active.job.normal;
-    var result = active.completion.normal;
-    extendResultPrincipalVariation(&result, &state.game.position, &state.hash.table);
+    const result = active.completion.normal;
     // The completion carries worker zero's count, while the iteration lines
     // already reported every thread's. Publishing the raw completion here
     // would end a multi-thread search on a line lower than the one before it.
@@ -1190,11 +1187,7 @@ fn finishActive(shared: *Shared, state: *ControllerState, publish: bool) void {
         switch (finished.completion) {
             .normal => |searched| {
                 const spec = finished.job.normal;
-                // The game root and the table outlive the job, so the final
-                // line and the ponder move see the same extended variation
-                // the iteration lines did.
-                var result = searched;
-                extendResultPrincipalVariation(&result, &state.game.position, &state.hash.table);
+                const result = searched;
                 if (last_published_iteration_nodes == null or
                     last_published_iteration_nodes.? != main_worker_nodes.?)
                 {
@@ -1377,61 +1370,6 @@ fn rootMoveInfo(depth: u16, chess_move: chess.move.Move, number: u16) Line {
         "info depth {d} currmove {s} currmovenumber {d}",
         .{ depth, text.slice(), number },
     );
-}
-
-/// Extends a searched principal variation from the transposition table, for
-/// display only. Selective search may end a principal line at a table hit, so
-/// an iteration that resolved from memory carries one move where the
-/// interface expects the line the score stands on. Each appended move is the
-/// stored move of an authenticated non-upper-bound entry for the position
-/// reached, legal there, and the walk stops at the first missing entry,
-/// unusable move, repeated position or capacity limit. The searched prefix is
-/// never changed, no search decision reads the result, and the table is read
-/// through the same lock-free authenticated probe the workers use, so a live
-/// search may run concurrently.
-fn extendPrincipalVariation(
-    pv: *search.types.PrincipalVariation,
-    root: *const chess.position.Position,
-    table: *const search.tt.Table,
-) void {
-    // SAFETY: `states[ply]` is written by `makeMove` before the walk reads it
-    // through `position.current`, and only the first `ply` entries are used.
-    var states: [chess.types.max_ply]chess.position.PositionState = undefined;
-    var position = root.*;
-    var ply: usize = 0;
-    for (pv.slice()) |chess_move| {
-        if (ply == states.len or !chess.movegen.isLegal(&position, chess_move)) return;
-        chess.transition.makeMove(&position, chess_move, &states[ply]);
-        ply += 1;
-    }
-    while (pv.length < pv.moves.len and ply < states.len) {
-        // A repeated position would loop back through the same entries. This
-        // is stricter than the threefold claim on purpose: the first repeat
-        // already means the walk is going round a cycle.
-        if (position.current.repetition != 0) return;
-        // The rules may have ended the game before the table's next move. A
-        // record is keyed by the position alone, so entries stored earlier in
-        // the game -- when the halfmove clock was low -- are still found once
-        // it has run out, and following them would display a line that cannot
-        // be played.
-        if (chess.draw.isClaimableDraw(&position)) return;
-        const record = table.probe(position.current.key, ply, position.current.rule50) orelse return;
-        if (record.bound == .upper) return;
-        const chess_move = record.chess_move;
-        if (!chess.movegen.isLegal(&position, chess_move)) return;
-        chess.transition.makeMove(&position, chess_move, &states[ply]);
-        ply += 1;
-        pv.moves[pv.length] = chess_move;
-        pv.length += 1;
-    }
-}
-
-fn extendResultPrincipalVariation(
-    result: *Runtime.SearchResult,
-    root: *const chess.position.Position,
-    table: *const search.tt.Table,
-) void {
-    if (result.completed) |*completed| extendPrincipalVariation(&completed.pv, root, table);
 }
 
 /// `displayed_nodes` is the work of every searching thread. The iteration
@@ -2092,95 +2030,6 @@ test "streaming files follow the inherited handle's I/O mode" {
     try std.testing.expect(!synchronous_write.flags.nonblocking);
 }
 
-fn storeTableMove(
-    table: *search.tt.Table,
-    position: *const chess.position.Position,
-    chess_move: chess.move.Move,
-    bound: search.types.Bound,
-) void {
-    _ = table.store(
-        position.current.key,
-        chess_move,
-        score.Score.zero,
-        null,
-        4,
-        bound,
-        .full_search,
-        0,
-    );
-}
-
-test "a principal variation ending in a table hit is extended by legal stored moves only" {
-    var storage: [64]search.tt.Cluster = undefined;
-    var table = search.tt.Table.init(&storage);
-    var root_state: chess.position.PositionState = .{};
-    const root = try chess.fen.parseStart(&root_state);
-
-    // Walk the intended line once to store an entry for each position on it:
-    // startpos -> e2e4 (searched) -> e7e5 -> g1f3 -> then an illegal move.
-    var states: [4]chess.position.PositionState = undefined;
-    var cursor = root;
-    const e2e4 = chess.move.Move.normal(.e2, .e4);
-    const e7e5 = chess.move.Move.normal(.e7, .e5);
-    const g1f3 = chess.move.Move.normal(.g1, .f3);
-    chess.transition.makeMove(&cursor, e2e4, &states[0]);
-    storeTableMove(&table, &cursor, e7e5, .exact);
-    chess.transition.makeMove(&cursor, e7e5, &states[1]);
-    storeTableMove(&table, &cursor, g1f3, .lower);
-    chess.transition.makeMove(&cursor, g1f3, &states[2]);
-    // A stored move the position cannot play ends the walk without being shown.
-    storeTableMove(&table, &cursor, chess.move.Move.normal(.e1, .e8), .exact);
-
-    var pv = search.types.PrincipalVariation.init();
-    pv.moves[0] = e2e4;
-    pv.length = 1;
-    extendPrincipalVariation(&pv, &root, &table);
-    try std.testing.expectEqual(@as(u16, 3), pv.length);
-    try std.testing.expectEqual(e2e4, pv.moves[0]);
-    try std.testing.expectEqual(e7e5, pv.moves[1]);
-    try std.testing.expectEqual(g1f3, pv.moves[2]);
-
-    // An upper bound carries no trustworthy move and ends the walk.
-    var upper_pv = search.types.PrincipalVariation.init();
-    storeTableMove(&table, &root, g1f3, .upper);
-    extendPrincipalVariation(&upper_pv, &root, &table);
-    try std.testing.expectEqual(@as(u16, 0), upper_pv.length);
-
-    // A searched prefix the root cannot play is left alone rather than walked.
-    var illegal_pv = search.types.PrincipalVariation.init();
-    illegal_pv.moves[0] = chess.move.Move.normal(.e1, .e8);
-    illegal_pv.length = 1;
-    extendPrincipalVariation(&illegal_pv, &root, &table);
-    try std.testing.expectEqual(@as(u16, 1), illegal_pv.length);
-}
-
-test "principal variation extension stops at a repeated position" {
-    var storage: [64]search.tt.Cluster = undefined;
-    var table = search.tt.Table.init(&storage);
-    var root_state: chess.position.PositionState = .{};
-    const root = try chess.fen.parseStart(&root_state);
-
-    // Knights out and back: every position on the cycle stores the next move,
-    // so without a repetition stop the walk would run to capacity.
-    const cycle = [_]chess.move.Move{
-        chess.move.Move.normal(.g1, .f3),
-        chess.move.Move.normal(.g8, .f6),
-        chess.move.Move.normal(.f3, .g1),
-        chess.move.Move.normal(.f6, .g8),
-    };
-    var states: [4]chess.position.PositionState = undefined;
-    var cursor = root;
-    for (cycle, 0..) |chess_move, index| {
-        storeTableMove(&table, &cursor, chess_move, .exact);
-        chess.transition.makeMove(&cursor, chess_move, &states[index]);
-    }
-
-    var pv = search.types.PrincipalVariation.init();
-    extendPrincipalVariation(&pv, &root, &table);
-    try std.testing.expectEqual(@as(u16, cycle.len), pv.length);
-    for (cycle, pv.slice()) |expected, actual| try std.testing.expectEqual(expected, actual);
-}
-
 test "a new search reports only its own work, never the previous search's" {
     // The helpers publish a readable copy of their node counts while they
     // poll. Left over from an earlier search, that copy would be added to the
@@ -2240,48 +2089,4 @@ test "a new search reports only its own work, never the previous search's" {
     }
     try std.testing.expect(lines != 0);
     finishActive(&shared, &state, false);
-}
-
-test "principal variation extension stops where the rules end the game" {
-    // A record carries no halfmove clock, so entries stored earlier in a long
-    // shuffle are still found once the fifty-move allowance is spent. Without
-    // a stop the displayed line runs past the draw, which is what an interface
-    // reports as a principal variation continuing after the fifty-move rule.
-    const shuffle = [_]chess.move.Move{
-        chess.move.Move.normal(.g1, .f3),
-        chess.move.Move.normal(.g8, .f6),
-        chess.move.Move.normal(.f3, .g1),
-        chess.move.Move.normal(.f6, .g8),
-    };
-
-    for ([_]u16{ 98, 0 }) |clock| {
-        var storage: [64]search.tt.Cluster = undefined;
-        var table = search.tt.Table.init(&storage);
-        var root_state: chess.position.PositionState = .{};
-        // The same knight shuffle from a position whose clock is nearly spent,
-        // and from one with the whole allowance left.
-        var root = try chess.fen.parse(
-            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-            &root_state,
-        );
-        root.current.rule50 = clock;
-
-        var states: [shuffle.len]chess.position.PositionState = undefined;
-        var cursor = root;
-        for (shuffle, 0..) |chess_move, index| {
-            storeTableMove(&table, &cursor, chess_move, .exact);
-            chess.transition.makeMove(&cursor, chess_move, &states[index]);
-        }
-
-        var pv = search.types.PrincipalVariation.init();
-        extendPrincipalVariation(&pv, &root, &table);
-        if (clock == 98) {
-            // Two more plies spend the allowance; the line stops there instead
-            // of continuing into moves the rules no longer allow.
-            try std.testing.expectEqual(@as(u16, 2), pv.length);
-        } else {
-            // Same entries, same walk: only the clock decided the difference.
-            try std.testing.expectEqual(@as(u16, shuffle.len), pv.length);
-        }
-    }
 }

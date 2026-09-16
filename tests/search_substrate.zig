@@ -2078,7 +2078,10 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
     var candidate_control: search.types.NeverStop = .{};
     var disabled_control: search.types.NeverStop = .{};
     const result = search.baseline.runRestrictedWithFeatures(
-        .{ .shallow_selectivity = false },
+        // Pre-MAN-S37 tree: these counts were measured where principal nodes
+        // still consumed stored verdicts, and the contract under test is the
+        // exclusion probe, not which nodes cut.
+        .{ .shallow_selectivity = false, .pv_table_refusal = false },
         &position,
         harness.binding(),
         .{ .depth = 7 },
@@ -2090,7 +2093,7 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
         &.{only},
     );
     const candidate = search.baseline.runRestrictedWithFeatures(
-        .{ .singular_exclusion_horizon = true, .shallow_selectivity = false },
+        .{ .singular_exclusion_horizon = true, .shallow_selectivity = false, .pv_table_refusal = false },
         &candidate_position,
         candidate_harness.binding(),
         .{ .depth = 7 },
@@ -2102,7 +2105,7 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
         &.{candidate_only},
     );
     const disabled = search.baseline.runRestrictedWithFeatures(
-        .{ .singular_extension = false, .shallow_selectivity = false },
+        .{ .singular_extension = false, .shallow_selectivity = false, .pv_table_refusal = false },
         &disabled_position,
         disabled_harness.binding(),
         .{ .depth = 7 },
@@ -3103,7 +3106,9 @@ test "a root verdict is never taken from the transposition table" {
         var harness: Harness = .{};
         var control: search.types.NeverStop = .{};
         const result = search.baseline.runWithFeatures(
-            .{ .root_table_refusal = refuse_root },
+            // MAN-S37's principal refusal also covers the root, so it is
+            // pinned off here: this test is about the root switch itself.
+            .{ .root_table_refusal = refuse_root, .pv_table_refusal = false },
             &game.position,
             harness.binding(),
             .{ .depth = search_depth },

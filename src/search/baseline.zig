@@ -3648,25 +3648,27 @@ const TableEvidence = struct {
 };
 
 test "which nodes decline a stored verdict is decided by the two switches" {
-    // The root always declines: it publishes without searching. A principal
-    // node declines only under the candidate, and a node searched with a null
-    // window never does -- that is where the table pays for itself.
+    // Production declines at the root, which publishes without searching, and
+    // at every principal node, so a published line is one the search walked. A
+    // node searched with a null window always takes the verdict: that is where
+    // the table pays for itself.
     const production: types.Features = .{};
     try std.testing.expect(refusesTableVerdict(production, 0, true));
-    try std.testing.expect(!refusesTableVerdict(production, 3, true));
+    try std.testing.expect(refusesTableVerdict(production, 3, true));
     try std.testing.expect(!refusesTableVerdict(production, 3, false));
 
-    const candidate: types.Features = .{ .pv_table_refusal = true };
-    try std.testing.expect(refusesTableVerdict(candidate, 0, true));
-    try std.testing.expect(refusesTableVerdict(candidate, 3, true));
-    try std.testing.expect(!refusesTableVerdict(candidate, 3, false));
+    // The 1.1.1 tree refused only at the root.
+    const before_s37: types.Features = .{ .pv_table_refusal = false };
+    try std.testing.expect(refusesTableVerdict(before_s37, 0, true));
+    try std.testing.expect(!refusesTableVerdict(before_s37, 3, true));
+    try std.testing.expect(!refusesTableVerdict(before_s37, 3, false));
 
-    // With the root repair off, a production root still searches every node
-    // for itself only when the candidate is on.
+    // With the root repair off the root still refuses, because a root is a
+    // principal node and the principal refusal covers it.
     const pre_repair: types.Features = .{ .root_table_refusal = false };
-    try std.testing.expect(!refusesTableVerdict(pre_repair, 0, true));
-    const pre_repair_candidate: types.Features = .{ .root_table_refusal = false, .pv_table_refusal = true };
-    try std.testing.expect(refusesTableVerdict(pre_repair_candidate, 0, true));
+    try std.testing.expect(refusesTableVerdict(pre_repair, 0, true));
+    const pre_repair_only: types.Features = .{ .root_table_refusal = false, .pv_table_refusal = false };
+    try std.testing.expect(!refusesTableVerdict(pre_repair_only, 0, true));
 }
 
 /// Which nodes decline a stored verdict and keep only the stored move. The

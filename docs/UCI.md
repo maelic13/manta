@@ -445,16 +445,12 @@ pending one, and a line is discarded rather than waiting when the output queue
 is full.
 
 Each fully completed iteration emits the ordinary score/depth/PV line, once per
-depth and in depth order, for any `Threads` value. The searched principal
-variation may end at a transposition-table hit; for display it is then extended
-from the table: each appended move is the stored move of an authenticated
-non-upper-bound entry for the position reached, legal there, and the extension
-stops at the first missing entry, unusable move, repeated position, position
-the rules have already ended -- the fifty-move allowance spent, a threefold
-reached or material that cannot mate -- or capacity limit. A displayed line
-therefore never continues past a move the game would not see played. The searched prefix is unchanged and the extension carries no search
-authority. The `ponder` move of `bestmove` is the second move of that same
-displayed line, so it may come from the table. Completed-iteration lines
+depth and in depth order, for any `Threads` value. The published line is the
+line the search walked: a principal node takes no stored verdict, so the
+variation is searched evidence rather than a walk through stored records, and
+it ends only where the search ended -- at its horizon, at a proven mate, or
+where the rules end the game. The `ponder` move of `bestmove` is the second
+move of that same searched line. Completed-iteration lines
 are required output: they are neither coalesced with root-move progress nor
 dropped when the output queue is full, and they wait for presenter capacity.
 The worker-side record of completed iterations is bounded; if more than it

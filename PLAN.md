@@ -2858,6 +2858,13 @@ aggregate, `MAN-C04` registered, records corrected):
 | `bench 6 1`, native ReleaseFast default | `359,045` |
 | `bench 6 1`, `-Dselective-core=false` | `642,131` |
 
+Re-run once each on the `1.2.0` release head (MAN-S37 promoted, the table-walk
+display removed, the project-version test wired into the gates): `454/472`,
+`455/472` off arm, `454/472` ReleaseSafe, `22/22` UCI and `27` transcript cases,
+`0` lint findings; `bench 6 1` reads `355,879` by default, `648,735` with
+`-Dselective-core=false` and `359,045` with `-Dpv-table-refusal=false`, and the
+build reports `Manta 1.2.0`.
+
 Re-run once each after the fifty-move display repair on its own commit: the
 same five gates passed -- `455/473`, `456/473` off arm, `455/473` ReleaseSafe,
 `25/25` and `27` transcript cases, `0` lint findings -- and both fingerprints
@@ -2922,8 +2929,36 @@ the main search and in quiescence. Production is untouched: both fingerprints
 stay `359,045` and `642,131`. The candidate arm reads `355,879`, spends `0.995`
 of the baseline's nodes to depth 13 across five positions and reaches the same
 mean depth in a fixed 1.5 seconds, so it is close to cost-free and only games
-can decide it. Registered as `MAN-S37`; if it accepts, the display extension
-can be removed rather than guarded.
+can decide it. Registered as `MAN-S37`.
+
+**`MAN-S37` verdict (2026-09-16): unresolved, retained by maintainer decision.**
+The gate ran 2,442 games at `-1.42 +/- 10.11` Elo, LLR `0.06`: indistinguishable,
+and a true value in the middle of `[-5,0]` cannot resolve that bracket in a
+sensible number of games. The maintainer stopped it and retained the mechanism
+on reporting grounds, which were measured rather than asserted: over five
+positions at depth 12 on a warm table the searched line went from 10 plies
+across five iterations to 68, with every line at least as long as its depth,
+where production had five of five lines shorter. The table-walk display is
+therefore deleted, not merely guarded -- with it goes the mechanism behind two
+interface faults -- and `bestmove` still carried a ponder move in 70 of 70
+self-play moves. Production fingerprints move to `355,879` and `648,735`; the
+1.1.1 tree is `-Dpv-table-refusal=false` at `359,045`, and every archived
+reconstruction pins the switch off. This is an explicit maintainer decision on
+a non-H1 gate, recorded as the `MAN-S35` exception was and precedent for
+nothing else.
+
+**Version.** The release carries a promoted search mechanism and a changed
+information format, so it ships as `1.2.0` rather than as the prepared `1.1.1`
+patch; `MAN-C05` re-gates the shipping head against released 1.1.0, because
+`MAN-C04` measured a head that predates `MAN-S37`.
+
+**Project-version test gap, found while bumping.** `build_support/version.zig`
+was in no test root: `build-version-tests` compiles `zig_version.zig`, the
+toolchain check. Its assertion had gone stale at the 1.1.1 bump -- it still
+required `patch == 0` -- and no gate noticed. The file now has its own test
+artifact in `check`, `test-fast` and the serial `test` list, and its assertions
+no longer hard-code the components: the version must parse, carry no
+prerelease or build metadata, and render back exactly as written.
 
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and

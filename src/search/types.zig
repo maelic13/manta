@@ -713,14 +713,19 @@ pub const Features = struct {
     /// this off restores the 1.1.0 loop, which every archived fingerprint was
     /// recorded on.
     settled_mate_stop: bool = true,
-    /// Candidate. A principal-variation node takes no stored verdict: it is
-    /// searched for itself, so the line it publishes is one the search walked
-    /// rather than one assembled from records. The root already refuses under
+    /// `MAN-S37`, production since the maintainer's decision of 2026-09-16. A
+    /// principal-variation node takes no stored verdict: it is searched for
+    /// itself, so the line it publishes is one the search walked rather than
+    /// one assembled from records. The root refuses for the same reason under
     /// `root_table_refusal`; this extends the refusal to every principal node
     /// in the main search and in quiescence, which is the shape the pinned
-    /// classical reference uses. It costs nodes on the principal spine and is
-    /// default off until a registered gate decides it.
-    pv_table_refusal: bool = false,
+    /// classical reference uses. Its registered `[-5,0]` gate did not resolve
+    /// -- `-1.42 +/- 10.11` Elo over 2,442 games -- and it was retained by
+    /// explicit maintainer decision on measured reporting grounds: the
+    /// searched line at depth 12 on a warm table went from about two plies to
+    /// the full depth, which removed the table-walk display entirely. Switching
+    /// it off restores the 1.1.1 tree at fingerprint `359,045`.
+    pv_table_refusal: bool = true,
     /// Step-6.5.5 singular-exclusion-horizon candidate. The same-position
     /// search still excludes exactly the legal ordinary TT move and alone
     /// decides whether that move extends; this switch only replaces the

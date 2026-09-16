@@ -82,14 +82,19 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   every gate passed again on the final head. 6.5.11 to 6.5.14 and
   6.5.15.2 to 6.5.15.4 stay open for when development resumes, with expected
   gains recorded in PLAN.
-- Manta 1.1.1 is prepared as a bugfix release on the release head: the issue #4
+- Manta 1.2.0 is prepared on the release head. It carries the issue #4
   repairs (a stored root verdict that drew a won game, forced moves spending the clock,
   mate-settled depth reporting, `go infinite` answering unasked, helper work
   missing from `nodes`/`nps`, Stockfish-shaped information lines and a clock
   reserve for later moves). PLAN 6.5.15.1 addendum D records them and
   `MAN-C04` accepted H1 against the released 1.1.0 after 3,026 games at
-  `+14.71 +/- 8.58` Elo with no engine fault from the candidate, so the release
-  is cleared to tag. The K+B+N mate reported in the same issue is technique and
+  `+14.71 +/- 8.58` Elo with no engine fault from the candidate. The release
+  then took `MAN-S37`, which makes every principal node search for itself so a
+  published line is searched rather than assembled from table records; its gate
+  was unresolved at `-1.42 +/- 10.11` Elo and the maintainer retained it on
+  measured reporting grounds. That made the release a minor one, `1.2.0`, and
+  `MAN-C05` re-gates the shipping head against 1.1.0. The one-thread depth-6
+  fingerprint is `355,879`. The K+B+N mate reported in the same issue is technique and
   stays open.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.

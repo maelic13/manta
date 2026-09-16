@@ -104,8 +104,8 @@ pub fn build(b: *std.Build) void {
     const pv_table_refusal = b.option(
         bool,
         "pv-table-refusal",
-        "Enable the candidate that refuses stored verdicts at every principal node",
-    ) orelse false;
+        "Keep the accepted MAN-S37 principal-node verdict refusal (false reconstructs the 1.1.1 tree)",
+    ) orelse true;
     const qsearch_tactical_generation = b.option(
         bool,
         "qsearch-tactical-generation",
@@ -382,6 +382,17 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_version_tests = b.addRunArtifact(version_tests);
+    // The reported project version has its own contract, and its file was in
+    // no test root until 1.2.0: a stale assertion there went unnoticed.
+    const project_version_tests = b.addTest(.{
+        .name = "project-version-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("build_support/version.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_project_version_tests = b.addRunArtifact(project_version_tests);
 
     const artifact_tests = b.addTest(.{
         .name = "build-artifact-tests",
@@ -651,6 +662,7 @@ pub fn build(b: *std.Build) void {
     test_fast_step.dependOn(&run_library_tests.step);
     test_fast_step.dependOn(&run_uci_tests.step);
     test_fast_step.dependOn(&run_version_tests.step);
+    test_fast_step.dependOn(&run_project_version_tests.step);
     test_fast_step.dependOn(&run_artifact_tests.step);
     test_fast_step.dependOn(&run_policy_checker.step);
 
@@ -664,6 +676,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&transcript_tests.step);
     check_step.dependOn(&uci_runner.step);
     check_step.dependOn(&version_tests.step);
+    check_step.dependOn(&project_version_tests.step);
     check_step.dependOn(&artifact_tests.step);
     check_step.dependOn(&policy_checker.step);
     check_step.dependOn(&policy_tests.step);
@@ -696,6 +709,7 @@ pub fn build(b: *std.Build) void {
         uci_tests,
         transcript_tests,
         version_tests,
+        project_version_tests,
         artifact_tests,
         policy_tests,
         differential_tests,

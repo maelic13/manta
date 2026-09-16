@@ -6,7 +6,7 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.1.1] - 2026-09-16
+## [1.2.0] - 2026-09-16
 
 ### Fixed
 
@@ -31,6 +31,12 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ### Changed
 
+- Principal variations are lines the search actually walked. Manta used to end
+  a line wherever it met a stored position and then pad the display from its
+  own tables; now every principal node is searched for itself. On a warm table
+  at depth 12 the searched line grew from about two moves to the full depth,
+  and the padding is gone. Playing strength is unchanged; the searched line was
+  the point.
 - Search information follows the field order interfaces expect:
   `depth`, `seldepth`, `score`, `nodes`, `nps`, `hashfull`, `tbhits`, `time`,
   `pv`. Table occupancy (`hashfull`) is new. Lines reporting the move being
@@ -102,7 +108,7 @@ All notable user-visible changes to Manta are recorded here. The format follows
 - Portable 64-bit release builds for Windows x86-64, Linux x86-64, Linux ARM64,
   macOS x86-64 and macOS ARM64.
 
-[Unreleased]: https://github.com/maelic13/manta/compare/v1.1.1...HEAD
-[1.1.1]: https://github.com/maelic13/manta/compare/v1.1.0...v1.1.1
+[Unreleased]: https://github.com/maelic13/manta/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/maelic13/manta/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/maelic13/manta/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/maelic13/manta/releases/tag/v1.0.0
