@@ -47,7 +47,7 @@ one identical-binary calibration before the next registered candidate.
 | Qsearch generation | MAN-S34 tactical-only non-check generation | Accepted H1 over MAN-S30 after 1,614 games at `+59.77 +/- 16.95` nElo without anomaly; ADR-0069 |
 | Mate windows | MAN-S35 complete non-root window clip | Neutral registered gate stopped at 1,998 games (`+4.00 +/- 9.32` Elo); production by documented maintainer exception, not H1 |
 | Selective search | MAN-S36 coordinated selective-search core | Accepted H1 over MAN-S35 after 670 games at `+108.68 +/- 17.86` Elo (`+170.97 +/- 26.31` nElo) without anomaly; ADR-0071 |
-| Deterministic identity | One-thread depth-6 bench | `359,259` nodes |
+| Deterministic identity | One-thread depth-6 bench | `359,045` nodes (`359,259` before the 1.1.1 repairs) |
 
 These measurements establish promotion decisions under their registered
 conditions. Small decisive samples, especially cumulative and 4T-versus-1T

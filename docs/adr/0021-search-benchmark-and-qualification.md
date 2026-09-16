@@ -49,7 +49,9 @@ upper median `12,447` nodes and maximum-position share `16.9%` (`130,895`
 nodes). Step 6.5.10.1's accepted MAN-S35 mate windows later moved the
 production total to `642,336`, geomean EBF `4.703`, upper median `12,201` and
 share `16.1%` (`103,615`). Step 6.5.10's accepted MAN-S36 coordinated
-selective-search core then moved it to `359,259`, geomean EBF `4.228`, upper
+selective-search core then moved it to `359,259`, and the 1.1.1 repairs to
+`359,045`: the root refuses a stored verdict, and a settled mate stops
+deepening. At `359,259` the corpus showed geomean EBF `4.228`, upper
 median `5,905` and share `16.8%` (`60,301`). Wall time and NPS remain
 run-specific diagnostics.
 

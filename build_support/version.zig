@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const current = "1.1.0";
+pub const current = "1.1.1";
 
 test "release version is valid semantic versioning" {
     const parsed = try std.SemanticVersion.parse(current);

@@ -18,7 +18,9 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   MAN-S30 live-history move ordering, MAN-S34 tactical-only non-check qsearch
   generation, MAN-S35 complete mate windows and the MAN-S36 coordinated
   selective-search core. The deterministic one-thread depth-6 fingerprint is
-  `359,259` nodes; `-Dselective-core=false` reconstructs MAN-S35 at `642,336`.
+  `359,045` nodes since the 1.1.1 repairs; `-Dselective-core=false` reads
+  `642,131`, and the archived MAN-S35 identity of `642,336` is reconstructed by
+  pinning those repairs off.
 - Step 6.5.4 is complete. On the designated 5950X the six-cell board ratio is
   `0.638`; depth 13 hit the frozen mate-position timeout, and routine bench 13
   exceeded 30 seconds. These are open deficits, not accepted targets.
@@ -80,6 +82,12 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   every gate passed again on the final head. 6.5.11 to 6.5.14 and
   6.5.15.2 to 6.5.15.4 stay open for when development resumes, with expected
   gains recorded in PLAN.
+- Manta 1.1.1 is prepared on `dev` as a bugfix release: the issue #4 repairs
+  (a stored root verdict that drew a won game, forced moves spending the clock,
+  mate-settled depth reporting, `go infinite` answering unasked, helper work
+  missing from `nodes`/`nps`, Stockfish-shaped information lines and a clock
+  reserve for later moves). PLAN 6.5.15.1 addendum D records them. The K+B+N
+  mate reported in the same issue is technique and stays open.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 

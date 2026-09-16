@@ -16,7 +16,7 @@ engine combines MAN-E19 classical evaluation, MAN-S29 search parameters,
 MAN-T05 integrated clock parameters, MAN-S30 live-history move ordering,
 MAN-S34 tactical-only non-check qsearch generation, MAN-S35 complete mate
 windows and the MAN-S36 coordinated selective-search core.
-One-thread depth-6 bench is `359,259` nodes. The release configuration supports portable 64-bit Windows x86-64,
+One-thread depth-6 bench is `359,045` nodes. The release configuration supports portable 64-bit Windows x86-64,
 Linux x86-64/ARM64 and macOS x86-64/ARM64 artifacts.
 
 No coding agent may start a Phase-6.5 implementation step, Phase 7, a game
@@ -2767,7 +2767,85 @@ counter readable while helpers run. Gates: `zig build test-uci`,
 `zig build test-fast` in ReleaseFast and ReleaseSafe and `zig build lint`
 passed on `d2826d9`; native ReleaseFast `bench 6 1` reads `359,259` by default
 and `642,336` with `-Dselective-core=false`, and the default build reports
-`Manta 1.1.0`.
+`Manta 1.1.0`. The deferred aggregated-node reporting was implemented in 1.1.1
+(addendum D below); it needed no atomic on the search's hot path.
+
+**6.5.15.1 addendum D (2026-09-16): issue #4 repairs, released as 1.1.1.**
+GitHub issue #4 reported games played with 1.1.0 at `5m+3s`: a won game drawn
+by repetition while the engine displayed `+5.05`, time spent on forced moves,
+and an unreliable K+B+N mate. Analysis of the reporter's PGN reproduced the
+first two and confirmed the third; the maintainer also reported node and NPS
+figures that looked like one thread's under `Threads 6`. The patch archive
+attached to the issue was neither downloaded nor applied. All repairs carry a
+compile-time switch, so every archived fingerprint is reconstructed by pinning
+the 1.1.1 switches off; production reads `359,045` and `-Dselective-core=false`
+reads `642,131`.
+
+1. **A stored root verdict drew a won game** (`src/search/tt.zig` key contract,
+   `src/search/baseline.zig`). A record is keyed by the position alone and
+   carries neither repetition history nor halfmove clock. Every interior node
+   re-derives both, because the draw test precedes the probe, but the root
+   publishes a move without searching, so the verdict stored while a position
+   had occurred twice was replayed once the same position completed a
+   threefold. Reproduced from the reporter's game: the decisive search returned
+   the repeating move after **18 nodes** at depth 18, reporting the stale
+   winning score -- exactly the `+5.05` in the PGN, and the reason the engine
+   repeated at every opportunity. `features.root_table_refusal` (default on)
+   keeps the stored move for ordering and refuses the stored verdict. The test
+   writes the poisoned record directly and runs both arms: the off arm replays
+   it and draws, the production arm searches and keeps the win.
+2. **Forced moves spent the clock** (`src/engine/time.zig`). The clock policy
+   only scaled a forced move's allocation to `350` permille, so a position with
+   one legal move took 2.5 to 3.9 seconds. `on_game_clock` plus a
+   `legal_root_move_count == 1` check now ends the search after its first
+   iteration, which still yields a line to ponder on. Measured: 0.000 s.
+   Fixed-depth, node-limited and infinite searches are analysis and unaffected.
+3. **Depth reporting and `go infinite`** (`src/search/baseline.zig`,
+   `src/uci/session.zig`). A proven mate settled every remaining iteration, so
+   the loop ran to the ply ceiling: 255 near-identical lines ending at
+   `depth 255`, which the reporter's PGN shows as `+M5/255`.
+   `features.settled_mate_stop` ends the loop once the proven distance is no
+   further than the iteration that found it. That exposed a protocol fault the
+   old spam had hidden: a `go infinite` search which runs out of work answered
+   with `bestmove` unasked. Infinite searches now hold their result until
+   `stop`, reusing the ponder retention path, and a transcript case pins it.
+   Releasing a held search also revealed that the controller consumed the wake
+   posted with a queued command and then skipped the command read, leaving it
+   one command behind for the rest of the session; that `continue` is gone.
+4. **Reported nodes and NPS ignored the helpers** (`src/engine/runtime.zig`).
+   Iteration lines carried worker zero's count, so `Threads 6` displayed about
+   `1.15 M` NPS -- one thread's. Each worker now mirrors its own counter into
+   an atomic while it polls, one relaxed store per `1024` nodes, and worker
+   zero totals them when it publishes. The search and the clock policy still
+   read the ordinary per-thread counter, so the hot path and the fingerprint
+   are untouched. `Threads 6` now reports about `6.2 M` NPS.
+5. **Information format** (`src/uci/session.zig`). Fields follow the order
+   interfaces expect -- `depth`, `seldepth`, `score`, `nodes`, `nps`,
+   `hashfull`, `tbhits`, `time`, `pv` -- with table occupancy added. Root-move
+   lines are trimmed to `currmove`/`currmovenumber` and appear only after three
+   seconds. `Table.hashfull` samples 250 clusters; its first version read above
+   `1000` permille because `@min(len, 250)` infers a type from the bound it
+   proves and `sampled_clusters * ways` overflowed it, which its test now pins
+   at both ends.
+6. **Clock reserve** (`src/engine/time.zig`). Measured at `300+3` from move
+   one: optimum `10.9 s`, hard maximum `46.7 s`, and a sudden-death horizon
+   that contracts from 36 moves to 20, which is why the reporter's games
+   reached their endgames on the increment. The maintainer chose a safety
+   change only: the fitted `MAN-T05` constants are untouched, and one move's
+   absolute maximum may now reach the credited increment plus a quarter of what
+   lies above it, floored at twice the optimum so a nearly spent clock keeps a
+   soft-to-hard interval. Early allocation is unchanged; with `30 s` left and a
+   `3 s` increment a move takes `7.1 s` instead of up to `16 s`. This shifts
+   play and has **no gate behind it**; a horizon re-fit remains open with
+   6.5.11.3.
+
+Not repaired: the K+B+N mate. Self-play from the wrong corner drew by
+repetition at `1 s` a move and mated at halfmove clock `99` at `3 s`, and
+clearing the table between moves barely changed it, so it is technique rather
+than the table defect above. `endgame_kbnk` drives the weak king with `22` per
+step of wrong-corner distance and `8` per step of king approach, a far shallower
+gradient than engines that convert it reliably. Recorded as a strength item for
+a later phase, not a 1.1.1 repair.
 
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
