@@ -322,6 +322,10 @@ fn controller(shared: *Shared, state: *ControllerState) !void {
 
         var command = buffer[0];
         defer if (command.raw) |raw| shared.allocator.free(raw);
+        // Closing discards queued jobs that have not started. Each queued job
+        // would get a fresh epoch that the urgent `quit` cancel never targeted,
+        // so starting them would run the whole backlog before shutdown.
+        if (shared.shutdown.isSet() and (command.tag == .go or command.tag == .bench)) continue;
         if (debug_enabled and !offerLine(shared, lineFmt(
             "info string debug received \"{s}\"",
             .{command.line.slice()},

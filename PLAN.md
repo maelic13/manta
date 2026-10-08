@@ -3011,6 +3011,24 @@ workflow as a sixth portable asset; it passed the native build and all three
 suites on a local Snapdragon X host, and its hosted gate is the release pull
 request's CI.
 
+That hosted gate then failed once: Windows ARM64 ReleaseSafe timed out on the
+backpressure transcript's third case, where forty `bench 1` commands queue
+behind a stalled reader and `quit` must exit within one second. It was a
+contract defect, not runner noise. UCI section 4.2 says Closing discards queued
+jobs that have not started, but the controller started every job queued ahead
+of `quit`; each took a fresh epoch that the urgent cancel had never targeted,
+and with a wake permit per queued command the bounded controller cancel never
+met a blocking wait. On the local Snapdragon X, ReleaseSafe quit-to-exit
+measured a `915` ms median with a maximum of `1,027` ms over the backlog. The
+controller now discards a queued `go` or `bench` once Closing has begun, while
+answering informational commands as before; the same case measures a `551` ms
+median and `574` ms maximum idle, and `622` ms maximum with every core
+loaded, which is the designed controller and presenter bounds. The
+fingerprint stays `355,879` and the Debug, ReleaseSafe and ReleaseFast UCI
+suites pass. The fix runs only after `quit`, EOF or a fatal stream, which no
+game reaches before it ends, so `MAN-C06`'s `6466b4a` arm still measures the
+shipped engine's play.
+
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
 6.5.15 closeout. Their surviving content is owned by the steps above; their

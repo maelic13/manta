@@ -43,6 +43,10 @@ ARM and makes every download run on the processors it is meant for.
   an illegal-instruction error.
 - The README showed `bench 13 1 64` as depth, threads and hash size. Bench
   takes only a depth and a repeat count, and rejected that command.
+- `quit` no longer works through searches and benchmarks that were still
+  waiting to start. When an interface sent several of them ahead of `quit`,
+  Manta ran each one before exiting, which could take long enough for the
+  interface to treat the engine as hung.
 
 ## [1.2.0] - 2026-09-16
 
