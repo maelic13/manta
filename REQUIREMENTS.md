@@ -288,8 +288,11 @@ replacement exists.
 Zig 0.16.0 introduced explicit `std.Io` plumbing and test timeouts. Zig 0.17.0
 removes `@cImport` and deprecates build-system C translation in favour of an
 external package, so Manta declares the small Fathom API it calls in Zig and
-checks those declarations against the compiled header. Manta uses no API that
-0.17.0 marks deprecated. Architecture and examples use the 0.17.0 APIs, not
+checks those declarations against the compiled header. Manta's source uses no
+API that 0.17.0 marks deprecated, but the documented and CI spellings
+`-Doptimize=Debug|ReleaseSafe|ReleaseFast|ReleaseSmall` parse only through an
+alias that Zig deprecates and removes after 0.18.0; the migration that leaves
+0.18.0 must switch them to `debug|safe|fast|small`. Architecture and examples use the 0.17.0 APIs, not
 development documentation. Release performance uses the LLVM-backed
 `ReleaseFast` path; Debug output is never a speed reference.
 
