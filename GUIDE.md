@@ -101,12 +101,14 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   `355,879`. The K+B+N mate reported in the same issue is technique and
   stays open.
 - Manta 1.2.1 is a patch release: the toolchain is Zig 0.17.0 since
-  2026-10-08, by maintainer-approved migration. Every deprecated API is replaced, the Fathom bindings are
-  hand-declared and checked against the compiled header, and the fingerprint
-  is unchanged at `355,879`. Speed under 0.17.0 is not yet measured on the
-  5950X, so a registered SPRT builds both arms with the same compiler. ZLint is
-  suspended from `lint` until a release supports Zig 0.17.0. Windows ARM64 is
-  validated in hosted CI but is not a release asset.
+  2026-10-08, by maintainer-approved migration. Every deprecated API is
+  replaced, the Fathom bindings are hand-declared and checked against the
+  compiled header, and the fingerprint is unchanged at `355,879`. Speed under
+  0.17.0 is not yet measured on the 5950X, so a registered SPRT builds both
+  arms with the same compiler. ZLint is suspended from `lint` until a release
+  supports Zig 0.17.0. `-Dportable` now really selects the baseline CPU; every
+  earlier portable artifact was built for its CI runner's processor. Windows
+  ARM64 is validated in hosted CI but is not a release asset.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 

@@ -2979,14 +2979,20 @@ artifact in `check`, `test-fast` and the serial `test` list, and its assertions
 no longer hard-code the components: the version must parse, carry no
 prerelease or build metadata, and render back exactly as written.
 
-**Manta 1.2.1.** A patch release that carries only the maintainer-approved
+**Manta 1.2.1.** A patch release that carries the maintainer-approved
 migration to Zig 0.17.0: every API that 0.17.0 removes or deprecates is
 replaced, and the Fathom bindings are declared in Zig and checked against the
 compiled header because `@cImport` is gone. Playing behavior is identical: the
 fingerprint stays `355,879` on native and portable ARM64 and on x86-64, and
 the Debug, ReleaseSafe and ReleaseFast suites, lint, policy and both
 table generators pass with byte-identical output. No game gate applies to a
-behavior-identical rebuild. Speed under 0.17.0 relative to 0.16.0 is not yet
+behavior-identical rebuild. The release audit found that `-Dportable` had
+never selected the baseline CPU required by `PORT-003`: an empty target query
+makes Zig detect the build host, so every portable artifact since 1.0.0 was
+built for its CI runner's processor, and native and portable builds were
+byte-identical. Portable now names the baseline CPU explicitly, a build-policy
+test pins that, and the portable x86-64 build keeps the `355,879` fingerprint
+while native output is unchanged. Speed under 0.17.0 relative to 0.16.0 is not yet
 measured on the 5950X. ZLint is suspended from `lint` until a release builds
 with Zig 0.17.0, and Windows ARM64 joins the hosted CI matrix without becoming
 a release asset.

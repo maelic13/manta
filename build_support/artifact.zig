@@ -76,6 +76,16 @@ pub fn resolve(request: Request, arch: std.Target.Cpu.Arch) ResolveError!Configu
     return .{ .mode = mode, .profile = profile, .pgo = false };
 }
 
+/// The compiler target for a build mode. Portable must name the baseline CPU
+/// explicitly: an empty query lets Zig detect the build host's CPU, which would
+/// tie a published artifact to the machine that happened to build it.
+pub fn targetQuery(mode: Mode) std.Target.Query {
+    return switch (mode) {
+        .native => .{ .cpu_model = .native },
+        .portable => .{ .cpu_model = .baseline },
+    };
+}
+
 fn baselineProfile(arch: std.Target.Cpu.Arch) error{UnsupportedArchitecture}!Profile {
     return switch (arch) {
         .x86_64 => .x86_64,
@@ -146,6 +156,14 @@ test "native is the default and portable is explicit" {
     const portable = try resolve(.{ .portable = true }, .aarch64);
     try std.testing.expectEqual(Mode.portable, portable.mode);
     try std.testing.expectEqual(Profile.arm64, portable.profile);
+}
+
+test "portable artifacts never inherit the build host's CPU" {
+    // A release binary built on a hosted runner must run on any CPU of its
+    // architecture, so the portable query may not resolve to host detection.
+    try std.testing.expect(!targetQuery(.portable).isNativeCpu());
+    try std.testing.expect(targetQuery(.portable).cpu_model == .baseline);
+    try std.testing.expect(targetQuery(.native).isNativeCpu());
 }
 
 test "build policy rejects every 32-bit architecture family" {

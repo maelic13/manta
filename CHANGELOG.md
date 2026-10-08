@@ -14,6 +14,13 @@ All notable user-visible changes to Manta are recorded here. The format follows
   Windows ARM64. Playing behavior is unchanged: the one-thread depth-6
   fingerprint stays `355,879`.
 
+### Fixed
+
+- Release binaries now run on any 64-bit processor of their architecture.
+  Every earlier portable build was compiled for the processor of the machine
+  that built it, so a downloaded release could stop with an illegal-instruction
+  error on an older processor than the one the build server happened to use.
+
 ## [1.2.0] - 2026-09-16
 
 ### Fixed
