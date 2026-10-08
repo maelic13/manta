@@ -106,7 +106,8 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   compiled header, and the fingerprint is unchanged at `355,879`. On the 5950X
   the 0.17.0 native build is 21.2% faster than 1.2.0 under 0.16.0 at an
   identical tree, so every registered SPRT must build both arms with the same
-  compiler. ZLint is suspended from `lint` until a release supports Zig 0.17.0.
+  compiler; the one exception is `MAN-C06`, registered and pending, which sizes
+  that speed-up in games for the changelog before the tag. ZLint is suspended from `lint` until a release supports Zig 0.17.0.
   `-Dportable` now really selects a portable CPU, `x86-64-v2` or the ARM64
   baseline; every earlier portable artifact was built for its CI runner's
   processor. Windows ARM64 joins the CI matrix and becomes the sixth release
