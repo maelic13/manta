@@ -216,7 +216,7 @@ test "canonical perft covers structurally distinct legal positions" {
 }
 
 test "deeper canonical perft is reserved for the ReleaseFast quality gate" {
-    if (builtin.mode != .ReleaseFast) return;
+    if (builtin.mode != .fast) return;
     try expectCases(&deep_cases);
 }
 

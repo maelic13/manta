@@ -264,9 +264,9 @@ fn encode(record: Record, ply: usize) u64 {
     return @as(u64, record.chess_move.raw()) |
         (@as(u64, score_bits) << 16) |
         (@as(u64, record.depth) << 32) |
-        (@as(u64, @intFromEnum(record.bound)) << 40) |
+        (@as(u64, @backingInt(record.bound)) << 40) |
         (@as(u64, record.generation) << 42) |
-        (@as(u64, @intFromEnum(record.producer)) << 50) |
+        (@as(u64, @backingInt(record.producer)) << 50) |
         (@as(u64, static_bits) << 55);
 }
 
@@ -278,9 +278,9 @@ fn decode(payload: u64, ply: usize, rule50: u16) Record {
         .value = scoreFromTableWithClock(.{ .raw_value = stored_raw }, ply, rule50),
         .static_eval = decodeStaticEval(@truncate(payload >> 55)),
         .depth = @truncate(payload >> 32),
-        .bound = @enumFromInt(@as(u2, @truncate(payload >> 40))),
+        .bound = @fromBackingInt(@intCast(@as(u2, @truncate(payload >> 40)))),
         .generation = @truncate(payload >> 42),
-        .producer = @enumFromInt(@as(u5, @truncate(payload >> 50))),
+        .producer = @fromBackingInt(@intCast(@as(u5, @truncate(payload >> 50)))),
     };
 }
 
@@ -316,7 +316,7 @@ comptime {
     std.debug.assert(@sizeOf(Entry) == 16);
     std.debug.assert(@sizeOf(Cluster) == 64);
     std.debug.assert(@alignOf(Cluster) == 64);
-    std.debug.assert(@typeInfo(types.Provenance).@"enum".fields.len <= 16);
+    std.debug.assert(@typeInfo(types.Provenance).@"enum".field_names.len <= 16);
 }
 
 test "mate normalization is independent of storage ply" {

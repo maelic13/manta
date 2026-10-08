@@ -298,9 +298,10 @@ Perft never emits search `info` or `bestmove` records.
 
 `bench` follows the versioned 40-position work contract in `PLAN.md` §4.2.
 Arguments are positive decimal integers and requested depth shares the
-authoritative depth ceiling. `manta-search-bench-v1` defaults to depth `6`;
-its optional arguments are depth then whole-suite repeat count, in the
-order frozen by ADR-0021.
+authoritative depth ceiling. `manta-search-bench-v1` defaults to depth `13`
+since 1.2.1; recorded fingerprints keep naming depth `6` explicitly
+(`bench 6 1`). Its optional arguments are depth then whole-suite repeat count,
+in the order frozen by ADR-0021.
 Single-run output reports each position's completed depth, score, nodes, EBF,
 elapsed milliseconds and NPS, followed by the same aggregate summary layout.
 Repeats default to one and are capped at `16`; the deterministic bench keeps

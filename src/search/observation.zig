@@ -109,7 +109,7 @@ test "observation population is legal balanced and nonterminal" {
     // QUAL-013/014: legal parsing and generated moves independently protect
     // the fixed workload; cohort balance prevents one search shape from
     // silently replacing another when the suite is revised.
-    const cohort_count = @typeInfo(Cohort).@"enum".fields.len;
+    const cohort_count = @typeInfo(Cohort).@"enum".field_names.len;
     var counts: [cohort_count]u8 = @splat(0);
     for (cases) |case| {
         var root: chess.position.PositionState = .{};
@@ -120,7 +120,7 @@ test "observation population is legal balanced and nonterminal" {
         try std.testing.expect(moves.count != 0);
         if (case.cohort == .check_evasion)
             try std.testing.expect(value.current.checkers != 0);
-        counts[@intFromEnum(case.cohort)] += 1;
+        counts[@backingInt(case.cohort)] += 1;
     }
     for (counts) |count| try std.testing.expectEqual(@as(u8, 2), count);
 }

@@ -388,7 +388,7 @@ pub const ReplyContext = struct {
 };
 
 pub const ContinuationDistance = enum { two, four, six };
-pub const continuation_distance_count = @typeInfo(ContinuationDistance).@"enum".fields.len;
+pub const continuation_distance_count = @typeInfo(ContinuationDistance).@"enum".field_names.len;
 
 pub const ContinuationContext = struct {
     previous_piece: chess.types.PieceType,
@@ -491,9 +491,9 @@ pub fn replyEvidenceKey(
     const current_piece = value.physical.pieceOn(chess_move.from());
     std.debug.assert(current_piece != .none and current_piece.color() == value.side_to_move);
     return (@as(u64, 2) << 62) |
-        (@as(u64, @intFromEnum(reply.previous_piece)) << 24) |
+        (@as(u64, @backingInt(reply.previous_piece)) << 24) |
         (@as(u64, reply.previous_to.index()) << 18) |
-        (@as(u64, @intFromEnum(current_piece.pieceType())) << 12) |
+        (@as(u64, @backingInt(current_piece.pieceType())) << 12) |
         (@as(u64, normalizeSquare(value.side_to_move, chess_move.to()).index()) << 6);
 }
 
@@ -507,9 +507,9 @@ pub fn continuationEvidenceKey(
     return (@as(u64, 3) << 62) |
         (@as(u64, @intFromBool(continuation.from_check)) << 31) |
         (@as(u64, @intFromBool(continuation.tactical)) << 30) |
-        (@as(u64, @intFromEnum(continuation.previous_piece)) << 24) |
+        (@as(u64, @backingInt(continuation.previous_piece)) << 24) |
         (@as(u64, continuation.previous_to.index()) << 18) |
-        (@as(u64, @intFromEnum(current_piece.pieceType())) << 12) |
+        (@as(u64, @backingInt(current_piece.pieceType())) << 12) |
         (@as(u64, normalizeSquare(value.side_to_move, chess_move.to()).index()) << 6);
 }
 

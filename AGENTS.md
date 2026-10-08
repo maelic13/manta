@@ -256,7 +256,7 @@ meaningful for legal chess and for the goal of producing a stronger engine.
 
 ## Zig and architecture requirements
 
-- Use Zig 0.16.0 until the latest-stable migration rule changes it; never use
+- Use Zig 0.17.0 until the latest-stable migration rule changes it; never use
   nightly syntax or compatibility shims.
 - Follow the inward dependency graph in `ARCHITECTURE.md`.
 - Use explicit allocators/ownership, precise types, optionals, error unions and

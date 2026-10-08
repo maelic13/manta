@@ -32,7 +32,7 @@ jobs:
 
       - name: Verify exact Zig
         shell: bash
-        run: test "$(zig version)" = "0.16.0"
+        run: test "$(zig version)" = "0.17.0"
 
       - name: Format, AST, policy and lint
         run: zig build lint
@@ -61,6 +61,8 @@ jobs:
             label: linux-arm64
           - runner: windows-2025
             label: windows-x86-64
+          - runner: windows-11-arm
+            label: windows-arm64
           - runner: macos-26-intel
             label: macos-x86-64
           - runner: macos-26
@@ -79,7 +81,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          test "$(zig version)" = "0.16.0"
+          test "$(zig version)" = "0.17.0"
           zig env
 
       - name: Compile all roots

@@ -76,7 +76,7 @@ pub fn parseLegal(value: *const position.Position, text: []const u8) Error!move.
 fn parseSquare(text: []const u8) ?types.Square {
     if (text.len != 2 or text[0] < 'a' or text[0] > 'h' or
         text[1] < '1' or text[1] > '8') return null;
-    return types.Square.make(@enumFromInt(text[0] - 'a'), @enumFromInt(text[1] - '1'));
+    return types.Square.make(@fromBackingInt(@intCast(text[0] - 'a')), @fromBackingInt(@intCast(text[1] - '1')));
 }
 
 fn parsePromotion(character: u8) ?types.PieceType {

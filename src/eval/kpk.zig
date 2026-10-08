@@ -62,7 +62,7 @@ pub fn isWin(
 /// Derive the checked embedded artifact. This is called only by the offline
 /// generator; ordinary builds consume `kpk.bin` directly.
 pub fn buildWins() [word_count]u64 {
-    var result = [_]u64{0} ** word_count;
+    var result: [word_count]u64 = @splat(0);
     var changed = true;
     while (changed) {
         changed = false;

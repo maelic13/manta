@@ -55,6 +55,16 @@ deepening. At `359,259` the corpus showed geomean EBF `4.228`, upper
 median `5,905` and share `16.8%` (`60,301`). Wall time and NPS remain
 run-specific diagnostics.
 
+- Amended for 1.2.1: the default depth is `13`, as in Rarog and Basilisk,
+  because the depth-six run lasts a fraction of a second and gives no stable
+  speed reading. The corpus, argument order, cap and per-depth node counts are
+  unchanged, so the contract keeps its name; every recorded fingerprint names
+  its depth, and the deterministic gate stays `bench 6 1`. Tests that pin
+  fingerprints use `bench.fingerprint_depth` rather than the default. Now that
+  depth 13 completes in about 25 seconds on the 5950X, the fingerprint itself
+  could move to depth 13 as well; that re-baselines every recorded value and
+  gate, so it is left to a separate maintainer decision.
+
 ## Verification
 
 Supports `UCI-001`, `UCI-002`, `PERF-006`, `QUAL-011`, `QUAL-015` and `REL-004`

@@ -76,6 +76,22 @@ pub fn resolve(request: Request, arch: std.Target.Cpu.Arch) ResolveError!Configu
     return .{ .mode = mode, .profile = profile, .pgo = false };
 }
 
+/// The compiler target for a build mode on the host architecture. Portable must
+/// name its CPU explicitly: an empty query lets Zig detect the build host's CPU,
+/// which would tie a published artifact to the machine that happened to build
+/// it. On x86-64 the portable floor is x86-64-v2, whose hardware POPCNT every
+/// bitboard count relies on; it excludes only pre-2008 Intel and pre-2011 AMD
+/// processors. ARM64 uses the architecture baseline.
+pub fn targetQuery(mode: Mode, arch: std.Target.Cpu.Arch) std.Target.Query {
+    return switch (mode) {
+        .native => .{ .cpu_model = .native },
+        .portable => if (arch == .x86_64)
+            .{ .cpu_model = .{ .explicit = &std.Target.x86.cpu.x86_64_v2 } }
+        else
+            .{ .cpu_model = .baseline },
+    };
+}
+
 fn baselineProfile(arch: std.Target.Cpu.Arch) error{UnsupportedArchitecture}!Profile {
     return switch (arch) {
         .x86_64 => .x86_64,
@@ -94,7 +110,7 @@ pub fn artifactName(
     version: []const u8,
     os: std.Target.Os.Tag,
     configuration: Configuration,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
 ) (NameError || std.mem.Allocator.Error)![]u8 {
     if (!validVersion(version)) return error.InvalidVersion;
 
@@ -106,16 +122,15 @@ pub fn artifactName(
     };
     const native_suffix = if (configuration.mode == .native) "-native" else "";
     const optimize_suffix = switch (optimize) {
-        .ReleaseFast => "",
-        .Debug => "-debug",
-        .ReleaseSafe => "-release-safe",
-        .ReleaseSmall => "-release-small",
+        .fast => "",
+        .debug => "-debug",
+        .safe => "-release-safe",
+        .small => "-release-small",
     };
     const pgo_suffix = if (configuration.pgo) "-pgo" else "";
     const extension = if (os == .windows) ".exe" else "";
 
-    return std.fmt.allocPrint(
-        allocator,
+    return allocator.print(
         "manta-v{s}-{s}-{s}{s}{s}{s}{s}",
         .{
             version,
@@ -147,6 +162,22 @@ test "native is the default and portable is explicit" {
     const portable = try resolve(.{ .portable = true }, .aarch64);
     try std.testing.expectEqual(Mode.portable, portable.mode);
     try std.testing.expectEqual(Profile.arm64, portable.profile);
+}
+
+test "portable artifacts never inherit the build host's CPU" {
+    // A release binary built on a hosted runner must run on any CPU of its
+    // architecture, so the portable query may not resolve to host detection.
+    inline for (.{ .x86_64, .aarch64 }) |arch| {
+        try std.testing.expect(!targetQuery(.portable, arch).isNativeCpu());
+        try std.testing.expect(targetQuery(.native, arch).isNativeCpu());
+    }
+    try std.testing.expect(targetQuery(.portable, .aarch64).cpu_model == .baseline);
+
+    // The documented x86-64 floor: hardware POPCNT and SSE4.2, nothing newer.
+    const x86_model = targetQuery(.portable, .x86_64).cpu_model.explicit;
+    const x86 = std.Target.x86;
+    try std.testing.expect(x86.featureSetHasAll(x86_model.features, .{ .popcnt, .sse4_2 }));
+    try std.testing.expect(!x86.featureSetHasAny(x86_model.features, .{ .avx, .avx2, .bmi2 }));
 }
 
 test "build policy rejects every 32-bit architecture family" {
@@ -191,7 +222,7 @@ test "artifact names state portability and non-default optimization" {
         "1.0.0",
         .windows,
         .{ .mode = .portable, .profile = .x86_64, .pgo = false },
-        .ReleaseFast,
+        .fast,
     );
     defer std.testing.allocator.free(portable);
     try std.testing.expectEqualStrings("manta-v1.0.0-windows-x86-64.exe", portable);
@@ -201,7 +232,7 @@ test "artifact names state portability and non-default optimization" {
         "0.0.0-dev",
         .linux,
         .{ .mode = .native, .profile = .arm64, .pgo = false },
-        .ReleaseSafe,
+        .safe,
     );
     defer std.testing.allocator.free(native);
     try std.testing.expectEqualStrings(
@@ -214,7 +245,7 @@ test "artifact names state portability and non-default optimization" {
         "1.0.0",
         .windows,
         .{ .mode = .native, .profile = .pext, .pgo = true },
-        .ReleaseFast,
+        .fast,
     );
     defer std.testing.allocator.free(future_pgo);
     try std.testing.expectEqualStrings(
@@ -231,7 +262,7 @@ test "artifact versions reject path syntax" {
             "1.0/escape",
             .linux,
             .{ .mode = .portable, .profile = .x86_64, .pgo = false },
-            .ReleaseFast,
+            .fast,
         ),
     );
 }

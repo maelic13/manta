@@ -6,6 +6,47 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-08
+
+This release is about 40 Elo stronger than 1.2.0: a newer compiler makes the
+same search run faster. It also adds a download for Windows on ARM and makes
+every download run on the processors it is meant for.
+
+### Added
+
+- A Windows ARM64 download (`windows-arm64.exe`) for Windows PCs with an ARM
+  processor, such as Snapdragon laptops. These PCs no longer need to run the
+  Intel/AMD download through Windows' slower emulation.
+
+### Changed
+
+- Manta is built with Zig 0.17.0, whose better code generation made it search
+  about 20% more positions per second on our AMD Ryzen test machine. The
+  search itself is unchanged, but in a timed game the extra speed lets Manta
+  look deeper in the same time. Against 1.2.0 that measured `+40.5 ± 15.6`
+  Elo over 1,094 one-thread games at 3 seconds plus 0.03 seconds per move.
+  Building from source now requires Zig 0.17.0.
+- `bench` without a depth now searches to depth 13, which takes about half a
+  minute and gives a steadier speed reading. `bench 6` remains the quick check
+  that your copy behaves correctly.
+- The Intel and AMD downloads now state their minimum processor: Intel from
+  2008 (Core i3, i5, i7 and newer) or AMD from 2011 (FX series and newer), the
+  `x86-64-v2` level. On anything older, such as a Core 2 or a Phenom II, build
+  Manta from source. The ARM downloads run on any 64-bit ARM processor.
+
+### Fixed
+
+- Downloads could fail to start on some computers. Earlier releases were
+  accidentally built for the processor of the server that compiled them, so on
+  a computer with an older or different processor they could stop at once with
+  an illegal-instruction error.
+- The README showed `bench 13 1 64` as depth, threads and hash size. Bench
+  takes only a depth and a repeat count, and rejected that command.
+- `quit` no longer works through searches and benchmarks that were still
+  waiting to start. When an interface sent several of them ahead of `quit`,
+  Manta ran each one before exiting, which could take long enough for the
+  interface to treat the engine as hung.
+
 ## [1.2.0] - 2026-09-16
 
 ### Fixed
@@ -108,7 +149,8 @@ All notable user-visible changes to Manta are recorded here. The format follows
 - Portable 64-bit release builds for Windows x86-64, Linux x86-64, Linux ARM64,
   macOS x86-64 and macOS ARM64.
 
-[Unreleased]: https://github.com/maelic13/manta/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/maelic13/manta/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/maelic13/manta/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/maelic13/manta/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/maelic13/manta/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/maelic13/manta/releases/tag/v1.0.0

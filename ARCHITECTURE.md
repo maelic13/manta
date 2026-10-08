@@ -1016,7 +1016,7 @@ native evidence.
 
 The build adapter owns one curated profile vocabulary rather than exposing raw
 compiler feature strings as product identities. `zig build` is ReleaseFast,
-host-native and `profile=auto`; `-Dportable` selects the platform baseline and
+host-native and `profile=auto`; `-Dportable` selects the portable floor (`x86-64-v2`, ARM64 baseline) and
 cannot be combined with `-Dnative`. Canonical files live under `zig-out/dist`,
 while `zig-out/bin/manta` remains the development alias. Reserved ISA profiles
 and PGO fail closed until their implementations and representative evidence
@@ -1174,5 +1174,5 @@ The Phase-0.3 exit verdict is recorded in `PLAN.md`. Later changes supersede an
 ADR rather than silently editing the historical decision.
 
 Authoritative language references for this architecture are the
-[Zig 0.16.0 documentation](https://ziglang.org/documentation/0.16.0/) and
-[release notes](https://ziglang.org/download/0.16.0/release-notes.html).
+[Zig 0.17.0 documentation](https://ziglang.org/documentation/0.17.0/) and
+[release notes](https://ziglang.org/download/0.17.0/release-notes.html).

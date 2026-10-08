@@ -98,7 +98,7 @@ pub fn write(value: *const position.Position, buffer: []u8) WriteError![]const u
     while (rank >= 0) : (rank -= 1) {
         var empty: u8 = 0;
         for (0..8) |file| {
-            const square = types.Square.make(@enumFromInt(file), @enumFromInt(rank));
+            const square = types.Square.make(@fromBackingInt(@intCast(file)), @fromBackingInt(@intCast(rank)));
             const piece = value.physical.pieceOn(square);
             if (piece == .none) {
                 empty += 1;
@@ -161,7 +161,7 @@ fn parsePlacement(text: []const u8, physical: *position.PhysicalPosition) ParseE
         const piece = decodePiece(character) orelse return error.InvalidPiece;
         total = std.math.add(u8, total, 1) catch return error.TooManyPieces;
         if (total > 32) return error.TooManyPieces;
-        const square = types.Square.make(@enumFromInt(file), @enumFromInt(rank));
+        const square = types.Square.make(@fromBackingInt(@intCast(file)), @fromBackingInt(@intCast(rank)));
         physical.board[square.index()] = piece;
         file += 1;
     }
@@ -207,16 +207,16 @@ fn parseCastling(text: []const u8) !types.CastlingRights {
     var raw: u4 = 0;
     for (text) |character| {
         const right: u4 = switch (character) {
-            'K' => @intFromEnum(types.CastlingRights.white_king),
-            'Q' => @intFromEnum(types.CastlingRights.white_queen),
-            'k' => @intFromEnum(types.CastlingRights.black_king),
-            'q' => @intFromEnum(types.CastlingRights.black_queen),
+            'K' => @backingInt(types.CastlingRights.white_king),
+            'Q' => @backingInt(types.CastlingRights.white_queen),
+            'k' => @backingInt(types.CastlingRights.black_king),
+            'q' => @backingInt(types.CastlingRights.black_queen),
             else => return error.InvalidCastling,
         };
         if (raw & right != 0) return error.InvalidCastling;
         raw |= right;
     }
-    return @enumFromInt(raw);
+    return @fromBackingInt(@intCast(raw));
 }
 
 fn normalizedCastling(
@@ -224,15 +224,15 @@ fn normalizedCastling(
     rights: types.CastlingRights,
 ) types.CastlingRights {
     var raw = rights.raw();
-    if (physical.pieceOn(.e1) != .white_king) raw &= ~@intFromEnum(types.CastlingRights.white_king) &
-        ~@intFromEnum(types.CastlingRights.white_queen);
-    if (physical.pieceOn(.h1) != .white_rook) raw &= ~@intFromEnum(types.CastlingRights.white_king);
-    if (physical.pieceOn(.a1) != .white_rook) raw &= ~@intFromEnum(types.CastlingRights.white_queen);
-    if (physical.pieceOn(.e8) != .black_king) raw &= ~@intFromEnum(types.CastlingRights.black_king) &
-        ~@intFromEnum(types.CastlingRights.black_queen);
-    if (physical.pieceOn(.h8) != .black_rook) raw &= ~@intFromEnum(types.CastlingRights.black_king);
-    if (physical.pieceOn(.a8) != .black_rook) raw &= ~@intFromEnum(types.CastlingRights.black_queen);
-    return @enumFromInt(raw);
+    if (physical.pieceOn(.e1) != .white_king) raw &= ~@backingInt(types.CastlingRights.white_king) &
+        ~@backingInt(types.CastlingRights.white_queen);
+    if (physical.pieceOn(.h1) != .white_rook) raw &= ~@backingInt(types.CastlingRights.white_king);
+    if (physical.pieceOn(.a1) != .white_rook) raw &= ~@backingInt(types.CastlingRights.white_queen);
+    if (physical.pieceOn(.e8) != .black_king) raw &= ~@backingInt(types.CastlingRights.black_king) &
+        ~@backingInt(types.CastlingRights.black_queen);
+    if (physical.pieceOn(.h8) != .black_rook) raw &= ~@backingInt(types.CastlingRights.black_king);
+    if (physical.pieceOn(.a8) != .black_rook) raw &= ~@backingInt(types.CastlingRights.black_queen);
+    return @fromBackingInt(@intCast(raw));
 }
 
 fn parseEnPassant(text: []const u8, side_to_move: types.Color) !types.Square {
@@ -241,8 +241,8 @@ fn parseEnPassant(text: []const u8, side_to_move: types.Color) !types.Square {
     const required_rank: u8 = if (side_to_move == .white) '6' else '3';
     if (text[1] != required_rank) return error.InvalidEnPassant;
     return types.Square.make(
-        @enumFromInt(text[0] - 'a'),
-        @enumFromInt(text[1] - '1'),
+        @fromBackingInt(@intCast(text[0] - 'a')),
+        @fromBackingInt(@intCast(text[1] - '1')),
     );
 }
 

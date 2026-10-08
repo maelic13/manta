@@ -183,7 +183,7 @@ fn runCase(
                 for (1..41) |position_index| {
                     const actual = try awaitLine(io, &output, default_wait_ms * 5);
                     var expected_buffer: [256]u8 = undefined;
-                    const rendered = std.fmt.bufPrint(
+                    const rendered = std.mem.print(
                         &expected_buffer,
                         "bench {d}/40  depth {{{{U64}}}}  score {{{{I64}}}}  nodes {{{{U64}}}}  ebf {{{{DECIMAL}}}}  time {{{{U64}}}}ms  nps {{{{U64}}}}",
                         .{position_index},
@@ -294,11 +294,11 @@ fn runCase(
             switch (term) {
                 .exited => |code| if (code != expected_exit.code) return error.WrongExitCode,
                 .signal => |signal| {
-                    std.debug.print("child terminated by signal {d}\n", .{@intFromEnum(signal)});
+                    std.debug.print("child terminated by signal {d}\n", .{@backingInt(signal)});
                     return error.UnexpectedExit;
                 },
                 .stopped => |signal| {
-                    std.debug.print("child stopped by signal {d}\n", .{@intFromEnum(signal)});
+                    std.debug.print("child stopped by signal {d}\n", .{@backingInt(signal)});
                     return error.UnexpectedExit;
                 },
                 .unknown => |status| {
@@ -339,7 +339,7 @@ fn unexpectedDuringSilence(
         const now = monotonicNs(io);
         if (now >= deadline) return null;
         const remaining_ns = deadline - now;
-        const remaining_ms: u32 = @intCast(@max(@as(u64, 1), @min(@as(u64, milliseconds), (remaining_ns + std.time.ns_per_ms - 1) / std.time.ns_per_ms)));
+        const remaining_ms: u32 = @intCast(@max(@as(u64, 1), @min(@as(u64, milliseconds), @divCeil(remaining_ns, std.time.ns_per_ms))));
         const line = try lineArrivesWithin(io, queue, remaining_ms) orelse return null;
         if (!allow_info or !validSearchInfo(line.slice())) return line;
     }
@@ -469,19 +469,19 @@ fn matchesExpected(expected: []const u8, actual: []const u8) bool {
     if (std.mem.eql(u8, expected, "{{BESTMOVE_LINE}}")) return validBestMove(actual);
     var expected_cursor: usize = 0;
     var actual_cursor: usize = 0;
-    while (std.mem.indexOfPos(u8, expected, expected_cursor, "{{")) |start| {
-        const end = std.mem.indexOfPos(u8, expected, start + 2, "}}") orelse return false;
+    while (std.mem.findPos(u8, expected, expected_cursor, "{{")) |start| {
+        const end = std.mem.findPos(u8, expected, start + 2, "}}") orelse return false;
         const literal = expected[expected_cursor..start];
         if (!std.mem.startsWith(u8, actual[actual_cursor..], literal)) return false;
         actual_cursor += literal.len;
         const placeholder = expected[start .. end + 2];
         const next_start = end + 2;
-        const next_marker = std.mem.indexOfPos(u8, expected, next_start, "{{") orelse expected.len;
+        const next_marker = std.mem.findPos(u8, expected, next_start, "{{") orelse expected.len;
         const following_literal = expected[next_start..next_marker];
         const value_end = if (following_literal.len == 0)
             actual.len
         else
-            std.mem.indexOfPos(u8, actual, actual_cursor, following_literal) orelse return false;
+            std.mem.findPos(u8, actual, actual_cursor, following_literal) orelse return false;
         const value = actual[actual_cursor..value_end];
         if (!matchesPlaceholder(placeholder, value)) return false;
         actual_cursor = value_end;
@@ -492,7 +492,7 @@ fn matchesExpected(expected: []const u8, actual: []const u8) bool {
 
 fn expectsIteration(expected: []const u8) bool {
     return std.mem.eql(u8, expected, "{{ITERATION_INFO}}") or
-        std.mem.indexOf(u8, expected, "{{ITERATION_FIELDS}}") != null;
+        std.mem.find(u8, expected, "{{ITERATION_FIELDS}}") != null;
 }
 
 fn matchesPlaceholder(placeholder: []const u8, value: []const u8) bool {
@@ -546,7 +546,7 @@ fn parseDecimal(value: []const u8) bool {
 /// transcript asserts the report itself with `{{BENCH_POSITION_LINES}}`.
 fn validBenchPositionLine(line: []const u8) bool {
     if (!std.mem.startsWith(u8, line, "bench ")) return false;
-    const slash = std.mem.indexOf(u8, line, "/40  depth ") orelse return false;
+    const slash = std.mem.find(u8, line, "/40  depth ") orelse return false;
     return parseUnsigned(line["bench ".len..slash], true);
 }
 
@@ -556,27 +556,27 @@ fn validSearchInfo(line: []const u8) bool {
 
 fn validTimeTelemetry(line: []const u8) bool {
     return std.mem.startsWith(u8, line, "info string time optimum_ms ") and
-        std.mem.indexOf(u8, line, " maximum_ms ") != null and
-        std.mem.indexOf(u8, line, " combined ") != null and
-        std.mem.indexOf(u8, line, " ponder_credit_ns ") != null and
-        std.mem.indexOf(u8, line, " helper_events ") != null and
-        std.mem.indexOf(u8, line, " hard_overshoot_ns ") != null;
+        std.mem.find(u8, line, " maximum_ms ") != null and
+        std.mem.find(u8, line, " combined ") != null and
+        std.mem.find(u8, line, " ponder_credit_ns ") != null and
+        std.mem.find(u8, line, " helper_events ") != null and
+        std.mem.find(u8, line, " hard_overshoot_ns ") != null;
 }
 
 fn validRootMoveInfo(line: []const u8) bool {
     if (!std.mem.startsWith(u8, line, "info depth ")) return false;
-    return std.mem.indexOf(u8, line, " currmove ") != null and
-        std.mem.indexOf(u8, line, " currmovenumber ") != null;
+    return std.mem.find(u8, line, " currmove ") != null and
+        std.mem.find(u8, line, " currmovenumber ") != null;
 }
 
 fn validIterationInfo(line: []const u8) bool {
     if (!std.mem.startsWith(u8, line, "info depth ")) return false;
-    return std.mem.indexOf(u8, line, " score ") != null and
-        std.mem.indexOf(u8, line, " nodes ") != null and
-        std.mem.indexOf(u8, line, " nps ") != null and
-        std.mem.indexOf(u8, line, " hashfull ") != null and
-        std.mem.indexOf(u8, line, " time ") != null and
-        (std.mem.indexOf(u8, line, " pv ") != null or
+    return std.mem.find(u8, line, " score ") != null and
+        std.mem.find(u8, line, " nodes ") != null and
+        std.mem.find(u8, line, " nps ") != null and
+        std.mem.find(u8, line, " hashfull ") != null and
+        std.mem.find(u8, line, " time ") != null and
+        (std.mem.find(u8, line, " pv ") != null or
             std.mem.endsWith(u8, line, " pv"));
 }
 
@@ -585,12 +585,12 @@ fn validIterationInfo(line: []const u8) bool {
 /// another depth value.
 fn validIterationFields(value: []const u8) bool {
     return std.mem.startsWith(u8, value, "seldepth ") and
-        std.mem.indexOf(u8, value, " score ") != null and
-        std.mem.indexOf(u8, value, " nodes ") != null and
-        std.mem.indexOf(u8, value, " nps ") != null and
-        std.mem.indexOf(u8, value, " hashfull ") != null and
-        std.mem.indexOf(u8, value, " time ") != null and
-        (std.mem.indexOf(u8, value, " pv ") != null or std.mem.endsWith(u8, value, " pv"));
+        std.mem.find(u8, value, " score ") != null and
+        std.mem.find(u8, value, " nodes ") != null and
+        std.mem.find(u8, value, " nps ") != null and
+        std.mem.find(u8, value, " hashfull ") != null and
+        std.mem.find(u8, value, " time ") != null and
+        (std.mem.find(u8, value, " pv ") != null or std.mem.endsWith(u8, value, " pv"));
 }
 
 fn validBestMove(line: []const u8) bool {
@@ -608,7 +608,7 @@ fn validUciMove(text: []const u8) bool {
     if (text.len != 4 and text.len != 5) return false;
     if (text[0] < 'a' or text[0] > 'h' or text[2] < 'a' or text[2] > 'h') return false;
     if (text[1] < '1' or text[1] > '8' or text[3] < '1' or text[3] > '8') return false;
-    if (text.len == 5 and std.mem.indexOfScalar(u8, "qrbn", text[4]) == null) return false;
+    if (text.len == 5 and std.mem.findScalar(u8, "qrbn", text[4]) == null) return false;
     return true;
 }
 

@@ -24,7 +24,7 @@ fn generate(initial_seed: u64) Tables {
     };
 
     for (0..15) |piece_index| {
-        const piece: types.Piece = @enumFromInt(piece_index);
+        const piece: types.Piece = @fromBackingInt(@intCast(piece_index));
         if (piece == .none or !piece.isValid()) continue;
         for (0..64) |square_index| {
             result.piece_square[piece_index][square_index] = generator.next();
@@ -55,7 +55,7 @@ test "Zobrist data covers exactly the legal piece encodings" {
     var seen_count: usize = 0;
 
     for (0..15) |piece_index| {
-        const piece: types.Piece = @enumFromInt(piece_index);
+        const piece: types.Piece = @fromBackingInt(@intCast(piece_index));
         for (tables.piece_square[piece_index]) |key| {
             if (piece == .none or !piece.isValid()) {
                 try std.testing.expectEqual(@as(types.Key, 0), key);

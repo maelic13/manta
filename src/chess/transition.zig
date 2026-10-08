@@ -362,7 +362,7 @@ fn rightsAfterMove(
     from: types.Square,
     to: types.Square,
 ) types.CastlingRights {
-    return @enumFromInt(clearRightsAt(clearRightsAt(rights.raw(), from), to));
+    return @fromBackingInt(@intCast(clearRightsAt(clearRightsAt(rights.raw(), from), to)));
 }
 
 fn clearRightsAt(raw: u4, square: types.Square) u4 {

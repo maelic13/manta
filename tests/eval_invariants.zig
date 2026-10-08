@@ -521,7 +521,7 @@ fn colorFlip(
     if (rights & 0b0010 != 0) flipped |= 0b1000;
     if (rights & 0b0100 != 0) flipped |= 0b0001;
     if (rights & 0b1000 != 0) flipped |= 0b0010;
-    root.castling_rights = @enumFromInt(flipped);
+    root.castling_rights = @fromBackingInt(@intCast(flipped));
     for (original.physical.board, 0..) |piece, square_index| {
         if (piece == .none) continue;
         const source = chess.types.Square.fromIndex(@intCast(square_index));

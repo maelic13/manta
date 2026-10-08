@@ -177,8 +177,8 @@ fn parseExit(value: []const u8) ParseError!Exit {
 
 fn validatePlaceholders(line: []const u8) ParseError!void {
     var cursor: usize = 0;
-    while (std.mem.indexOfPos(u8, line, cursor, "{{")) |start| {
-        const end = std.mem.indexOfPos(u8, line, start + 2, "}}") orelse return error.InvalidPlaceholder;
+    while (std.mem.findPos(u8, line, cursor, "{{")) |start| {
+        const end = std.mem.findPos(u8, line, start + 2, "}}") orelse return error.InvalidPlaceholder;
         const placeholder = line[start .. end + 2];
         const allowed = [_][]const u8{
             "{{VERSION}}",
@@ -203,7 +203,7 @@ fn validatePlaceholders(line: []const u8) ParseError!void {
         if (!known) return error.InvalidPlaceholder;
         cursor = end + 2;
     }
-    if (std.mem.indexOfPos(u8, line, cursor, "}}") != null) return error.InvalidPlaceholder;
+    if (std.mem.findPos(u8, line, cursor, "}}") != null) return error.InvalidPlaceholder;
 }
 
 test "parses a bounded active transcript case" {

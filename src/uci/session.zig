@@ -202,7 +202,7 @@ const StreamModeError = error{StreamModeQueryFailed};
 /// ones, which is why only some hosts ever saw it.
 fn streamingFile(inherited: std.Io.File) StreamModeError!std.Io.File {
     var file = inherited;
-    if (comptime builtin.os.tag != .windows) return file;
+    if (comptime builtin.target.os.tag != .windows) return file;
 
     const windows = std.os.windows;
     // SAFETY: NtQueryInformationFile initializes the status block before any
@@ -322,6 +322,10 @@ fn controller(shared: *Shared, state: *ControllerState) !void {
 
         var command = buffer[0];
         defer if (command.raw) |raw| shared.allocator.free(raw);
+        // Closing discards queued jobs that have not started. Each queued job
+        // would get a fresh epoch that the urgent `quit` cancel never targeted,
+        // so starting them would run the whole backlog before shutdown.
+        if (shared.shutdown.isSet() and (command.tag == .go or command.tag == .bench)) continue;
         if (debug_enabled and !offerLine(shared, lineFmt(
             "info string debug received \"{s}\"",
             .{command.line.slice()},
@@ -599,7 +603,7 @@ fn parseGoField(
         fields.bad_token = protocol.sanitize(keyword);
         return error.Unknown;
     };
-    const bit = @as(u16, 1) << @intFromEnum(tag);
+    const bit = @as(u16, 1) << @backingInt(tag);
     if (fields.seen & bit != 0) {
         fields.bad_token = protocol.sanitize(keyword);
         return error.Duplicate;
@@ -653,8 +657,8 @@ fn parseGoField(
 const GoKeyword = enum(u4) { wtime, btime, winc, binc, movestogo, movetime, depth, nodes, mate, infinite, ponder, searchmoves };
 
 fn goKeyword(text: []const u8) ?GoKeyword {
-    inline for (@typeInfo(GoKeyword).@"enum".fields) |field| {
-        if (std.mem.eql(u8, text, field.name)) return @enumFromInt(field.value);
+    inline for (comptime std.meta.tags(GoKeyword)) |keyword| {
+        if (std.mem.eql(u8, text, @tagName(keyword))) return keyword;
     }
     return null;
 }
@@ -1682,7 +1686,7 @@ test "ponder parsing requires the active option and a game clock" {
 
 test "bench parsing freezes defaults, semantic caps, and one-thread scope" {
     const defaults = parseBench("bench").spec;
-    try std.testing.expectEqual(engine.bench.default_depth, defaults.depth);
+    try std.testing.expectEqual(@as(u16, 13), defaults.depth);
     try std.testing.expectEqual(@as(u16, 1), defaults.repeats);
     try std.testing.expectEqual(@as(u16, 1), defaults.threads);
     try std.testing.expectEqual(@as(u16, 5), parseBench("bench 5 2").spec.depth);
@@ -1761,7 +1765,7 @@ test "SyzygyPath survives a native Windows path unchanged" {
         parseSetOption("setoption name SyzygyPath value C:\\Program Files\\tb").syzygy_path.slice(),
     );
     // A path longer than the adapter accepts is refused rather than truncated.
-    const long_value = "setoption name SyzygyPath value " ++ ("x" ** (engine.syzygy.max_path_len + 1));
+    const long_value = "setoption name SyzygyPath value " ++ @as([engine.syzygy.max_path_len + 1]u8, @splat('x'));
     try std.testing.expect(parseSetOption(long_value) == .invalid);
 }
 
@@ -1883,7 +1887,7 @@ fn testSearchOutput(threads: u16, go: []const u8, lines: []Line) !usize {
 }
 
 fn isSearchDepthLine(line: []const u8) bool {
-    return std.mem.startsWith(u8, line, "info depth ") and std.mem.indexOf(u8, line, " currmove ") == null;
+    return std.mem.startsWith(u8, line, "info depth ") and std.mem.find(u8, line, " currmove ") == null;
 }
 
 test "a depth-limited search publishes its last depth once at any thread count" {
@@ -1930,10 +1934,10 @@ test "a stopped one-thread search keeps its closing line with the final totals" 
     try std.testing.expectEqual(depth_lines.len, found);
     const closing = depth_lines[0];
     const iteration = depth_lines[1];
-    const depth_end = std.mem.indexOfScalarPos(u8, iteration, "info depth ".len, ' ').?;
+    const depth_end = std.mem.findScalarPos(u8, iteration, "info depth ".len, ' ').?;
     try std.testing.expect(std.mem.startsWith(u8, closing, iteration[0 .. depth_end + 1]));
-    try std.testing.expect(std.mem.indexOf(u8, closing, " nodes 5000 ") != null);
-    try std.testing.expect(std.mem.indexOf(u8, iteration, " nodes 5000 ") == null);
+    try std.testing.expect(std.mem.find(u8, closing, " nodes 5000 ") != null);
+    try std.testing.expect(std.mem.find(u8, iteration, " nodes 5000 ") == null);
 }
 
 test "streaming files follow the inherited handle's I/O mode" {
@@ -1942,7 +1946,7 @@ test "streaming files follow the inherited handle's I/O mode" {
     // library the first time a write cannot complete immediately. The detector
     // must report the asynchronous pipe as nonblocking and a plain anonymous
     // pipe as blocking, whatever the constructor assumed.
-    if (comptime builtin.os.tag != .windows) return error.SkipZigTest;
+    if (comptime builtin.target.os.tag != .windows) return error.SkipZigTest;
     const windows = std.os.windows;
     const kernel32 = struct {
         extern "kernel32" fn CreateNamedPipeW(
@@ -1979,7 +1983,7 @@ test "streaming files follow the inherited handle's I/O mode" {
     const open_existing: u32 = 3;
 
     var name_utf8: [96]u8 = undefined;
-    const name_text = try std.fmt.bufPrint(
+    const name_text = try std.mem.print(
         &name_utf8,
         "\\\\.\\pipe\\manta-stream-mode-{d}",
         .{windows.GetCurrentProcessId()},
@@ -2080,9 +2084,9 @@ test "a new search reports only its own work, never the previous search's" {
     while (try output_queue.get(io, &buffer, 0) == 1) {
         const text = buffer[0].line.slice();
         if (!std.mem.startsWith(u8, text, "info depth ")) continue;
-        const nodes_at = std.mem.indexOf(u8, text, " nodes ") orelse continue;
+        const nodes_at = std.mem.find(u8, text, " nodes ") orelse continue;
         const rest = text[nodes_at + " nodes ".len ..];
-        const end = std.mem.indexOfScalar(u8, rest, ' ') orelse rest.len;
+        const end = std.mem.findScalar(u8, rest, ' ') orelse rest.len;
         const reported = try std.fmt.parseInt(u64, rest[0..end], 10);
         try std.testing.expect(reported < stale);
         lines += 1;

@@ -7,8 +7,10 @@ measurement verdicts.
 
 ## Current state
 
-Manta 1.1.0, released 2026-09-13, is the release baseline. Phases 0–6 are
-closed, targeted pre-NNUE performance Phase 6.5 is paused at that release with
+Manta 1.2.1, released 2026-10-08, is the release baseline: the 1.2.0 search
+rebuilt with Zig 0.17.0, identical at fixed depth and `+40.52 +/- 15.59` Elo
+stronger at `3+0.03` from speed alone (`MAN-C06`). Phases 0–6 are closed,
+targeted pre-NNUE performance Phase 6.5 is paused at the 1.1.0 release with
 6.5.11 to 6.5.14 open, and Phase 7 has not started. Phase 7 remains
 blocked until all of Phase 6.5, including every retained candidate and evidence
 closeout below, is complete. The production
@@ -16,7 +18,7 @@ engine combines MAN-E19 classical evaluation, MAN-S29 search parameters,
 MAN-T05 integrated clock parameters, MAN-S30 live-history move ordering,
 MAN-S34 tactical-only non-check qsearch generation, MAN-S35 complete mate
 windows and the MAN-S36 coordinated selective-search core.
-One-thread depth-6 bench is `359,045` nodes. The release configuration supports portable 64-bit Windows x86-64,
+One-thread depth-6 bench is `355,879` nodes. The release configuration supports portable 64-bit Windows x86-64,
 Linux x86-64/ARM64 and macOS x86-64/ARM64 artifacts.
 
 No coding agent may start a Phase-6.5 implementation step, Phase 7, a game
@@ -73,7 +75,7 @@ approval.
 
 ### Tooling and host policy
 
-- Use exactly Zig 0.16.0 until a separately approved stable-toolchain migration.
+- Use exactly Zig 0.17.0 until a separately approved stable-toolchain migration.
 - Use Manta's checked fastchess bridge for matches and its pinned local Weather
   Factory wrapper for SPSA. Colosseum is parked until explicitly re-enabled.
 - Development, implementation and local diagnostics occur on the current
@@ -203,7 +205,9 @@ Closed with deterministic bench and full correctness/safety/process gates. The
 2026-09-09 presentation alignment uses Rarog's `bench [depth] [repeats]`
 argument order, per-position fields and aggregate layout over the already
 identical forty-position corpus. Manta retains its depth-six default and exact
-`775,451` production fingerprint; only the diagnostic interface changed.
+`775,451` production fingerprint; only the diagnostic interface changed. (1.2.1
+later raised the default depth to 13, as amended in ADR-0021; fingerprints keep
+naming depth 6.)
 
 #### 4.4 — Experiment tooling
 
@@ -2978,6 +2982,56 @@ artifact in `check`, `test-fast` and the serial `test` list, and its assertions
 no longer hard-code the components: the version must parse, carry no
 prerelease or build metadata, and render back exactly as written.
 
+**Manta 1.2.1.** A patch release that carries the maintainer-approved
+migration to Zig 0.17.0: every API that 0.17.0 removes or deprecates is
+replaced, and the Fathom bindings are declared in Zig and checked against the
+compiled header because `@cImport` is gone. Search behavior at fixed depth is
+identical: the fingerprint stays `355,879` on native and portable ARM64 and on
+x86-64, and the Debug, ReleaseSafe and ReleaseFast suites, lint, policy and
+both table generators pass with byte-identical output. Only speed differs,
+which a clock turns into different games, so the strength of the rebuild is
+gated in games below. The release audit found that `-Dportable` had
+never selected the baseline CPU required by `PORT-003`: an empty target query
+makes Zig detect the build host, so every portable artifact since 1.0.0 was
+built for its CI runner's processor, and native and portable builds were
+byte-identical. Portable now names its CPU explicitly: the ARM64 baseline, and
+on x86-64 the maintainer-chosen `x86-64-v2` floor rather than the SSE2-only
+baseline, because the strict baseline compiled no hardware POPCNT at all while
+excluding only pre-2008 Intel and pre-2011 AMD processors. A build-policy test
+pins both, the portable x86-64 build keeps the `355,879` fingerprint, and
+native output is unchanged. On the 5950X, ten interleaved one-thread `bench 11`
+rounds, every one at `14,659,883` nodes, measured native 1.2.0 under 0.16.0 at a
+median `1,832,943` NPS and native 1.2.1 under 0.17.0 at `2,222,204` (+21.2%),
+with no overlap between the arms; the portable `x86-64-v2` build ran at
+`2,160,631`, 2.8% below native. Identical trees at fixed depth do not make
+identical games on a clock, so the user-facing strength claim of the speed-up
+is gated by `MAN-C06`, a `gainer` SPRT of the native 1.2.1 head against the
+native 1.2.0 arm. It accepted H1 after 1,094 games at `+40.52 +/- 15.59` Elo
+with no anomaly, and the changelog states that gain. Plain `bench` now
+defaults to depth 13 (ADR-0021 amendment); fingerprints stay `bench 6 1`.
+ZLint is suspended from `lint` until a release builds with Zig 0.17.0. Windows ARM64 joins the hosted CI matrix and the release
+workflow as a sixth portable asset; it passed the native build and all three
+suites on a local Snapdragon X host, and its hosted gate is the release pull
+request's CI.
+
+That hosted gate then failed once: Windows ARM64 ReleaseSafe timed out on the
+backpressure transcript's third case, where forty `bench 1` commands queue
+behind a stalled reader and `quit` must exit within one second. It was a
+contract defect, not runner noise. UCI section 4.2 says Closing discards queued
+jobs that have not started, but the controller started every job queued ahead
+of `quit`; each took a fresh epoch that the urgent cancel had never targeted,
+and with a wake permit per queued command the bounded controller cancel never
+met a blocking wait. On the local Snapdragon X, ReleaseSafe quit-to-exit
+measured a `915` ms median with a maximum of `1,027` ms over the backlog. The
+controller now discards a queued `go` or `bench` once Closing has begun, while
+answering informational commands as before; the same case measures a `551` ms
+median and `574` ms maximum idle, and `622` ms maximum with every core
+loaded, which is the designed controller and presenter bounds. The
+fingerprint stays `355,879` and the Debug, ReleaseSafe and ReleaseFast UCI
+suites pass. The fix runs only after `quit`, EOF or a fatal stream, which no
+game reaches before it ends, so `MAN-C06`'s `6466b4a` arm still measures the
+shipped engine's play.
+
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
 6.5.15 closeout. Their surviving content is owned by the steps above; their
@@ -3120,9 +3174,10 @@ SPRT and complete platform/release evidence only if the result will ship.
    version (`1.0.0` / `v1.0.0`, then `1.1.0` / `v1.1.0`).
 2. The worktree is reviewed for accidental/generated content and licensing.
 3. Format, policy, lint and required Debug/ReleaseSafe/ReleaseFast gates pass.
-4. Pull-request CI passes all five native targets and portable smoke tests.
+4. Pull-request CI passes every native target (six from 1.2.1, which adds
+   Windows ARM64) and portable smoke tests.
 5. The annotated tag points at the reviewed release commit.
-6. The published release workflow natively builds all five artifacts, verifies
+6. The published release workflow natively builds every artifact, verifies
    their UCI identities and shared depth-6 fingerprint, and attaches checksums.
 7. A clean download of at least one published artifact is launched in a UCI
    interface before announcing the release.

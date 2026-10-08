@@ -13,9 +13,120 @@ const std = @import("std");
 const chess = @import("../chess/root.zig");
 const tablebase = @import("../search/tablebase.zig");
 
-const c = @cImport({
-    @cInclude("tbprobe.h");
-});
+/// Zig declarations for the vendored `tbprobe.h` API that Manta calls.
+///
+/// They are written by hand rather than translated so that the build carries no
+/// C-translation dependency. `syzygy_abi.c` compiles against the real header
+/// and exports its constants and layout; a test below compares them with these
+/// declarations, so an upstream renumbering or layout change cannot pass
+/// silently.
+const c = struct {
+    const TbMove = u16;
+
+    const TB_MAX_MOVES = 192 + 1;
+    const TB_MAX_PLY = 256;
+
+    const TB_LOSS = 0;
+    const TB_BLESSED_LOSS = 1;
+    const TB_DRAW = 2;
+    const TB_CURSED_WIN = 3;
+    const TB_WIN = 4;
+
+    const TB_PROMOTES_NONE = 0;
+    const TB_PROMOTES_QUEEN = 1;
+    const TB_PROMOTES_ROOK = 2;
+    const TB_PROMOTES_BISHOP = 3;
+    const TB_PROMOTES_KNIGHT = 4;
+
+    const TB_RESULT_FAILED: c_uint = 0xFFFFFFFF;
+
+    const TbRootMove = extern struct {
+        move: TbMove,
+        pv: [TB_MAX_PLY]TbMove,
+        pv_size: c_uint,
+        tb_score: i32,
+        tb_rank: i32,
+    };
+
+    const TbRootMoves = extern struct {
+        size: c_uint,
+        moves: [TB_MAX_MOVES]TbRootMove,
+    };
+
+    extern var TB_LARGEST: c_uint;
+    extern fn tb_init(path: [*:0]const u8) bool;
+    extern fn tb_free() void;
+    extern fn tb_probe_wdl_impl(
+        white: u64,
+        black: u64,
+        kings: u64,
+        queens: u64,
+        rooks: u64,
+        bishops: u64,
+        knights: u64,
+        pawns: u64,
+        ep: c_uint,
+        turn: bool,
+    ) c_uint;
+    extern fn tb_probe_root_dtz(
+        white: u64,
+        black: u64,
+        kings: u64,
+        queens: u64,
+        rooks: u64,
+        bishops: u64,
+        knights: u64,
+        pawns: u64,
+        rule50: c_uint,
+        castling: c_uint,
+        ep: c_uint,
+        turn: bool,
+        has_repeated: bool,
+        use_rule50: bool,
+        results: *TbRootMoves,
+    ) c_int;
+    extern fn tb_probe_root_wdl(
+        white: u64,
+        black: u64,
+        kings: u64,
+        queens: u64,
+        rooks: u64,
+        bishops: u64,
+        knights: u64,
+        pawns: u64,
+        rule50: c_uint,
+        castling: c_uint,
+        ep: c_uint,
+        turn: bool,
+        use_rule50: bool,
+        results: *TbRootMoves,
+    ) c_int;
+
+    /// The header's `static inline` entry point: Syzygy WDL tables index only
+    /// positions without castling rights and with a reset halfmove clock.
+    fn tb_probe_wdl(
+        white: u64,
+        black: u64,
+        kings: u64,
+        queens: u64,
+        rooks: u64,
+        bishops: u64,
+        knights: u64,
+        pawns: u64,
+        rule50: c_uint,
+        castling: c_uint,
+        ep: c_uint,
+        turn: bool,
+    ) c_uint {
+        if (castling != 0) return TB_RESULT_FAILED;
+        if (rule50 != 0) return TB_RESULT_FAILED;
+        return tb_probe_wdl_impl(white, black, kings, queens, rooks, bishops, knights, pawns, ep, turn);
+    }
+};
+
+/// Constants and layout facts exported by `syzygy_abi.c` from the real header.
+extern const manta_fathom_abi: [manta_fathom_abi_len]u32;
+const manta_fathom_abi_len = 21;
 
 /// Reasons initialization refused a path. Missing files are not an error:
 /// Fathom reports success with zero tables, which degrades to ordinary search.
@@ -45,13 +156,13 @@ pub const Handle = struct {
     /// fail the engine.
     pub fn init(path: []const u8) InitError!Handle {
         if (path.len > max_path_len) return error.PathTooLong;
-        if (std.mem.indexOfScalar(u8, path, 0) != null) return error.InvalidPath;
+        if (std.mem.findScalar(u8, path, 0) != null) return error.InvalidPath;
 
         var buffer: [max_path_len + 1]u8 = undefined;
         @memcpy(buffer[0..path.len], path);
         buffer[path.len] = 0;
 
-        if (!c.tb_init(&buffer)) return error.ProbeInitFailed;
+        if (!c.tb_init(buffer[0..path.len :0])) return error.ProbeInitFailed;
         const largest = c.TB_LARGEST;
         return .{
             .largest = if (largest > std.math.maxInt(u8)) std.math.maxInt(u8) else @intCast(largest),
@@ -135,7 +246,7 @@ pub const Handle = struct {
         if (position.current.castling_rights != .none) return null;
 
         const physical = &position.physical;
-        var results: c.struct_TbRootMoves = undefined;
+        var results: c.TbRootMoves = undefined;
         const white = physical.by_color[chess.types.Color.white.index()];
         const black = physical.by_color[chess.types.Color.black.index()];
         const kings = physical.by_type[chess.types.PieceType.king.index()];
@@ -192,7 +303,7 @@ pub const Handle = struct {
         var count: usize = 0;
         for (results.moves[0..results.size]) |ranked| {
             const matched = matchLegalMove(legal_moves, ranked.move) orelse return null;
-            out[count] = .{ .move = matched, .rank = ranked.tbRank };
+            out[count] = .{ .move = matched, .rank = ranked.tb_rank };
             count += 1;
         }
         return count;
@@ -251,11 +362,40 @@ comptime {
     // The inward contract mirrors Fathom's encoding. If the vendored revision
     // ever renumbers these, the pinned-hash update procedure must catch it, so
     // assert the agreement here instead of trusting two independent constants.
-    std.debug.assert(@intFromEnum(tablebase.Wdl.loss) == c.TB_LOSS);
-    std.debug.assert(@intFromEnum(tablebase.Wdl.blessed_loss) == c.TB_BLESSED_LOSS);
-    std.debug.assert(@intFromEnum(tablebase.Wdl.draw) == c.TB_DRAW);
-    std.debug.assert(@intFromEnum(tablebase.Wdl.cursed_win) == c.TB_CURSED_WIN);
-    std.debug.assert(@intFromEnum(tablebase.Wdl.win) == c.TB_WIN);
+    std.debug.assert(@backingInt(tablebase.Wdl.loss) == c.TB_LOSS);
+    std.debug.assert(@backingInt(tablebase.Wdl.blessed_loss) == c.TB_BLESSED_LOSS);
+    std.debug.assert(@backingInt(tablebase.Wdl.draw) == c.TB_DRAW);
+    std.debug.assert(@backingInt(tablebase.Wdl.cursed_win) == c.TB_CURSED_WIN);
+    std.debug.assert(@backingInt(tablebase.Wdl.win) == c.TB_WIN);
+}
+
+test "hand-written Fathom declarations match the compiled header" {
+    // The C compiler reads tbprobe.h independently of these declarations, so
+    // agreement here is the guard that ABI-relevant upstream changes fail.
+    const expected = [manta_fathom_abi_len]u32{
+        c.TB_MAX_MOVES,
+        c.TB_MAX_PLY,
+        c.TB_LOSS,
+        c.TB_BLESSED_LOSS,
+        c.TB_DRAW,
+        c.TB_CURSED_WIN,
+        c.TB_WIN,
+        c.TB_PROMOTES_NONE,
+        c.TB_PROMOTES_QUEEN,
+        c.TB_PROMOTES_ROOK,
+        c.TB_PROMOTES_BISHOP,
+        c.TB_PROMOTES_KNIGHT,
+        c.TB_RESULT_FAILED,
+        @sizeOf(c.TbMove),
+        @sizeOf(c.TbRootMove),
+        @offsetOf(c.TbRootMove, "pv"),
+        @offsetOf(c.TbRootMove, "pv_size"),
+        @offsetOf(c.TbRootMove, "tb_rank"),
+        @sizeOf(c.TbRootMoves),
+        @offsetOf(c.TbRootMoves, "moves"),
+        @sizeOf(c_uint),
+    };
+    try std.testing.expectEqualSlices(u32, &expected, &manta_fathom_abi);
 }
 
 test "an empty path yields a safe unloaded handle rather than an error" {
@@ -277,8 +417,8 @@ test "a nonexistent path loads no tables and still degrades safely" {
 test "paths that cannot cross the C ABI are rejected before probing" {
     // An interior zero byte would silently truncate the path inside C.
     try std.testing.expectError(error.InvalidPath, Handle.init("a\x00b"));
-    const long_path = "x" ** (max_path_len + 1);
-    try std.testing.expectError(error.PathTooLong, Handle.init(long_path));
+    const long_path: [max_path_len + 1]u8 = @splat('x');
+    try std.testing.expectError(error.PathTooLong, Handle.init(&long_path));
 }
 
 test "an unloaded handle reports not_loaded instead of probing" {

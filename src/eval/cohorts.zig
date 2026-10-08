@@ -178,7 +178,7 @@ test "evaluation cohorts are legal, nonterminal and evenly balanced" {
     // QUAL-013/014: independent parsing and move generation protect the fixed
     // workload. Even balance stops one evaluation situation from quietly
     // dominating the residual picture when the suite is revised.
-    const cohort_count = @typeInfo(Cohort).@"enum".fields.len;
+    const cohort_count = @typeInfo(Cohort).@"enum".field_names.len;
     var counts: [cohort_count]u8 = @splat(0);
     for (cases) |case| {
         var root: chess.position.PositionState = .{};
@@ -187,7 +187,7 @@ test "evaluation cohorts are legal, nonterminal and evenly balanced" {
         var moves = chess.position.MoveList.init();
         chess.movegen.generate(.all, &value, &moves);
         try std.testing.expect(moves.count != 0);
-        counts[@intFromEnum(case.cohort)] += 1;
+        counts[@backingInt(case.cohort)] += 1;
     }
     for (counts) |count| try std.testing.expectEqual(@as(u8, 3), count);
 }

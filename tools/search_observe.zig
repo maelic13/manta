@@ -153,7 +153,7 @@ fn validate(
         return error.RootAccounting;
     }
     if (counters.null_move_cutoffs !=
-        counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.null_move)])
+        counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.null_move)])
     {
         return error.PruneAccounting;
     }
@@ -161,14 +161,14 @@ fn validate(
         return error.ProbCutAccounting;
     const searched_probcut_cutoffs = counters.probcut_cutoffs - counters.probcut_tt_cutoffs;
     if (counters.probcut_cutoffs !=
-        counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.probcut)] or
+        counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.probcut)] or
         searched_probcut_cutoffs > counters.probcut_verifications or
         counters.probcut_verifications > counters.probcut_qsearch_passes or
         counters.probcut_qsearch_passes > counters.probcut_moves or
         counters.probcut_tt_cutoffs + counters.probcut_tt_skips > counters.probcut_nodes or
-        counters.context_by_route[@intFromEnum(search.types.EntryRoute.probcut_probe)] !=
+        counters.context_by_route[@backingInt(search.types.EntryRoute.probcut_probe)] !=
             counters.probcut_verifications or
-        counters.tt_stores_by_producer[@intFromEnum(search.types.Provenance.probcut)] !=
+        counters.tt_stores_by_producer[@backingInt(search.types.Provenance.probcut)] !=
             searched_probcut_cutoffs)
     {
         return error.ProbCutAccounting;
@@ -181,7 +181,7 @@ fn validate(
         return error.QuiescenceAccounting;
     }
     if (counters.reverse_futility_cutoffs !=
-        counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.reverse_futility)] or
+        counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.reverse_futility)] or
         counters.reverse_futility_cutoffs > counters.reverse_futility_candidates)
     {
         return error.ReverseFutilityAccounting;
@@ -190,15 +190,15 @@ fn validate(
     // search: each phase keeps its own dedicated counter, and only their sum
     // must equal the cross-cutting `prunes_by_cause` aggregate.
     if (counters.qsearch_see_prunes + counters.main_see_pruning_prunes !=
-        counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.see)] or
+        counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.see)] or
         counters.main_see_pruning_prunes > counters.main_see_pruning_candidates or
         counters.razoring_triggers > counters.razoring_candidates or
         counters.razoring_triggers !=
-            counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.razoring)] or
+            counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.razoring)] or
         counters.late_move_pruning_candidates <
-            counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.late_move)] or
+            counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.late_move)] or
         counters.quiet_futility_candidates <
-            counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.futility)] or
+            counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.futility)] or
         counters.history_pruning_tightened_prunes > counters.history_pruning_tightenings or
         counters.capture_futility_prunes + counters.capture_futility_check_exemptions >
             counters.capture_futility_candidates)
@@ -215,8 +215,8 @@ fn validate(
             return error.AttributionAccounting;
     }
     if (sum(counters.nodes_by_charge) != counters.context_nodes or
-        counters.nodes_under_charge[@intFromEnum(search.diagnostics.WorkCharge.ordinary)] !=
-            counters.nodes_by_charge[@intFromEnum(search.diagnostics.WorkCharge.ordinary)] or
+        counters.nodes_under_charge[@backingInt(search.diagnostics.WorkCharge.ordinary)] !=
+            counters.nodes_by_charge[@backingInt(search.diagnostics.WorkCharge.ordinary)] or
         sum(counters.check_chain_lengths) != counters.context_in_check or
         sum(counters.extension_chain_lengths) != counters.extended_depth_intents or
         (counters.context_in_check == 0) != (counters.check_chain_max == 0) or
@@ -225,12 +225,12 @@ fn validate(
         return error.AttributionAccounting;
     }
     const lookup_outcomes = counters.tt_lookups_by_outcome;
-    const authenticated = lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.depth_rejected)] +
-        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.bound_rejected)] +
-        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.cutoff_refused)] +
-        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.usable)];
+    const authenticated = lookup_outcomes[@backingInt(search.diagnostics.TableLookup.depth_rejected)] +
+        lookup_outcomes[@backingInt(search.diagnostics.TableLookup.bound_rejected)] +
+        lookup_outcomes[@backingInt(search.diagnostics.TableLookup.cutoff_refused)] +
+        lookup_outcomes[@backingInt(search.diagnostics.TableLookup.usable)];
     if (authenticated != sum(counters.tt_probes_by_bound) or
-        lookup_outcomes[@intFromEnum(search.diagnostics.TableLookup.usable)] !=
+        lookup_outcomes[@backingInt(search.diagnostics.TableLookup.usable)] !=
             sum(counters.tt_usable_by_bound) or
         sum(counters.tt_stores_by_outcome) != sum(counters.tt_stores_by_bound))
     {
@@ -240,10 +240,10 @@ fn validate(
         sum(counters.context_by_route) != counters.context_nodes or
         sum(counters.context_by_arrival) != counters.context_nodes or
         sum(counters.context_by_expectation) != counters.context_nodes or
-        counters.context_by_expectation[@intFromEnum(search.types.NodeExpectation.principal)] !=
+        counters.context_by_expectation[@backingInt(search.types.NodeExpectation.principal)] !=
             counters.pv_nodes or
-        counters.context_by_expectation[@intFromEnum(search.types.NodeExpectation.cut)] +
-            counters.context_by_expectation[@intFromEnum(search.types.NodeExpectation.all)] !=
+        counters.context_by_expectation[@backingInt(search.types.NodeExpectation.cut)] +
+            counters.context_by_expectation[@backingInt(search.types.NodeExpectation.all)] !=
             counters.non_pv_nodes or
         sum(counters.outcomes_by_disposition) != counters.outcomes or
         sum(counters.outcomes_by_producer) != counters.outcomes)
@@ -251,10 +251,10 @@ fn validate(
         return error.ContextAccounting;
     }
     if (counters.contextual_history_rewards + counters.contextual_history_pretrained_winners !=
-        counters.contextual_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.exact)] +
-            counters.contextual_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.cutoff)] +
+        counters.contextual_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.exact)] +
+            counters.contextual_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.cutoff)] +
             counters.contextual_history_lmr_positive or
-        counters.contextual_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.fail_low)] != 0 or
+        counters.contextual_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.fail_low)] != 0 or
         counters.contextual_history_lmr_failures > counters.lmr_researches or
         counters.contextual_history_lmr_positive + counters.contextual_history_lmr_negative > counters.lmr_researches or
         counters.contextual_history_lmr_failures > counters.contextual_history_penalties or
@@ -265,10 +265,10 @@ fn validate(
     for (0..search.ordering.continuation_distance_count) |distance| {
         if (counters.continuation_history_rewards[distance] +
             counters.continuation_history_pretrained_winners[distance] !=
-            counters.continuation_history_updates_by_disposition[distance][@intFromEnum(search.types.NodeDisposition.exact)] +
-                counters.continuation_history_updates_by_disposition[distance][@intFromEnum(search.types.NodeDisposition.cutoff)] +
+            counters.continuation_history_updates_by_disposition[distance][@backingInt(search.types.NodeDisposition.exact)] +
+                counters.continuation_history_updates_by_disposition[distance][@backingInt(search.types.NodeDisposition.cutoff)] +
                 counters.continuation_history_lmr_positive[distance] or
-            counters.continuation_history_updates_by_disposition[distance][@intFromEnum(search.types.NodeDisposition.fail_low)] != 0 or
+            counters.continuation_history_updates_by_disposition[distance][@backingInt(search.types.NodeDisposition.fail_low)] != 0 or
             counters.continuation_history_lmr_positive[distance] +
                 counters.continuation_history_lmr_negative[distance] > counters.lmr_researches or
             counters.continuation_history_nonzero[distance] > counters.continuation_history_lookups[distance] or
@@ -279,15 +279,15 @@ fn validate(
         }
     }
     if (counters.capture_history_rewards !=
-        counters.capture_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.exact)] +
-            counters.capture_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.cutoff)] or
-        counters.capture_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.fail_low)] != 0 or
+        counters.capture_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.exact)] +
+            counters.capture_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.cutoff)] or
+        counters.capture_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.fail_low)] != 0 or
         counters.capture_history_nonzero > counters.capture_history_selections or
         sum(counters.capture_history_selections_by_consumer) != counters.capture_history_selections)
     {
         return error.CaptureHistoryAccounting;
     }
-    if (counters.context_by_route[@intFromEnum(search.types.EntryRoute.root)] != counters.root_searches)
+    if (counters.context_by_route[@backingInt(search.types.EntryRoute.root)] != counters.root_searches)
         return error.RootRouteAccounting;
     if (counters.root_searches != counters.completed_iterations +
         counters.aspiration_fail_lows + counters.aspiration_fail_highs or
@@ -295,15 +295,15 @@ fn validate(
     {
         return error.AspirationAccounting;
     }
-    if (counters.context_by_route[@intFromEnum(search.types.EntryRoute.quiescence)] != counters.quiescence_nodes)
+    if (counters.context_by_route[@backingInt(search.types.EntryRoute.quiescence)] != counters.quiescence_nodes)
         return error.QuiescenceRouteAccounting;
-    if (counters.context_by_route[@intFromEnum(search.types.EntryRoute.null_probe)] != counters.null_move_attempts or
-        counters.context_by_route[@intFromEnum(search.types.EntryRoute.null_verification)] != counters.null_move_verifications)
+    if (counters.context_by_route[@backingInt(search.types.EntryRoute.null_probe)] != counters.null_move_attempts or
+        counters.context_by_route[@backingInt(search.types.EntryRoute.null_verification)] != counters.null_move_verifications)
         return error.NullRouteAccounting;
-    if (counters.context_by_route[@intFromEnum(search.types.EntryRoute.reduced_probe)] != counters.lmr_probes or
-        counters.context_by_route[@intFromEnum(search.types.EntryRoute.reduction_research)] != counters.lmr_researches)
+    if (counters.context_by_route[@backingInt(search.types.EntryRoute.reduced_probe)] != counters.lmr_probes or
+        counters.context_by_route[@backingInt(search.types.EntryRoute.reduction_research)] != counters.lmr_researches)
         return error.LmrRouteAccounting;
-    if (counters.context_by_route[@intFromEnum(search.types.EntryRoute.singular_probe)] !=
+    if (counters.context_by_route[@backingInt(search.types.EntryRoute.singular_probe)] !=
         counters.singular_attempts + counters.singular_multicut_probes or
         counters.singular_attempts != counters.singular_extensions + counters.singular_rejections or
         // A legal same-position exclusion probe may terminate as a search draw
@@ -312,8 +312,8 @@ fn validate(
         counters.exclusion_moves_skipped > counters.singular_attempts + counters.singular_multicut_probes)
         return error.SingularRouteAccounting;
     if (counters.extended_depth_intents >
-        counters.extensions_by_cause[@intFromEnum(search.diagnostics.ExtensionCause.check)] +
-            counters.extensions_by_cause[@intFromEnum(search.diagnostics.ExtensionCause.singular)])
+        counters.extensions_by_cause[@backingInt(search.diagnostics.ExtensionCause.check)] +
+            counters.extensions_by_cause[@backingInt(search.diagnostics.ExtensionCause.singular)])
         return error.ExtensionAccounting;
 }
 
@@ -510,8 +510,8 @@ fn printRecord(case: search.observation.Case, record: Record) void {
         .{
             record.counters.contextual_history_lookups,
             record.counters.contextual_history_nonzero,
-            record.counters.contextual_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.exact)],
-            record.counters.contextual_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.cutoff)],
+            record.counters.contextual_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.exact)],
+            record.counters.contextual_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.cutoff)],
             record.counters.contextual_history_lmr_failures,
             record.counters.contextual_history_penalties,
         },
@@ -533,11 +533,11 @@ fn printRecord(case: search.observation.Case, record: Record) void {
         .{
             record.counters.capture_history_selections,
             record.counters.capture_history_nonzero,
-            record.counters.capture_history_selections_by_consumer[@intFromEnum(search.diagnostics.TacticalConsumer.main)],
-            record.counters.capture_history_selections_by_consumer[@intFromEnum(search.diagnostics.TacticalConsumer.quiescence)],
-            record.counters.capture_history_selections_by_consumer[@intFromEnum(search.diagnostics.TacticalConsumer.probcut)],
-            record.counters.capture_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.exact)],
-            record.counters.capture_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.cutoff)],
+            record.counters.capture_history_selections_by_consumer[@backingInt(search.diagnostics.TacticalConsumer.main)],
+            record.counters.capture_history_selections_by_consumer[@backingInt(search.diagnostics.TacticalConsumer.quiescence)],
+            record.counters.capture_history_selections_by_consumer[@backingInt(search.diagnostics.TacticalConsumer.probcut)],
+            record.counters.capture_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.exact)],
+            record.counters.capture_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.cutoff)],
             record.counters.capture_history_penalties,
         },
     );
@@ -551,8 +551,8 @@ fn printRecord(case: search.observation.Case, record: Record) void {
         "depth_authority iir={d}/{d}/{d} singular={d}/{d}/{d} provenance_reject={d} double={d} multicut={d}/{d}/{d} exclusion_skips={d}\n",
         .{
             record.counters.internal_iterative_reductions,
-            record.counters.internal_iterative_reductions_by_expectation[@intFromEnum(search.types.NodeExpectation.principal)],
-            record.counters.internal_iterative_reductions_by_expectation[@intFromEnum(search.types.NodeExpectation.cut)],
+            record.counters.internal_iterative_reductions_by_expectation[@backingInt(search.types.NodeExpectation.principal)],
+            record.counters.internal_iterative_reductions_by_expectation[@backingInt(search.types.NodeExpectation.cut)],
             record.counters.singular_attempts,
             record.counters.singular_extensions,
             record.counters.singular_rejections,
@@ -653,8 +653,8 @@ fn printBuckets(label: []const u8, longest: u16, values: [search.diagnostics.max
 
 fn printEnumCounts(comptime Enum: type, label: []const u8, values: anytype) void {
     std.debug.print("{s}", .{label});
-    inline for (@typeInfo(Enum).@"enum".fields, 0..) |field, index|
-        std.debug.print(" {s}={d}", .{ field.name, values[index] });
+    inline for (@typeInfo(Enum).@"enum".field_names, 0..) |field_name, index|
+        std.debug.print(" {s}={d}", .{ field_name, values[index] });
     std.debug.print("\n", .{});
 }
 
@@ -705,16 +705,16 @@ test "fixed observation suite has complete behavior-neutral accounting" {
     var singular_multicut_candidates: u64 = 0;
     var singular_multicut_probes: u64 = 0;
     var singular_multicut_cutoffs: u64 = 0;
-    var lmr_modifier_protect: [@typeInfo(search.diagnostics.LmrModifier).@"enum".fields.len]u64 = @splat(0);
-    var lmr_modifier_deepen: [@typeInfo(search.diagnostics.LmrModifier).@"enum".fields.len]u64 = @splat(0);
+    var lmr_modifier_protect: [@typeInfo(search.diagnostics.LmrModifier).@"enum".field_names.len]u64 = @splat(0);
+    var lmr_modifier_deepen: [@typeInfo(search.diagnostics.LmrModifier).@"enum".field_names.len]u64 = @splat(0);
     var continuation_lookups: [search.ordering.continuation_distance_count]u64 = @splat(0);
     var continuation_nonzero: [search.ordering.continuation_distance_count]u64 = @splat(0);
     var continuation_rewards: [search.ordering.continuation_distance_count]u64 = @splat(0);
-    var capture_selections: [@typeInfo(search.diagnostics.TacticalConsumer).@"enum".fields.len]u64 = @splat(0);
+    var capture_selections: [@typeInfo(search.diagnostics.TacticalConsumer).@"enum".field_names.len]u64 = @splat(0);
     var capture_nonzero: u64 = 0;
     var capture_exact: u64 = 0;
     var capture_cutoff: u64 = 0;
-    var expectations: [@typeInfo(search.types.NodeExpectation).@"enum".fields.len]u64 = @splat(0);
+    var expectations: [@typeInfo(search.types.NodeExpectation).@"enum".field_names.len]u64 = @splat(0);
     var aspiration_searches: u64 = 0;
     for (search.observation.cases) |case| {
         const observed = try observe(case, &thread, &hash.table, &heuristics);
@@ -726,8 +726,8 @@ test "fixed observation suite has complete behavior-neutral accounting" {
         probcut_tt_decisions += observed.counters.probcut_tt_cutoffs + observed.counters.probcut_tt_skips;
         contextual_lookups += observed.counters.contextual_history_lookups;
         contextual_nonzero += observed.counters.contextual_history_nonzero;
-        contextual_exact += observed.counters.contextual_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.exact)];
-        contextual_cutoff += observed.counters.contextual_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.cutoff)];
+        contextual_exact += observed.counters.contextual_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.exact)];
+        contextual_cutoff += observed.counters.contextual_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.cutoff)];
         contextual_lmr_failures += observed.counters.contextual_history_lmr_failures;
         lmr_feedback_positive += observed.counters.contextual_history_lmr_positive;
         lmr_feedback_negative += observed.counters.contextual_history_lmr_negative;
@@ -744,7 +744,7 @@ test "fixed observation suite has complete behavior-neutral accounting" {
         history_pruning_effects += observed.counters.history_pruning_protections +
             observed.counters.history_pruning_tightenings;
         capture_futility_candidates += observed.counters.capture_futility_candidates;
-        cut_iir += observed.counters.internal_iterative_reductions_by_expectation[@intFromEnum(search.types.NodeExpectation.cut)];
+        cut_iir += observed.counters.internal_iterative_reductions_by_expectation[@backingInt(search.types.NodeExpectation.cut)];
         singular_attempts += observed.counters.singular_attempts;
         singular_multicut_candidates += observed.counters.singular_multicut_candidates;
         singular_multicut_probes += observed.counters.singular_multicut_probes;
@@ -758,8 +758,8 @@ test "fixed observation suite has complete behavior-neutral accounting" {
         }
         for (&capture_selections, observed.counters.capture_history_selections_by_consumer) |*total, count| total.* += count;
         capture_nonzero += observed.counters.capture_history_nonzero;
-        capture_exact += observed.counters.capture_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.exact)];
-        capture_cutoff += observed.counters.capture_history_updates_by_disposition[@intFromEnum(search.types.NodeDisposition.cutoff)];
+        capture_exact += observed.counters.capture_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.exact)];
+        capture_cutoff += observed.counters.capture_history_updates_by_disposition[@backingInt(search.types.NodeDisposition.cutoff)];
         for (&expectations, observed.counters.context_by_expectation) |*total, count| total.* += count;
         aspiration_searches += observed.counters.aspiration_searches;
     }

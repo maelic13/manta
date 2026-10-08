@@ -123,8 +123,8 @@
     defaults on; pass -QsearchTacticalGeneration:$false to reconstruct MAN-S30.
 
 .PARAMETER BenchDepth
-    Depth for the verification bench. Default 6 (the manta-search-bench-v1
-    default). Lower it for a quicker smoke test; the node count is only a
+    Depth for the verification bench. Default 6, the depth every recorded
+    fingerprint names (plain `bench` searches to depth 13). Lower it for a quicker smoke test; the node count is only a
     fingerprint, so any depth is fine as long as it is recorded.
 
 .PARAMETER TestEnginesDir

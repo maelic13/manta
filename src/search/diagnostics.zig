@@ -17,16 +17,16 @@ pub const LmrDirection = enum {
         return if (self == .protect) 1 else -1;
     }
 };
-const provenance_count = @typeInfo(types.Provenance).@"enum".fields.len;
-const bound_count = @typeInfo(types.Bound).@"enum".fields.len;
-const source_count = @typeInfo(ordering.Source).@"enum".fields.len;
-const wdl_count = @typeInfo(tablebase.Wdl).@"enum".fields.len;
-const route_count = @typeInfo(types.EntryRoute).@"enum".fields.len;
-const arrival_count = @typeInfo(types.Arrival).@"enum".fields.len;
-const disposition_count = @typeInfo(types.NodeDisposition).@"enum".fields.len;
-const expectation_count = @typeInfo(types.NodeExpectation).@"enum".fields.len;
-const tactical_consumer_count = @typeInfo(TacticalConsumer).@"enum".fields.len;
-const lmr_modifier_count = @typeInfo(LmrModifier).@"enum".fields.len;
+const provenance_count = @typeInfo(types.Provenance).@"enum".field_names.len;
+const bound_count = @typeInfo(types.Bound).@"enum".field_names.len;
+const source_count = @typeInfo(ordering.Source).@"enum".field_names.len;
+const wdl_count = @typeInfo(tablebase.Wdl).@"enum".field_names.len;
+const route_count = @typeInfo(types.EntryRoute).@"enum".field_names.len;
+const arrival_count = @typeInfo(types.Arrival).@"enum".field_names.len;
+const disposition_count = @typeInfo(types.NodeDisposition).@"enum".field_names.len;
+const expectation_count = @typeInfo(types.NodeExpectation).@"enum".field_names.len;
+const tactical_consumer_count = @typeInfo(TacticalConsumer).@"enum".field_names.len;
+const lmr_modifier_count = @typeInfo(LmrModifier).@"enum".field_names.len;
 
 /// Step-6.5.2 whole-tree attribution. Every visited node is charged to the
 /// innermost speculative context that encloses it, so the charges partition the
@@ -82,14 +82,14 @@ pub const FailHighBucket = enum { first, second, third, fourth_to_eighth, later 
 pub const PruneCause = enum { null_move, reverse_futility, razoring, probcut, multi_cut, late_move, futility, see, history, qsearch_delta };
 pub const ExtensionCause = enum { check, singular, recapture, passed_pawn };
 
-const charge_count = @typeInfo(WorkCharge).@"enum".fields.len;
-const table_lookup_count = @typeInfo(TableLookup).@"enum".fields.len;
-const store_outcome_count = @typeInfo(tt.StoreOutcome).@"enum".fields.len;
+const charge_count = @typeInfo(WorkCharge).@"enum".field_names.len;
+const table_lookup_count = @typeInfo(TableLookup).@"enum".field_names.len;
+const store_outcome_count = @typeInfo(tt.StoreOutcome).@"enum".field_names.len;
 /// Longest chain reported exactly; longer chains accumulate in the last bucket.
 pub const max_chain_bucket = 8;
-const fail_high_count = @typeInfo(FailHighBucket).@"enum".fields.len;
-const prune_count = @typeInfo(PruneCause).@"enum".fields.len;
-const extension_count = @typeInfo(ExtensionCause).@"enum".fields.len;
+const fail_high_count = @typeInfo(FailHighBucket).@"enum".field_names.len;
+const prune_count = @typeInfo(PruneCause).@"enum".field_names.len;
+const extension_count = @typeInfo(ExtensionCause).@"enum".field_names.len;
 
 pub const Disabled = struct {
     pub const observes_move_sources = false;
@@ -403,9 +403,9 @@ pub const Counters = struct {
     ) void {
         std.debug.assert((kind == .quiescence) == (route == .quiescence));
         self.context_nodes += 1;
-        self.context_by_route[@intFromEnum(route)] += 1;
-        self.context_by_arrival[@intFromEnum(ply_context.arrival)] += 1;
-        self.context_by_expectation[@intFromEnum(expectation)] += 1;
+        self.context_by_route[@backingInt(route)] += 1;
+        self.context_by_arrival[@backingInt(ply_context.arrival)] += 1;
+        self.context_by_expectation[@backingInt(expectation)] += 1;
         if (ply_context.in_check) self.context_in_check += 1;
         if (depth.reduction != 0) self.reduced_depth_intents += 1;
         if (depth.extension != 0) self.extended_depth_intents += 1;
@@ -424,16 +424,16 @@ pub const Counters = struct {
         const opened = WorkCharge.opened(route);
         const charge = opened orelse inherited;
         const mask = inherited_mask |
-            (if (opened) |value| @as(u16, 1) << @intFromEnum(value) else 0);
+            (if (opened) |value| @as(u16, 1) << @backingInt(value) else 0);
         self.charge_stack[ply] = charge;
         self.charge_mask_stack[ply] = mask;
-        self.nodes_by_charge[@intFromEnum(charge)] += 1;
+        self.nodes_by_charge[@backingInt(charge)] += 1;
         // Inclusive cost answers a different question than the exclusive
         // partition: how much of the tree disappears if a mechanism stops
         // opening subtrees, including the nested speculation it pays for.
         // A node inside two nested probes of the same kind still counts once.
         if (mask == 0) {
-            self.nodes_under_charge[@intFromEnum(WorkCharge.ordinary)] += 1;
+            self.nodes_under_charge[@backingInt(WorkCharge.ordinary)] += 1;
         } else {
             inline for (1..charge_count) |index| {
                 if (mask & (@as(u16, 1) << index) != 0) self.nodes_under_charge[index] += 1;
@@ -464,8 +464,8 @@ pub const Counters = struct {
 
     pub inline fn nodeOutcome(self: *Counters, outcome: types.OutcomeAttribution) void {
         self.outcomes += 1;
-        self.outcomes_by_disposition[@intFromEnum(outcome.disposition)] += 1;
-        self.outcomes_by_producer[@intFromEnum(outcome.evidence.provenance)] += 1;
+        self.outcomes_by_disposition[@backingInt(outcome.disposition)] += 1;
+        self.outcomes_by_producer[@backingInt(outcome.evidence.provenance)] += 1;
     }
 
     pub inline fn generated(self: *Counters, count: usize) void {
@@ -497,16 +497,16 @@ pub const Counters = struct {
     }
 
     pub inline fn ttProbe(self: *Counters, producer: types.Provenance, bound: types.Bound, usable: bool) void {
-        self.tt_probes_by_producer[@intFromEnum(producer)] += 1;
-        self.tt_probes_by_bound[@intFromEnum(bound)] += 1;
+        self.tt_probes_by_producer[@backingInt(producer)] += 1;
+        self.tt_probes_by_bound[@backingInt(bound)] += 1;
         if (usable) {
-            self.tt_usable_by_producer[@intFromEnum(producer)] += 1;
-            self.tt_usable_by_bound[@intFromEnum(bound)] += 1;
+            self.tt_usable_by_producer[@backingInt(producer)] += 1;
+            self.tt_usable_by_bound[@backingInt(bound)] += 1;
         }
     }
 
     pub inline fn ttLookup(self: *Counters, outcome: TableLookup) void {
-        self.tt_lookups_by_outcome[@intFromEnum(outcome)] += 1;
+        self.tt_lookups_by_outcome[@backingInt(outcome)] += 1;
     }
 
     pub inline fn ttStore(
@@ -515,9 +515,9 @@ pub const Counters = struct {
         bound: types.Bound,
         outcome: tt.StoreOutcome,
     ) void {
-        self.tt_stores_by_producer[@intFromEnum(producer)] += 1;
-        self.tt_stores_by_bound[@intFromEnum(bound)] += 1;
-        self.tt_stores_by_outcome[@intFromEnum(outcome)] += 1;
+        self.tt_stores_by_producer[@backingInt(producer)] += 1;
+        self.tt_stores_by_bound[@backingInt(bound)] += 1;
+        self.tt_stores_by_outcome[@backingInt(outcome)] += 1;
     }
 
     pub inline fn ttBest(self: *Counters, recalled: bool) void {
@@ -526,11 +526,11 @@ pub const Counters = struct {
     }
 
     pub inline fn moveSource(self: *Counters, source_value: ordering.Source) void {
-        self.searched_by_source[@intFromEnum(source_value)] += 1;
+        self.searched_by_source[@backingInt(source_value)] += 1;
     }
 
     pub inline fn failHigh(self: *Counters, move_index: usize, source_value: ordering.Source) void {
-        self.cutoffs_by_source[@intFromEnum(source_value)] += 1;
+        self.cutoffs_by_source[@backingInt(source_value)] += 1;
         const bucket: FailHighBucket = switch (move_index) {
             0 => .first,
             1 => .second,
@@ -538,7 +538,7 @@ pub const Counters = struct {
             3...7 => .fourth_to_eighth,
             else => .later,
         };
-        self.fail_high_by_index[@intFromEnum(bucket)] += 1;
+        self.fail_high_by_index[@backingInt(bucket)] += 1;
     }
 
     pub inline fn historyReward(self: *Counters, depth: u16) void {
@@ -566,7 +566,7 @@ pub const Counters = struct {
         self.contextual_history_rewards += @intFromBool(rewarded);
         self.contextual_history_pretrained_winners += @intFromBool(!rewarded);
         self.contextual_history_penalties += penalties;
-        self.contextual_history_updates_by_disposition[@intFromEnum(disposition)] += 1;
+        self.contextual_history_updates_by_disposition[@backingInt(disposition)] += 1;
     }
 
     pub inline fn contextualHistoryLmrFailure(self: *Counters) void {
@@ -591,7 +591,7 @@ pub const Counters = struct {
         from_check: bool,
         tactical: bool,
     ) void {
-        const index = @intFromEnum(distance);
+        const index = @backingInt(distance);
         self.continuation_history_lookups[index] += 1;
         if (nonzero) self.continuation_history_nonzero[index] += 1;
         if (from_check) self.continuation_history_from_check[index] += 1;
@@ -606,11 +606,11 @@ pub const Counters = struct {
         rewarded: bool,
     ) void {
         std.debug.assert(disposition == .exact or disposition == .cutoff);
-        const index = @intFromEnum(distance);
+        const index = @backingInt(distance);
         self.continuation_history_rewards[index] += @intFromBool(rewarded);
         self.continuation_history_pretrained_winners[index] += @intFromBool(!rewarded);
         self.continuation_history_penalties[index] += penalties;
-        self.continuation_history_updates_by_disposition[index][@intFromEnum(disposition)] += 1;
+        self.continuation_history_updates_by_disposition[index][@backingInt(disposition)] += 1;
     }
 
     pub inline fn continuationHistoryLmrFeedback(
@@ -618,7 +618,7 @@ pub const Counters = struct {
         distance: ordering.ContinuationDistance,
         positive: bool,
     ) void {
-        const index = @intFromEnum(distance);
+        const index = @backingInt(distance);
         if (positive) {
             self.continuation_history_rewards[index] += 1;
             self.continuation_history_lmr_positive[index] += 1;
@@ -634,7 +634,7 @@ pub const Counters = struct {
         nonzero: bool,
     ) void {
         self.capture_history_selections += 1;
-        self.capture_history_selections_by_consumer[@intFromEnum(consumer)] += 1;
+        self.capture_history_selections_by_consumer[@backingInt(consumer)] += 1;
         if (nonzero) self.capture_history_nonzero += 1;
     }
 
@@ -646,7 +646,7 @@ pub const Counters = struct {
         std.debug.assert(disposition == .exact or disposition == .cutoff);
         self.capture_history_rewards += 1;
         self.capture_history_penalties += penalties;
-        self.capture_history_updates_by_disposition[@intFromEnum(disposition)] += 1;
+        self.capture_history_updates_by_disposition[@backingInt(disposition)] += 1;
     }
 
     pub inline fn lmrHistoryProtection(self: *Counters) void {
@@ -658,7 +658,7 @@ pub const Counters = struct {
         modifier: LmrModifier,
         direction: LmrDirection,
     ) void {
-        const index = @intFromEnum(modifier);
+        const index = @backingInt(modifier);
         if (direction == .protect)
             self.lmr_modifier_protect[index] += 1
         else
@@ -697,7 +697,7 @@ pub const Counters = struct {
         prior: i32,
         depth: u16,
     ) void {
-        self.correction_updates_by_bound[@intFromEnum(bound)] += 1;
+        self.correction_updates_by_bound[@backingInt(bound)] += 1;
         if (delta > 0) self.correction_positive_updates += 1;
         if (delta < 0) self.correction_negative_updates += 1;
         self.correction_max_depth = @max(self.correction_max_depth, depth);
@@ -738,7 +738,7 @@ pub const Counters = struct {
 
     pub inline fn tablebaseHit(self: *Counters, wdl: tablebase.Wdl) void {
         self.tablebase_hits += 1;
-        self.tablebase_hits_by_wdl[@intFromEnum(wdl)] += 1;
+        self.tablebase_hits_by_wdl[@backingInt(wdl)] += 1;
     }
 
     pub inline fn reverseFutility(self: *Counters, caused_cutoff: bool) void {
@@ -793,11 +793,11 @@ pub const Counters = struct {
     }
 
     pub inline fn prune(self: *Counters, cause: PruneCause) void {
-        self.prunes_by_cause[@intFromEnum(cause)] += 1;
+        self.prunes_by_cause[@backingInt(cause)] += 1;
     }
 
     pub inline fn extension(self: *Counters, cause: ExtensionCause) void {
-        self.extensions_by_cause[@intFromEnum(cause)] += 1;
+        self.extensions_by_cause[@backingInt(cause)] += 1;
     }
 
     pub inline fn rootSearch(self: *Counters, aspirated: bool) void {
@@ -885,7 +885,7 @@ pub const Counters = struct {
 
     pub inline fn internalIterativeReduction(self: *Counters, expectation: types.NodeExpectation) void {
         self.internal_iterative_reductions += 1;
-        self.internal_iterative_reductions_by_expectation[@intFromEnum(expectation)] += 1;
+        self.internal_iterative_reductions_by_expectation[@backingInt(expectation)] += 1;
     }
 
     pub inline fn singularAttempt(self: *Counters) void {
@@ -948,8 +948,8 @@ pub const Counters = struct {
         self.previous_root_score = result.value.raw();
         self.completed_iterations += 1;
         self.completed_depth = depth;
-        self.completed_by_bound[@intFromEnum(result.bound)] += 1;
-        self.completed_by_producer[@intFromEnum(result.provenance)] += 1;
+        self.completed_by_bound[@backingInt(result.bound)] += 1;
+        self.completed_by_producer[@backingInt(result.provenance)] += 1;
     }
 
     pub inline fn pruning(self: *Counters, candidate_mask: u8, applied_mask: u8) void {
@@ -964,8 +964,8 @@ test "whole-tree charge follows real ancestry across a same-ply exclusion search
     // save/restore pair the launching node's later children would inherit the
     // probe's ancestry and their cost would be billed to singular extension.
     // The oracle here is the shape of the walk itself, not a search result.
-    const ordinary_index = @intFromEnum(WorkCharge.ordinary);
-    const singular_index = @intFromEnum(WorkCharge.singular_probe);
+    const ordinary_index = @backingInt(WorkCharge.ordinary);
+    const singular_index = @backingInt(WorkCharge.singular_probe);
     var counters: Counters = .{};
     const context = types.PlyContext.root(false);
     const depth = types.DepthIntent.full(3);
@@ -1002,12 +1002,12 @@ test "nested speculation charges the innermost context and every enclosing one" 
     counters.nodeContext(.main, 2, context, .reduced_probe, depth, .cut);
     counters.nodeContext(.quiescence, 3, context, .quiescence, types.DepthIntent.full(0), .cut);
 
-    try std.testing.expectEqual(@as(u64, 1), counters.nodes_by_charge[@intFromEnum(WorkCharge.null_probe)]);
-    try std.testing.expectEqual(@as(u64, 2), counters.nodes_by_charge[@intFromEnum(WorkCharge.lmr_probe)]);
+    try std.testing.expectEqual(@as(u64, 1), counters.nodes_by_charge[@backingInt(WorkCharge.null_probe)]);
+    try std.testing.expectEqual(@as(u64, 2), counters.nodes_by_charge[@backingInt(WorkCharge.lmr_probe)]);
     // Both nested nodes still lie under the null probe that paid for them.
-    try std.testing.expectEqual(@as(u64, 3), counters.nodes_under_charge[@intFromEnum(WorkCharge.null_probe)]);
-    try std.testing.expectEqual(@as(u64, 2), counters.nodes_under_charge[@intFromEnum(WorkCharge.lmr_probe)]);
-    try std.testing.expectEqual(@as(u64, 1), counters.nodes_under_charge[@intFromEnum(WorkCharge.ordinary)]);
+    try std.testing.expectEqual(@as(u64, 3), counters.nodes_under_charge[@backingInt(WorkCharge.null_probe)]);
+    try std.testing.expectEqual(@as(u64, 2), counters.nodes_under_charge[@backingInt(WorkCharge.lmr_probe)]);
+    try std.testing.expectEqual(@as(u64, 1), counters.nodes_under_charge[@backingInt(WorkCharge.ordinary)]);
 }
 
 test "diagnostic overlap and root stability counters describe without deciding" {
@@ -1123,7 +1123,7 @@ test "diagnostic overlap and root stability counters describe without deciding" 
     try @import("std").testing.expectEqual(@as(u64, 1), counters.probcut_tt_cutoffs);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.probcut_tt_skips);
     try @import("std").testing.expectEqual(@as(u64, 2), counters.probcut_cutoffs);
-    try @import("std").testing.expectEqual(@as(u64, 2), counters.prunes_by_cause[@intFromEnum(PruneCause.probcut)]);
+    try @import("std").testing.expectEqual(@as(u64, 2), counters.prunes_by_cause[@backingInt(PruneCause.probcut)]);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.lmr_probes);
     try @import("std").testing.expectEqual(@as(u64, 2), counters.lmr_reduction_plies);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.lmr_multi_ply_probes);
@@ -1140,8 +1140,8 @@ test "diagnostic overlap and root stability counters describe without deciding" 
     try @import("std").testing.expectEqual(@as(u64, 1), counters.singular_multicut_candidates);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.singular_multicut_cutoffs);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.exclusion_moves_skipped);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.searched_by_source[@intFromEnum(ordering.Source.tt)]);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.fail_high_by_index[@intFromEnum(FailHighBucket.fourth_to_eighth)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.searched_by_source[@backingInt(ordering.Source.tt)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.fail_high_by_index[@backingInt(FailHighBucket.fourth_to_eighth)]);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.history_rewards);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.history_penalties);
     try @import("std").testing.expectEqual(@as(u64, 2), counters.contextual_history_lookups);
@@ -1151,43 +1151,43 @@ test "diagnostic overlap and root stability counters describe without deciding" 
     try @import("std").testing.expectEqual(@as(u64, 1), counters.contextual_history_lmr_failures);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.contextual_history_lmr_positive);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.contextual_history_lmr_negative);
-    try @import("std").testing.expectEqual(@as(u64, 2), counters.continuation_history_lookups[@intFromEnum(ordering.ContinuationDistance.two)]);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.continuation_history_nonzero[@intFromEnum(ordering.ContinuationDistance.two)]);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.continuation_history_from_check[@intFromEnum(ordering.ContinuationDistance.two)]);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.continuation_history_tactical[@intFromEnum(ordering.ContinuationDistance.two)]);
-    try @import("std").testing.expectEqual(@as(u64, 2), counters.continuation_history_rewards[@intFromEnum(ordering.ContinuationDistance.two)]);
-    try @import("std").testing.expectEqual(@as(u64, 3), counters.continuation_history_penalties[@intFromEnum(ordering.ContinuationDistance.two)]);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.continuation_history_updates_by_disposition[@intFromEnum(ordering.ContinuationDistance.four)][@intFromEnum(types.NodeDisposition.cutoff)]);
+    try @import("std").testing.expectEqual(@as(u64, 2), counters.continuation_history_lookups[@backingInt(ordering.ContinuationDistance.two)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.continuation_history_nonzero[@backingInt(ordering.ContinuationDistance.two)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.continuation_history_from_check[@backingInt(ordering.ContinuationDistance.two)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.continuation_history_tactical[@backingInt(ordering.ContinuationDistance.two)]);
+    try @import("std").testing.expectEqual(@as(u64, 2), counters.continuation_history_rewards[@backingInt(ordering.ContinuationDistance.two)]);
+    try @import("std").testing.expectEqual(@as(u64, 3), counters.continuation_history_penalties[@backingInt(ordering.ContinuationDistance.two)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.continuation_history_updates_by_disposition[@backingInt(ordering.ContinuationDistance.four)][@backingInt(types.NodeDisposition.cutoff)]);
     try @import("std").testing.expectEqual(@as(u64, 3), counters.capture_history_selections);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.capture_history_nonzero);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.capture_history_selections_by_consumer[@intFromEnum(TacticalConsumer.main)]);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.capture_history_selections_by_consumer[@intFromEnum(TacticalConsumer.quiescence)]);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.capture_history_selections_by_consumer[@intFromEnum(TacticalConsumer.probcut)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.capture_history_selections_by_consumer[@backingInt(TacticalConsumer.main)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.capture_history_selections_by_consumer[@backingInt(TacticalConsumer.quiescence)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.capture_history_selections_by_consumer[@backingInt(TacticalConsumer.probcut)]);
     try @import("std").testing.expectEqual(@as(u64, 2), counters.capture_history_rewards);
     try @import("std").testing.expectEqual(@as(u64, 3), counters.capture_history_penalties);
     try @import("std").testing.expectEqual(
         @as(u64, 1),
-        counters.capture_history_updates_by_disposition[@intFromEnum(types.NodeDisposition.exact)],
+        counters.capture_history_updates_by_disposition[@backingInt(types.NodeDisposition.exact)],
     );
     try @import("std").testing.expectEqual(
         @as(u64, 1),
-        counters.capture_history_updates_by_disposition[@intFromEnum(types.NodeDisposition.cutoff)],
+        counters.capture_history_updates_by_disposition[@backingInt(types.NodeDisposition.cutoff)],
     );
     try @import("std").testing.expectEqual(
         @as(u64, 1),
-        counters.contextual_history_updates_by_disposition[@intFromEnum(types.NodeDisposition.exact)],
+        counters.contextual_history_updates_by_disposition[@backingInt(types.NodeDisposition.exact)],
     );
     try @import("std").testing.expectEqual(
         @as(u64, 1),
-        counters.contextual_history_updates_by_disposition[@intFromEnum(types.NodeDisposition.cutoff)],
+        counters.contextual_history_updates_by_disposition[@backingInt(types.NodeDisposition.cutoff)],
     );
     try @import("std").testing.expectEqual(
         @as(u64, 0),
-        counters.contextual_history_updates_by_disposition[@intFromEnum(types.NodeDisposition.fail_low)],
+        counters.contextual_history_updates_by_disposition[@backingInt(types.NodeDisposition.fail_low)],
     );
     try @import("std").testing.expectEqual(@as(u64, 1), counters.lmr_history_protections);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.lmr_modifier_protect[@intFromEnum(LmrModifier.improving)]);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.lmr_modifier_deepen[@intFromEnum(LmrModifier.tt_move)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.lmr_modifier_protect[@backingInt(LmrModifier.improving)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.lmr_modifier_deepen[@backingInt(LmrModifier.tt_move)]);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.lmr_adjusted_shallower);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.lmr_adjusted_deeper);
     try @import("std").testing.expectEqual(@as(u64, 2), counters.qsearch_stand_pat_nodes);
@@ -1202,9 +1202,9 @@ test "diagnostic overlap and root stability counters describe without deciding" 
     try @import("std").testing.expectEqual(@as(u64, 2), counters.correction_lookups);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.correction_nonzero_lookups);
     try @import("std").testing.expectEqual(@as(i32, 12), counters.correction_max_abs);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.correction_updates_by_bound[@intFromEnum(types.Bound.exact)]);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.correction_updates_by_bound[@intFromEnum(types.Bound.lower)]);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.correction_updates_by_bound[@intFromEnum(types.Bound.upper)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.correction_updates_by_bound[@backingInt(types.Bound.exact)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.correction_updates_by_bound[@backingInt(types.Bound.lower)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.correction_updates_by_bound[@backingInt(types.Bound.upper)]);
     try @import("std").testing.expectEqual(@as(u64, 2), counters.correction_positive_updates);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.correction_negative_updates);
     try @import("std").testing.expectEqual(@as(u64, 40), counters.correction_exact_raw_abs_error);
@@ -1231,10 +1231,10 @@ test "diagnostic overlap and root stability counters describe without deciding" 
     try @import("std").testing.expectEqual(@as(u64, 2), counters.capture_futility_candidates);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.capture_futility_prunes);
     try @import("std").testing.expectEqual(@as(u64, 1), counters.capture_futility_check_exemptions);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.prunes_by_cause[@intFromEnum(PruneCause.razoring)]);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.prunes_by_cause[@intFromEnum(PruneCause.futility)]);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.prunes_by_cause[@intFromEnum(PruneCause.late_move)]);
-    try @import("std").testing.expectEqual(@as(u64, 1), counters.prunes_by_cause[@intFromEnum(PruneCause.null_move)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.prunes_by_cause[@backingInt(PruneCause.razoring)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.prunes_by_cause[@backingInt(PruneCause.futility)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.prunes_by_cause[@backingInt(PruneCause.late_move)]);
+    try @import("std").testing.expectEqual(@as(u64, 1), counters.prunes_by_cause[@backingInt(PruneCause.null_move)]);
     try @import("std").testing.expectEqual(@as(u16, 1), counters.root_best_changes);
     try @import("std").testing.expectEqual(@as(u16, 1), counters.root_score_changes);
 }

@@ -109,7 +109,7 @@ test "bench repeats reset shared search state" {
 }
 
 test "optimized safety and production modes preserve the accepted MAN-S36 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -125,7 +125,7 @@ test "optimized safety and production modes preserve the accepted MAN-S36 finger
     // and the prospectively frozen candidate report; do not relabel MAN-S30.
     const report = bench.runWithFeatures(
         .{},
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -143,7 +143,7 @@ test "optimized safety and production modes preserve the accepted MAN-S36 finger
 }
 
 test "disabling the MAN-S36 core reconstructs the superseded MAN-S35 tree" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     // MAN-S36 accepted H1 and became production, so its umbrella now runs the
     // other way: switching it off must rebuild MAN-S35 exactly. That keeps the
     // promoted package ablatable as a whole and preserves the causal ledger
@@ -168,7 +168,7 @@ test "disabling the MAN-S36 core reconstructs the superseded MAN-S35 tree" {
             .settled_mate_stop = false,
             .pv_table_refusal = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -180,7 +180,7 @@ test "disabling the MAN-S36 core reconstructs the superseded MAN-S35 tree" {
 }
 
 test "archived depth-authority cluster reproduces the MAN-S21 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -192,7 +192,7 @@ test "archived depth-authority cluster reproduces the MAN-S21 fingerprint" {
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = true },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -204,7 +204,7 @@ test "archived depth-authority cluster reproduces the MAN-S21 fingerprint" {
 }
 
 test "default-off candidate heads build and search" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     // Both switches default off, so nothing else in the suite instantiates the
     // search generic with them on. A candidate path that does not compile is
     // invisible until someone tries to build the candidate, which is exactly
@@ -229,7 +229,7 @@ test "default-off candidate heads build and search" {
         var clock = IncrementingClock{};
         const report = runArchived(
             candidate[0],
-            .{ .depth = bench.default_depth },
+            .{ .depth = bench.fingerprint_depth },
             &clock,
             &control,
             &thread,
@@ -242,7 +242,7 @@ test "default-off candidate heads build and search" {
 }
 
 test "disabling MAN-S30 staging reconstructs the archived MAN-S29 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     // MAN-S30 accepted H1 and became production, so the switch now runs the
     // other way: turning live-history staging off must still rebuild the
     // superseded eager picker exactly on the unchanged MAN-S29 parameter head.
@@ -266,7 +266,7 @@ test "disabling MAN-S30 staging reconstructs the archived MAN-S29 fingerprint" {
             .settled_mate_stop = false,
             .pv_table_refusal = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -278,7 +278,7 @@ test "disabling MAN-S30 staging reconstructs the archived MAN-S29 fingerprint" {
 }
 
 test "disabling MAN-S35 mate windows reconstructs the superseded MAN-S34 tree" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     // MAN-S35's switch runs the other way from its promotion: turning the
     // complete clip off, on the pre-core head, must rebuild MAN-S34 exactly. That
     // keeps the promoted mechanism independently ablatable and preserves the
@@ -302,7 +302,7 @@ test "disabling MAN-S35 mate windows reconstructs the superseded MAN-S34 tree" {
             .settled_mate_stop = false,
             .pv_table_refusal = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -314,7 +314,7 @@ test "disabling MAN-S35 mate windows reconstructs the superseded MAN-S34 tree" {
 }
 
 test "MAN-S33 singular exclusion horizon builds on the current production head" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     // SCORE-011/QUAL-015: this frozen diagnostic proves the default-off switch
     // selects the qualified candidate tree on MAN-S30. It is not strength
     // evidence; only the prospectively registered time-controlled games decide
@@ -340,7 +340,7 @@ test "MAN-S33 singular exclusion horizon builds on the current production head" 
             .settled_mate_stop = false,
             .pv_table_refusal = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -352,7 +352,7 @@ test "MAN-S33 singular exclusion horizon builds on the current production head" 
 }
 
 test "MAN-R02 stability aspiration builds on the MAN-S29 picker it was qualified under" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     // This exact total proves that the default-off candidate is live and
     // buildable on MAN-S29, not that fewer nodes are speed or Elo. Step 6.5.1b
     // changed the production picker and Step 6.5.10.1 the mate windows after
@@ -378,7 +378,7 @@ test "MAN-R02 stability aspiration builds on the MAN-S29 picker it was qualified
             .settled_mate_stop = false,
             .pv_table_refusal = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -390,7 +390,7 @@ test "MAN-R02 stability aspiration builds on the MAN-S29 picker it was qualified
 }
 
 test "archived main-selectivity cluster reproduces the rejected MAN-S20 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -402,7 +402,7 @@ test "archived main-selectivity cluster reproduces the rejected MAN-S20 fingerpr
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = true },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -414,7 +414,7 @@ test "archived main-selectivity cluster reproduces the rejected MAN-S20 fingerpr
 }
 
 test "evaluation qsearch cluster switch restores the accepted MAN-S17 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -426,7 +426,7 @@ test "evaluation qsearch cluster switch restores the accepted MAN-S17 fingerprin
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -438,7 +438,7 @@ test "evaluation qsearch cluster switch restores the accepted MAN-S17 fingerprin
 }
 
 test "rejected MAN-S18 switch retains its qualified diagnostic fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -450,7 +450,7 @@ test "rejected MAN-S18 switch retains its qualified diagnostic fingerprint" {
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false, .lmr_synchronization = true },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -462,7 +462,7 @@ test "rejected MAN-S18 switch retains its qualified diagnostic fingerprint" {
 }
 
 test "continuation-history switch restores the accepted MAN-S15 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -474,7 +474,7 @@ test "continuation-history switch restores the accepted MAN-S15 fingerprint" {
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false, .lmr_synchronization = false, .continuation_history = false },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -486,7 +486,7 @@ test "continuation-history switch restores the accepted MAN-S15 fingerprint" {
 }
 
 test "capture-history switch preserves the rejected MAN-S16 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -498,7 +498,7 @@ test "capture-history switch preserves the rejected MAN-S16 fingerprint" {
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false, .lmr_synchronization = false, .capture_history = true, .continuation_history = false },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -510,7 +510,7 @@ test "capture-history switch preserves the rejected MAN-S16 fingerprint" {
 }
 
 test "dynamic LMR switch restores the accepted MAN-S13 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -522,7 +522,7 @@ test "dynamic LMR switch restores the accepted MAN-S13 fingerprint" {
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false, .lmr_synchronization = false, .capture_history = false, .dynamic_lmr = false, .continuation_history = false },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -534,7 +534,7 @@ test "dynamic LMR switch restores the accepted MAN-S13 fingerprint" {
 }
 
 test "LMR reply-feedback switch reproduces the archived MAN-S14 candidate fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -546,7 +546,7 @@ test "LMR reply-feedback switch reproduces the archived MAN-S14 candidate finger
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false, .lmr_synchronization = false, .capture_history = false, .dynamic_lmr = false, .continuation_history = false, .lmr_reply_feedback = true },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -558,7 +558,7 @@ test "LMR reply-feedback switch reproduces the archived MAN-S14 candidate finger
 }
 
 test "contextual-history switch restores the accepted MAN-S12 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -570,7 +570,7 @@ test "contextual-history switch restores the accepted MAN-S12 fingerprint" {
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false, .lmr_synchronization = false, .capture_history = false, .dynamic_lmr = false, .contextual_history = false },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -582,7 +582,7 @@ test "contextual-history switch restores the accepted MAN-S12 fingerprint" {
 }
 
 test "depth-authority family switch restores the accepted MAN-S07 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -605,7 +605,7 @@ test "depth-authority family switch restores the accepted MAN-S07 fingerprint" {
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -617,7 +617,7 @@ test "depth-authority family switch restores the accepted MAN-S07 fingerprint" {
 }
 
 test "ProbCut switch restores the accepted MAN-S11 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -639,7 +639,7 @@ test "ProbCut switch restores the accepted MAN-S11 fingerprint" {
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -653,7 +653,7 @@ test "ProbCut switch restores the accepted MAN-S11 fingerprint" {
 }
 
 test "shallow-selectivity family switch restores the accepted MAN-S10 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -675,7 +675,7 @@ test "shallow-selectivity family switch restores the accepted MAN-S10 fingerprin
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -687,7 +687,7 @@ test "shallow-selectivity family switch restores the accepted MAN-S10 fingerprin
 }
 
 test "parked razoring component retains its own qualified diagnostic fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -710,7 +710,7 @@ test "parked razoring component retains its own qualified diagnostic fingerprint
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -725,7 +725,7 @@ test "parked razoring component retains its own qualified diagnostic fingerprint
 }
 
 test "search-context switch preserves the accepted MAN-S07 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -748,7 +748,7 @@ test "search-context switch preserves the accepted MAN-S07 fingerprint" {
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -761,7 +761,7 @@ test "search-context switch preserves the accepted MAN-S07 fingerprint" {
 }
 
 test "parked MAN-S08 switch retains its qualified diagnostic fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -788,7 +788,7 @@ test "parked MAN-S08 switch retains its qualified diagnostic fingerprint" {
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -801,7 +801,7 @@ test "parked MAN-S08 switch retains its qualified diagnostic fingerprint" {
 }
 
 test "qsearch SEE switch restores the accepted MAN-S04 fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -826,7 +826,7 @@ test "qsearch SEE switch restores the accepted MAN-S04 fingerprint" {
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -839,7 +839,7 @@ test "qsearch SEE switch restores the accepted MAN-S04 fingerprint" {
 }
 
 test "rejected MAN-S06 switches retain their qualified diagnostic fingerprint" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(
         std.testing.allocator,
         bench.hash_bytes / (1024 * 1024),
@@ -866,7 +866,7 @@ test "rejected MAN-S06 switches retain their qualified diagnostic fingerprint" {
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,

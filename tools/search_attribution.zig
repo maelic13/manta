@@ -25,10 +25,10 @@ const EvalBinding = manta.eval.contract.Binding(manta.eval.hce.Hce, manta.eval.t
 
 pub const schema = "manta-search-attribution-v1";
 
-const charge_count = @typeInfo(search.diagnostics.WorkCharge).@"enum".fields.len;
-const route_count = @typeInfo(search.types.EntryRoute).@"enum".fields.len;
-const lookup_count = @typeInfo(search.diagnostics.TableLookup).@"enum".fields.len;
-const store_outcome_count = @typeInfo(search.tt.StoreOutcome).@"enum".fields.len;
+const charge_count = @typeInfo(search.diagnostics.WorkCharge).@"enum".field_names.len;
+const route_count = @typeInfo(search.types.EntryRoute).@"enum".field_names.len;
+const lookup_count = @typeInfo(search.diagnostics.TableLookup).@"enum".field_names.len;
+const store_outcome_count = @typeInfo(search.tt.StoreOutcome).@"enum".field_names.len;
 
 const Harness = struct {
     evaluator: manta.eval.hce.Hce = .{},
@@ -217,17 +217,17 @@ fn measure(
     if (counters.context_nodes != result.nodes) return error.NodeAccounting;
     if (sum(&counters.nodes_by_charge) != counters.context_nodes) return error.ChargeAccounting;
 
-    const check_index = @intFromEnum(search.diagnostics.ExtensionCause.check);
-    const singular_index = @intFromEnum(search.diagnostics.ExtensionCause.singular);
-    const null_index = @intFromEnum(search.diagnostics.PruneCause.null_move);
-    const probcut_index = @intFromEnum(search.diagnostics.PruneCause.probcut);
-    const late_move_index = @intFromEnum(search.diagnostics.PruneCause.late_move);
-    const futility_index = @intFromEnum(search.diagnostics.PruneCause.futility);
-    const see_index = @intFromEnum(search.diagnostics.PruneCause.see);
-    const history_index = @intFromEnum(search.diagnostics.PruneCause.history);
-    const razoring_index = @intFromEnum(search.diagnostics.PruneCause.razoring);
-    const reverse_index = @intFromEnum(search.diagnostics.PruneCause.reverse_futility);
-    const first_index = @intFromEnum(search.diagnostics.FailHighBucket.first);
+    const check_index = @backingInt(search.diagnostics.ExtensionCause.check);
+    const singular_index = @backingInt(search.diagnostics.ExtensionCause.singular);
+    const null_index = @backingInt(search.diagnostics.PruneCause.null_move);
+    const probcut_index = @backingInt(search.diagnostics.PruneCause.probcut);
+    const late_move_index = @backingInt(search.diagnostics.PruneCause.late_move);
+    const futility_index = @backingInt(search.diagnostics.PruneCause.futility);
+    const see_index = @backingInt(search.diagnostics.PruneCause.see);
+    const history_index = @backingInt(search.diagnostics.PruneCause.history);
+    const razoring_index = @backingInt(search.diagnostics.PruneCause.razoring);
+    const reverse_index = @backingInt(search.diagnostics.PruneCause.reverse_futility);
+    const first_index = @backingInt(search.diagnostics.FailHighBucket.first);
     return .{
         .position = index,
         .depth = completed.depth,
@@ -301,8 +301,8 @@ fn printDepthSummary(rows: []const Row, depth: u16, previous_nodes: *u64) void {
 
 fn printShares(label: []const u8, values: [charge_count]u64, total: u64) void {
     std.debug.print("{s}", .{label});
-    inline for (@typeInfo(search.diagnostics.WorkCharge).@"enum".fields, 0..) |field, index|
-        std.debug.print(" {s}={d}%", .{ field.name, percent(values[index], total) });
+    inline for (@typeInfo(search.diagnostics.WorkCharge).@"enum".field_names, 0..) |field_name, index|
+        std.debug.print(" {s}={d}%", .{ field_name, percent(values[index], total) });
     std.debug.print("\n", .{});
 }
 
@@ -351,11 +351,11 @@ fn printCorpusSummary(rows: []const Row, options: Options) void {
         .{ lmr_probes, lmr_researches, percent(lmr_researches, lmr_probes) },
     );
     std.debug.print("  tt_lookups", .{});
-    inline for (@typeInfo(search.diagnostics.TableLookup).@"enum".fields, 0..) |field, index|
-        std.debug.print(" {s}={d}", .{ field.name, lookups[index] });
+    inline for (@typeInfo(search.diagnostics.TableLookup).@"enum".field_names, 0..) |field_name, index|
+        std.debug.print(" {s}={d}", .{ field_name, lookups[index] });
     std.debug.print("\n  tt_stores", .{});
-    inline for (@typeInfo(search.tt.StoreOutcome).@"enum".fields, 0..) |field, index|
-        std.debug.print(" {s}={d}", .{ field.name, stores[index] });
+    inline for (@typeInfo(search.tt.StoreOutcome).@"enum".field_names, 0..) |field_name, index|
+        std.debug.print(" {s}={d}", .{ field_name, stores[index] });
     std.debug.print("\n", .{});
 }
 
@@ -363,7 +363,7 @@ fn renderJson(allocator: std.mem.Allocator, rows: []const Row, options: Options)
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
     var buffer: [1024]u8 = undefined;
-    try output.appendSlice(allocator, try std.fmt.bufPrint(
+    try output.appendSlice(allocator, try std.mem.print(
         &buffer,
         "{{\n  \"schema\": \"{s}\",\n  \"build\": \"{s}\",\n  \"hash_mib\": {d},\n  \"min_depth\": {d},\n  \"max_depth\": {d},\n  \"positions\": {d},\n  \"rows\": [\n",
         .{
@@ -376,7 +376,7 @@ fn renderJson(allocator: std.mem.Allocator, rows: []const Row, options: Options)
         },
     ));
     for (rows, 0..) |row, index| {
-        try output.appendSlice(allocator, try std.fmt.bufPrint(
+        try output.appendSlice(allocator, try std.mem.print(
             &buffer,
             "    {{\"position\": {d}, \"depth\": {d}, \"nodes\": {d}, \"main\": {d}, \"quiescence\": {d}, \"ms\": {d}, \"generated\": {d}, \"searched\": {d}, \"searched_main\": {d}, \"searched_quiescence\": {d}, \"tt_move_available\": {d}, \"tt_move_best\": {d}, \"cutoffs\": {d}, \"first_move_cutoffs\": {d}, \"in_check\": {d}, \"check_chain_max\": {d}, \"extension_chain_max\": {d}, \"extended\": {d}, \"check_extensions\": {d}, \"singular_attempts\": {d}, \"singular_extensions\": {d}, \"lmr_probes\": {d}, \"lmr_researches\": {d}, \"null_attempts\": {d}, \"null_cutoffs\": {d}, \"probcut_nodes\": {d}, \"probcut_cutoffs\": {d}, \"aspiration_fail_lows\": {d}, \"aspiration_fail_highs\": {d}",
             .{
@@ -393,7 +393,7 @@ fn renderJson(allocator: std.mem.Allocator, rows: []const Row, options: Options)
             },
         ));
         // A second call: one format call takes at most 32 arguments.
-        try output.appendSlice(allocator, try std.fmt.bufPrint(
+        try output.appendSlice(allocator, try std.mem.print(
             &buffer,
             ", \"prunes_late_move\": {d}, \"prunes_quiet_futility\": {d}, \"prunes_history\": {d}, \"prunes_see\": {d}, \"prunes_reverse_futility\": {d}, \"prunes_razoring\": {d}, \"null_verifications\": {d}",
             .{
@@ -403,7 +403,7 @@ fn renderJson(allocator: std.mem.Allocator, rows: []const Row, options: Options)
                 row.null_verifications,
             },
         ));
-        try output.appendSlice(allocator, try std.fmt.bufPrint(
+        try output.appendSlice(allocator, try std.mem.print(
             &buffer,
             ", \"prunes_late_move\": {d}, \"prunes_quiet_futility\": {d}, \"prunes_see\": {d}, \"prunes_reverse_futility\": {d}",
             .{
@@ -432,13 +432,13 @@ fn appendEnumObject(
     values: anytype,
 ) !void {
     var buffer: [256]u8 = undefined;
-    try output.appendSlice(allocator, try std.fmt.bufPrint(&buffer, ", \"{s}\": {{", .{name}));
-    inline for (@typeInfo(Enum).@"enum".fields, 0..) |field, index| {
+    try output.appendSlice(allocator, try std.mem.print(&buffer, ", \"{s}\": {{", .{name}));
+    inline for (@typeInfo(Enum).@"enum".field_names, 0..) |field_name, index| {
         const separator = if (index == 0) "" else ", ";
-        try output.appendSlice(allocator, try std.fmt.bufPrint(
+        try output.appendSlice(allocator, try std.mem.print(
             &buffer,
             "{s}\"{s}\": {d}",
-            .{ separator, field.name, values[index] },
+            .{ separator, field_name, values[index] },
         ));
     }
     try output.appendSlice(allocator, "}");
@@ -526,7 +526,7 @@ test "a shallow sweep keeps its charge partition exact on every position" {
     // The corpus rows are only comparable if each one is an exact partition of
     // its own tree. Depth two is cheap enough for the ordinary test gate and
     // still exercises quiescence, extensions and the transposition table.
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     var hash = try manta.engine.runtime.HashResource.init(std.testing.allocator, 1);
     defer hash.deinit(std.testing.allocator);
     var thread = search.types.ThreadState.init();

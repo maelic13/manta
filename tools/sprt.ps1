@@ -144,6 +144,13 @@
     completed game lines. Calibration, fixed-time and fixed-node runs cannot
     use this switch; non-time engine/protocol/infrastructure faults stay fatal.
 
+.PARAMETER CompilerComparison
+    Declare that the Zig version is the variable under test, as in a release
+    that changes only the toolchain. The compiler-equality guard then reports
+    both compilers instead of refusing, and the run manifest records the
+    declaration. Refused when both arms share a compiler. Never use it to run
+    an ordinary candidate across a toolchain change.
+
 .PARAMETER DryRun
     Resolve engines, manifests, options, placement, seed and test design, then
     exit before creating result artifacts or starting fastchess.
@@ -191,6 +198,7 @@ param(
     [int]$Nodes = 0,
     [int]$TimeMargin = 20,
     [switch]$ScoreCompletedTimeForfeits,
+    [switch]$CompilerComparison,
     [switch]$DryRun,
     [string]$Book = "$PSScriptRoot\books\UHO_Lichess_4852_v1.epd",
     [string]$FastchessPath = "$PSScriptRoot\bin\fastchess.exe"
@@ -398,13 +406,21 @@ foreach ($pair in @(@($EngineA, $NameA), @($EngineB, $NameB))) {
 }
 if ($compilers.Count -eq 2 -and $compilers[$NameA] -and $compilers[$NameB]) {
     $cA = $compilers[$NameA]; $cB = $compilers[$NameB]
-    if ($cA -ne $cB) {
+    if ($CompilerComparison) {
+        if ($cA -eq $cB) {
+            throw "-CompilerComparison declared, but both engines were built with zig $cA."
+        }
+        Write-Host "  Compiler comparison declared: $NameA zig $cA vs $NameB zig $cB" -ForegroundColor Yellow
+    } elseif ($cA -ne $cB) {
         throw ("COMPILER MISMATCH - this match would measure the compiler, not the change.`n" +
                "  $NameA : $cA`n  $NameB : $cB`n" +
                "Rebuild BOTH engines with the pinned toolchain " +
                "(build_support/zig_version.zig) via tools/build_test.ps1, then re-run.")
+    } else {
+        Write-Host "  Compiler equality OK: zig $cA"
     }
-    Write-Host "  Compiler equality OK: zig $cA"
+} elseif ($CompilerComparison) {
+    throw "-CompilerComparison needs build manifests for both engines to name their compilers."
 }
 
 if ($engineManifests.Count -eq 2) {
@@ -452,6 +468,7 @@ if (-not $repoSha) { $repoSha = "n/a" } else { $repoSha = $repoSha.Trim() }
     "engineB:         $NameB = $EngineB"
     "engineB_sha256:  $shaB"
     "repo_revision:   $repoSha"
+    "compilers:       $(if ($compilers.Count -eq 2) { "$NameA=zig $($compilers[$NameA]) $NameB=zig $($compilers[$NameB])" } else { 'not checkable' })$(if ($CompilerComparison) { '; compiler comparison declared' } else { '' })"
     "test_design:     $(if ($Mode -eq 'calibrate') { "fixed ${Games}-game null; tolerance +/-${CalibrationTolerance} nElo" } elseif ($Mode -eq 'fixed') { "fixed ${Games}-game match; no stop rule" } else { "SPRT elo0=$Elo0 elo1=$Elo1 alpha=$Alpha beta=$Beta model=normalized" })"
     "game_budget:     $(if ($Mode -eq 'calibrate' -or $Mode -eq 'fixed') { $Games } else { $MaxGames })"
     "time_control:    $tcLabel; timemargin=${TimeMargin}ms"
