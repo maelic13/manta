@@ -6,6 +6,12 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Manta now builds with Zig 0.17.0, which also builds and runs natively on
+  Windows ARM64. Playing behavior is unchanged: the one-thread depth-6
+  fingerprint stays `355,879`.
+
 ## [1.2.0] - 2026-09-16
 
 ### Fixed

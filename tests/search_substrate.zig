@@ -64,9 +64,9 @@ test "warm transposition evidence preserves the exact root result" {
     // replayed a stored verdict: the root derives its own, since a record
     // carries neither repetition history nor halfmove clock.
     try std.testing.expectEqual(search.types.Provenance.full_search, warm.evidence.provenance);
-    try std.testing.expect(second_counters.tt_usable_by_producer[@intFromEnum(search.types.Provenance.full_search)] != 0);
+    try std.testing.expect(second_counters.tt_usable_by_producer[@backingInt(search.types.Provenance.full_search)] != 0);
     try std.testing.expect(second_counters.tt_lookups_by_outcome[
-        @intFromEnum(search.diagnostics.TableLookup.cutoff_refused)
+        @backingInt(search.diagnostics.TableLookup.cutoff_refused)
     ] != 0);
 }
 
@@ -257,7 +257,7 @@ test "diagnostics enabled and disabled preserve the complete search fingerprint"
     try std.testing.expectEqual(@as(u64, enabled_observer.completed_iterations), enabled_observer.root_searches);
     try std.testing.expectEqual(@as(u64, 0), enabled_observer.aspiration_searches);
     try std.testing.expect(enabled_observer.generated_moves >= enabled_observer.searched_main_moves);
-    try std.testing.expect(enabled_observer.tt_stores_by_producer[@intFromEnum(search.types.Provenance.full_search)] != 0);
+    try std.testing.expect(enabled_observer.tt_stores_by_producer[@backingInt(search.types.Provenance.full_search)] != 0);
     try std.testing.expect(enabled_observer.max_nodes_between_stop_checks <= 1);
 }
 
@@ -397,7 +397,7 @@ test "verified null move prunes non-pawn positions and excludes pawn-only zugzwa
     try std.testing.expect(rich_counters.null_move_cutoffs != 0);
     try std.testing.expect(rich_counters.null_move_cutoffs <= rich_counters.null_move_verifications);
     try std.testing.expect(
-        rich_counters.tt_stores_by_producer[@intFromEnum(search.types.Provenance.null_move)] != 0,
+        rich_counters.tt_stores_by_producer[@backingInt(search.types.Provenance.null_move)] != 0,
     );
 
     const pawn_fen = "8/pp2k3/8/2p5/2P5/1P2K3/P7/8 w - - 0 1";
@@ -591,14 +591,14 @@ test "qsearch SEE rejects only losing nonchecking captures" {
     );
     try std.testing.expectEqual(
         enabled_counters.qsearch_see_prunes,
-        enabled_counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.see)],
+        enabled_counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.see)],
     );
     if (comptime search.types.search_evidence_observation_compiled)
         try std.testing.expect(
             enabled_harness.thread.search_evidence.summary().qsearch_outcomes_with_omissions != 0,
         );
     try std.testing.expectEqual(@as(u64, 0), disabled_counters.qsearch_see_candidates);
-    try std.testing.expectEqual(@as(u64, 0), disabled_counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.see)]);
+    try std.testing.expectEqual(@as(u64, 0), disabled_counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.see)]);
     try std.testing.expectEqual(search.types.Bound.exact, enabled.evidence.bound);
     try std.testing.expectEqual(search.types.Bound.exact, disabled.evidence.bound);
     try std.testing.expect(chess.movegen.isLegal(&enabled_position, enabled.best_move.?));
@@ -676,12 +676,12 @@ test "frontier reverse futility is ablatable and keeps speculative evidence out 
     try std.testing.expect(enabled_counters.reverse_futility_cutoffs != 0);
     try std.testing.expectEqual(
         enabled_counters.reverse_futility_cutoffs,
-        enabled_counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.reverse_futility)],
+        enabled_counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.reverse_futility)],
     );
     try std.testing.expectEqual(@as(u64, 0), disabled_counters.reverse_futility_candidates);
     try std.testing.expectEqual(
         @as(u64, 0),
-        enabled_counters.tt_stores_by_producer[@intFromEnum(search.types.Provenance.speculative_cutoff)],
+        enabled_counters.tt_stores_by_producer[@backingInt(search.types.Provenance.speculative_cutoff)],
     );
     try std.testing.expectEqual(search.types.Bound.exact, enabled.evidence.bound);
     try std.testing.expectEqual(search.types.Bound.exact, disabled.evidence.bound);
@@ -783,8 +783,8 @@ test "shallow selectivity family is ablatable and preserves legal root publicati
     try std.testing.expect(enabled_counters.capture_futility_candidates != 0);
     try std.testing.expect(enabled_counters.reverse_futility_candidates != 0);
     try std.testing.expect(enabled_counters.reverse_futility_cutoffs != 0);
-    try std.testing.expect(enabled_counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.futility)] != 0);
-    try std.testing.expect(enabled_counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.late_move)] != 0);
+    try std.testing.expect(enabled_counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.futility)] != 0);
+    try std.testing.expect(enabled_counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.late_move)] != 0);
     // Razoring is a parked component: the default family never triggers it.
     try std.testing.expectEqual(@as(u64, 0), enabled_counters.razoring_candidates);
     try std.testing.expectEqual(@as(u64, 0), disabled_counters.quiet_futility_candidates);
@@ -796,7 +796,7 @@ test "shallow selectivity family is ablatable and preserves legal root publicati
     try std.testing.expectEqual(@as(u64, 0), disabled_counters.capture_futility_candidates);
     try std.testing.expectEqual(
         @as(u64, 0),
-        enabled_counters.tt_stores_by_producer[@intFromEnum(search.types.Provenance.speculative_cutoff)],
+        enabled_counters.tt_stores_by_producer[@backingInt(search.types.Provenance.speculative_cutoff)],
     );
     try std.testing.expectEqual(search.types.Bound.exact, enabled.evidence.bound);
     try std.testing.expectEqual(search.types.Bound.exact, disabled.evidence.bound);
@@ -927,11 +927,11 @@ test "search context is behavior-neutral and accounts for every completed node" 
     );
     try std.testing.expectEqual(
         enabled_counters.quiescence_nodes,
-        enabled_counters.context_by_route[@intFromEnum(search.types.EntryRoute.quiescence)],
+        enabled_counters.context_by_route[@backingInt(search.types.EntryRoute.quiescence)],
     );
     try std.testing.expectEqual(
         enabled_counters.lmr_probes,
-        enabled_counters.context_by_route[@intFromEnum(search.types.EntryRoute.reduced_probe)],
+        enabled_counters.context_by_route[@backingInt(search.types.EntryRoute.reduced_probe)],
     );
     try std.testing.expectEqual(@as(u64, 0), enabled_counters.extended_depth_intents);
     try std.testing.expectEqual(@as(u64, 0), disabled_counters.context_nodes);
@@ -977,10 +977,10 @@ test "check extension is independently ablatable and preserves legal evasion pub
         &disabled_counters,
     );
 
-    try std.testing.expect(enabled_counters.extensions_by_cause[@intFromEnum(search.diagnostics.ExtensionCause.check)] != 0);
+    try std.testing.expect(enabled_counters.extensions_by_cause[@backingInt(search.diagnostics.ExtensionCause.check)] != 0);
     try std.testing.expectEqual(
         @as(u64, 0),
-        disabled_counters.extensions_by_cause[@intFromEnum(search.diagnostics.ExtensionCause.check)],
+        disabled_counters.extensions_by_cause[@backingInt(search.diagnostics.ExtensionCause.check)],
     );
     try std.testing.expectEqual(@as(u16, 2), enabled.completed.?.depth);
     try std.testing.expectEqual(@as(u16, 2), disabled.completed.?.depth);
@@ -1161,10 +1161,10 @@ test "the core omission rules are live and leave legal published lines" {
             &counters,
         );
         total_omissions +=
-            counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.late_move)] +
-            counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.futility)] +
-            counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.history)] +
-            counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.see)];
+            counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.late_move)] +
+            counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.futility)] +
+            counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.history)] +
+            counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.see)];
         try expectLegalPv(fen_text, result.completed.?.pv.slice());
         try std.testing.expect(chess.movegen.isLegal(&position, result.best_move.?));
         try std.testing.expect(chess.state.isConsistent(&position));
@@ -1235,9 +1235,9 @@ test "core omission refuses principal nodes, checks and decisive windows" {
     );
     try std.testing.expectEqual(@as(i32, 1), result.evidence.value.mateDistance().?);
     const omissions =
-        counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.late_move)] +
-        counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.futility)] +
-        counters.prunes_by_cause[@intFromEnum(search.diagnostics.PruneCause.history)];
+        counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.late_move)] +
+        counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.futility)] +
+        counters.prunes_by_cause[@backingInt(search.diagnostics.PruneCause.history)];
     try std.testing.expectEqual(@as(u64, 0), omissions);
 }
 
@@ -1469,8 +1469,8 @@ test "production reverse futility and razoring keep speculative evidence out of 
     // below: whatever branch produced it, nothing labelled
     // `speculative_cutoff` may enter the table. Non-vacuity: reverse futility
     // actually cut somewhere in the corpus.
-    const producer_index = @intFromEnum(search.types.Provenance.speculative_cutoff);
-    const rfp_index = @intFromEnum(search.diagnostics.PruneCause.reverse_futility);
+    const producer_index = @backingInt(search.types.Provenance.speculative_cutoff);
+    const rfp_index = @backingInt(search.diagnostics.PruneCause.reverse_futility);
     var cuts: u64 = 0;
     for (core_positions) |fen_text| {
         var root: chess.position.PositionState = .{};
@@ -1523,7 +1523,7 @@ test "an unverified core null cutoff leaves no table authority behind" {
     // `null_move_cutoffs` counts accepted verifications plus unverified
     // cutoffs, so any excess over `null_move_verifications` can only have come
     // from the unverified branch.
-    const producer_index = @intFromEnum(search.types.Provenance.null_move);
+    const producer_index = @backingInt(search.types.Provenance.null_move);
     var unverified_cutoffs: u64 = 0;
     for (core_positions) |fen_text| {
         for ([_]u16{ 5, 7, 9 }) |depth| {
@@ -1632,7 +1632,7 @@ test "mate windows are behavior-identical wherever no mate score enters the wind
         );
         try std.testing.expectEqual(
             @as(u64, 0),
-            baseline_counters.outcomes_by_producer[@intFromEnum(search.types.Provenance.mate_distance)],
+            baseline_counters.outcomes_by_producer[@backingInt(search.types.Provenance.mate_distance)],
         );
     }
 }
@@ -1892,7 +1892,7 @@ test "MAN-S31 preserves root extension and removes only interior check increment
             &counters,
         );
         try std.testing.expectEqual(@as(u16, 2), result.completed.?.depth);
-        try std.testing.expectEqual(@as(u64, if (case.root_checked) 2 else 0), counters.extensions_by_cause[@intFromEnum(search.diagnostics.ExtensionCause.check)]);
+        try std.testing.expectEqual(@as(u64, if (case.root_checked) 2 else 0), counters.extensions_by_cause[@backingInt(search.diagnostics.ExtensionCause.check)]);
         try std.testing.expect(counters.context_in_check != 0);
         if (!case.root_checked)
             try std.testing.expectEqual(@as(?i32, 1), result.evidence.value.mateDistance());
@@ -2122,11 +2122,11 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
     try std.testing.expectEqual(counters.singular_attempts, counters.exclusion_moves_skipped);
     try std.testing.expectEqual(
         counters.singular_attempts,
-        counters.context_by_route[@intFromEnum(search.types.EntryRoute.singular_probe)],
+        counters.context_by_route[@backingInt(search.types.EntryRoute.singular_probe)],
     );
     try std.testing.expectEqual(
         @as(u64, 0),
-        counters.tt_stores_by_producer[@intFromEnum(search.types.Provenance.exclusion_search)],
+        counters.tt_stores_by_producer[@backingInt(search.types.Provenance.exclusion_search)],
     );
     try std.testing.expectEqual(@as(u16, 7), result.completed.?.depth);
     try std.testing.expect(candidate_counters.singular_attempts != 0);
@@ -2134,7 +2134,7 @@ test "singular verification excludes only its legal TT move and leaks no TT auth
     try std.testing.expectEqual(candidate_counters.singular_attempts, candidate_counters.exclusion_moves_skipped);
     try std.testing.expectEqual(
         @as(u64, 0),
-        candidate_counters.tt_stores_by_producer[@intFromEnum(search.types.Provenance.exclusion_search)],
+        candidate_counters.tt_stores_by_producer[@backingInt(search.types.Provenance.exclusion_search)],
     );
     try std.testing.expectEqual(@as(u16, 7), candidate.completed.?.depth);
     try std.testing.expect(candidate.nodes < result.nodes);
@@ -2738,7 +2738,7 @@ test "a loaded tablebase supplies exact evidence with its own provenance" {
     try std.testing.expect(counters.tablebase_hits != 0);
     try std.testing.expectEqual(
         counters.tablebase_hits,
-        counters.tablebase_hits_by_wdl[@intFromEnum(search.tablebase.Wdl.win)],
+        counters.tablebase_hits_by_wdl[@backingInt(search.tablebase.Wdl.win)],
     );
     // Interior evidence must never be published as the root's own producer.
     try std.testing.expect(result.best_move != null);

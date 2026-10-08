@@ -102,7 +102,7 @@ fn legacyAProfile() Profile {
 }
 
 fn legacyBProfile() Profile {
-    const debug = builtin.mode == .Debug;
+    const debug = builtin.mode == .debug;
     return .{
         .name = "legacy-board-b-v1",
         .fens = &corpus_b,
@@ -203,7 +203,7 @@ fn run(io: std.Io, profile: Profile, preflight_only: bool, see_signature: bool) 
 
     std.debug.print(
         "Manta board benchmark\nschema: {s}\nprofile: {s}\nbuild: {s}\ntarget: {s}-{s}\npositions: 5\n",
-        .{ schema, profile.name, @tagName(builtin.mode), @tagName(builtin.cpu.arch), @tagName(builtin.os.tag) },
+        .{ schema, profile.name, @tagName(builtin.mode), @tagName(builtin.target.cpu.arch), @tagName(builtin.target.os.tag) },
     );
     switch (profile.estimator) {
         .timed_median_mad => std.debug.print("samples: 11 x 150 ms (median +/- MAD)\n", .{}),

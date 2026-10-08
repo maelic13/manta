@@ -84,8 +84,8 @@ fn run(io: std.Io, preflight_only: bool) !void {
         .{
             schema,
             @tagName(builtin.mode),
-            @tagName(builtin.cpu.arch),
-            @tagName(builtin.os.tag),
+            @tagName(builtin.target.cpu.arch),
+            @tagName(builtin.target.os.tag),
             fens.len,
             fens.len,
             scores[0],

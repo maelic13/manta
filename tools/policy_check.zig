@@ -237,6 +237,7 @@ const Checker = struct {
             "label: linux-x86-64",
             "label: linux-arm64",
             "label: windows-x86-64",
+            "label: windows-arm64",
             "label: macos-x86-64",
             "label: macos-arm64",
             "name: gate",
@@ -244,7 +245,7 @@ const Checker = struct {
             "needs: [quality, native]",
         };
         for (required_fragments) |fragment| {
-            if (std.mem.indexOf(u8, workflow, fragment) == null) {
+            if (std.mem.find(u8, workflow, fragment) == null) {
                 self.fail("CI workflow is missing required contract: {s}", .{fragment});
             }
         }
@@ -266,7 +267,7 @@ const Checker = struct {
             "\n  release:",
         };
         for (forbidden_fragments) |fragment| {
-            if (std.mem.indexOf(u8, workflow, fragment) != null) {
+            if (std.mem.find(u8, workflow, fragment) != null) {
                 self.fail("CI workflow contains forbidden contract: {s}", .{fragment});
             }
         }
@@ -278,12 +279,12 @@ const Checker = struct {
             "-Dpgo is not available until Manta has the representative Phase 4.3 bench",
             "cross-target and raw CPU overrides are unsupported",
             "dist/{s}",
-            "orelse .ReleaseFast",
+            "orelse .fast",
             "chess-domain-tests",
             "generate-attacks",
         };
         for (build_contracts) |contract| {
-            if (std.mem.indexOf(u8, build_file, contract) == null) {
+            if (std.mem.find(u8, build_file, contract) == null) {
                 self.fail("build file is missing required artifact contract: {s}", .{contract});
             }
         }
@@ -291,15 +292,15 @@ const Checker = struct {
         const setup_action = try self.read(".github/actions/setup-zig/action.yml");
         defer self.allocator.free(setup_action);
         const setup_contracts = [_][]const u8{
-            "actions/cache@v5",
+            "actions/cache@v6",
             "using: composite",
-            "zig-0.16.0-${{ runner.os }}-${{ runner.arch }}",
+            "zig-0.17.0-${{ runner.os }}-${{ runner.arch }}",
             "tools/ci/install-zig.ps1",
             "tools/ci/install-zig.sh",
             "bash \"${{ github.workspace }}/tools/ci/install-zig.sh\"",
         };
         for (setup_contracts) |contract| {
-            if (std.mem.indexOf(u8, setup_action, contract) == null) {
+            if (std.mem.find(u8, setup_action, contract) == null) {
                 self.fail("Zig setup action is missing required contract: {s}", .{contract});
             }
         }
@@ -313,15 +314,16 @@ const Checker = struct {
             fragment: []const u8,
         }{
             .{ .content = windows_installer, .fragment = "https://ziglang.org/download/$version/" },
-            .{ .content = windows_installer, .fragment = "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e" },
+            .{ .content = windows_installer, .fragment = "b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428" },
+            .{ .content = windows_installer, .fragment = "0a59d91fa1cb40cf068e9b0954434ce973500c7a2ea749f1e01af62cdab52d26" },
             .{ .content = unix_installer, .fragment = "https://ziglang.org/download/$version/" },
-            .{ .content = unix_installer, .fragment = "70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00" },
-            .{ .content = unix_installer, .fragment = "ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17" },
-            .{ .content = unix_installer, .fragment = "0387557ed1877bc6a2e1802c8391953baddba76081876301c522f52977b52ba7" },
-            .{ .content = unix_installer, .fragment = "b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489" },
+            .{ .content = unix_installer, .fragment = "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026" },
+            .{ .content = unix_installer, .fragment = "9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8" },
+            .{ .content = unix_installer, .fragment = "4f9a1c5269aa17ebda5e6d3c2b89d6cbf36f7d2b22a0306e9ab98f25f95529c6" },
+            .{ .content = unix_installer, .fragment = "b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a" },
         };
         for (installer_contracts) |contract| {
-            if (std.mem.indexOf(u8, contract.content, contract.fragment) == null) {
+            if (std.mem.find(u8, contract.content, contract.fragment) == null) {
                 self.fail("Zig installer is missing required contract: {s}", .{contract.fragment});
             }
         }
@@ -355,7 +357,7 @@ const Checker = struct {
     fn checkReferenceNames(self: *Checker, path: []const u8, content: []const u8) void {
         if (isAllowedReferenceFile(path)) return;
         for (restricted_names) |name| {
-            if (std.ascii.indexOfIgnoreCase(content, name) != null) {
+            if (std.ascii.findIgnoreCase(content, name) != null) {
                 self.fail("restricted outside-engine reference in {s}", .{path});
             }
         }
@@ -363,9 +365,9 @@ const Checker = struct {
 
     fn checkMarkdownLinks(self: *Checker, source_path: []const u8, content: []const u8) !void {
         var cursor: usize = 0;
-        while (std.mem.indexOfPos(u8, content, cursor, "](")) |open| {
+        while (std.mem.findPos(u8, content, cursor, "](")) |open| {
             const target_start = open + 2;
-            const close = std.mem.indexOfPos(u8, content, target_start, ")") orelse break;
+            const close = std.mem.findPos(u8, content, target_start, ")") orelse break;
             cursor = close + 1;
 
             var target = std.mem.trim(u8, content[target_start..close], " \t");
@@ -374,14 +376,14 @@ const Checker = struct {
             }
             if (target.len == 0 or isExternalLink(target)) continue;
 
-            const hash = std.mem.indexOfScalar(u8, target, '#');
+            const hash = std.mem.findScalar(u8, target, '#');
             const relative_path = if (hash) |index| target[0..index] else target;
             const anchor = if (hash) |index| target[index + 1 ..] else "";
-            const source_directory = std.fs.path.dirname(source_path) orelse ".";
+            const source_directory = std.Io.Dir.path.dirname(source_path) orelse ".";
             const resolved = if (relative_path.len == 0)
                 try self.allocator.dupe(u8, source_path)
             else
-                try std.fs.path.join(self.allocator, &.{ source_directory, relative_path });
+                try std.Io.Dir.path.join(self.allocator, &.{ source_directory, relative_path });
             defer self.allocator.free(resolved);
 
             self.root.access(self.io, resolved, .{}) catch {
@@ -415,7 +417,7 @@ const Checker = struct {
                 ".stderr()",
             };
             for (forbidden) |fragment| {
-                if (std.mem.indexOf(u8, content, fragment) != null) {
+                if (std.mem.find(u8, content, fragment) != null) {
                     self.fail("inward layer imports an outer adapter in {s}: {s}", .{ path, fragment });
                 }
             }
@@ -428,13 +430,13 @@ const Checker = struct {
                 "@import(\"../search/",
             };
             for (forbidden) |fragment| {
-                if (std.mem.indexOf(u8, content, fragment) != null) {
+                if (std.mem.find(u8, content, fragment) != null) {
                     self.fail("UCI adapter bypasses the engine boundary in {s}: {s}", .{ path, fragment });
                 }
             }
         }
 
-        if (pathEquals(path, "src/manta.zig") and std.mem.indexOf(u8, content, "uci/") != null) {
+        if (pathEquals(path, "src/manta.zig") and std.mem.find(u8, content, "uci/") != null) {
             self.fail("non-UCI library facade imports the UCI adapter", .{});
         }
     }
@@ -460,14 +462,14 @@ fn numberedUnit(line: []const u8, source: UnitSource) ?[]const u8 {
         .plan => blk: {
             if (!std.mem.startsWith(u8, line, "#### ") and
                 !std.mem.startsWith(u8, line, "##### ")) return null;
-            break :blk std.mem.indexOfScalar(u8, line, ' ').? + 1;
+            break :blk std.mem.findScalar(u8, line, ' ').? + 1;
         },
         .guide => blk: {
-            const marker = std.mem.indexOf(u8, line, "**") orelse return null;
+            const marker = std.mem.find(u8, line, "**") orelse return null;
             break :blk marker + 2;
         },
     };
-    const end = std.mem.indexOfScalarPos(u8, line, start, ' ') orelse return null;
+    const end = std.mem.findScalarPos(u8, line, start, ' ') orelse return null;
     return line[start..end];
 }
 
@@ -484,14 +486,14 @@ fn isNumberedUnit(id: []const u8) bool {
 
 fn requirementId(line: []const u8) ?[]const u8 {
     if (!std.mem.startsWith(u8, line, "| `")) return null;
-    const end = std.mem.indexOfPos(u8, line, 3, "`") orelse return null;
+    const end = std.mem.findPos(u8, line, 3, "`") orelse return null;
     const id = line[3..end];
-    if (std.mem.lastIndexOfScalar(u8, id, '-') == null) return null;
+    if (std.mem.findScalarLast(u8, id, '-') == null) return null;
     return id;
 }
 
 fn isRequirementId(id: []const u8) bool {
-    const dash = std.mem.lastIndexOfScalar(u8, id, '-') orelse return false;
+    const dash = std.mem.findScalarLast(u8, id, '-') orelse return false;
     if (dash == 0 or id.len - dash - 1 != 3) return false;
     for (id[0..dash]) |character| if (!std.ascii.isUpper(character)) return false;
     for (id[dash + 1 ..]) |character| if (!std.ascii.isDigit(character)) return false;
@@ -499,7 +501,7 @@ fn isRequirementId(id: []const u8) bool {
 }
 
 fn shouldSkipDirectory(path: []const u8) bool {
-    const basename = std.fs.path.basename(path);
+    const basename = std.Io.Dir.path.basename(path);
     if (std.mem.eql(u8, basename, ".git") or
         std.mem.eql(u8, basename, ".venv") or
         std.mem.eql(u8, basename, ".zig-cache") or
@@ -570,7 +572,7 @@ fn hasHeadingAnchor(content: []const u8, wanted: []const u8) bool {
     var lines = std.mem.splitScalar(u8, content, '\n');
     while (lines.next()) |line| {
         if (line.len < 2 or line[0] != '#') continue;
-        const heading_start = std.mem.indexOfScalar(u8, line, ' ') orelse continue;
+        const heading_start = std.mem.findScalar(u8, line, ' ') orelse continue;
         var buffer: [512]u8 = undefined;
         const anchor = headingAnchor(line[heading_start + 1 ..], &buffer) orelse continue;
         if (std.mem.eql(u8, anchor, wanted)) return true;

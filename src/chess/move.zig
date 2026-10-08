@@ -78,18 +78,18 @@ pub const Move = struct {
 
     pub fn kind(self: Move) Kind {
         std.debug.assert(self.isChessMove());
-        return @enumFromInt((self.raw_value >> 14) & 0x3);
+        return @fromBackingInt(@intCast((self.raw_value >> 14) & 0x3));
     }
 
     pub fn promotionPiece(self: Move) types.PieceType {
         std.debug.assert(self.kind() == .promotion);
-        return @enumFromInt(((self.raw_value >> 12) & 0x3) + @intFromEnum(types.PieceType.knight));
+        return @fromBackingInt(@intCast(((self.raw_value >> 12) & 0x3) + @backingInt(types.PieceType.knight)));
     }
 
     pub fn isChessMove(self: Move) bool {
         return self.raw_value != none.raw_value and self.raw_value != null_move.raw_value and
             (self.raw_value & 0x3f) != ((self.raw_value >> 6) & 0x3f) and
-            ((self.raw_value >> 14) & 0x3 == @intFromEnum(Kind.promotion) or
+            ((self.raw_value >> 14) & 0x3 == @backingInt(Kind.promotion) or
                 self.raw_value & 0x3000 == 0);
     }
 
@@ -104,13 +104,13 @@ pub const Move = struct {
         promotion_piece: types.PieceType,
     ) Move {
         const promotion_bits: u16 = if (kind_value == .promotion)
-            @as(u16, @intFromEnum(promotion_piece) - @intFromEnum(types.PieceType.knight))
+            @as(u16, @backingInt(promotion_piece) - @backingInt(types.PieceType.knight))
         else
             0;
         return .{ .raw_value = @as(u16, to_square.index()) |
             (@as(u16, from_square.index()) << 6) |
             (promotion_bits << 12) |
-            (@as(u16, @intFromEnum(kind_value)) << 14) };
+            (@as(u16, @backingInt(kind_value)) << 14) };
     }
 };
 

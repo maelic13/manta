@@ -2,11 +2,11 @@
     .name = .manta_zlint,
     .version = "0.0.0",
     .fingerprint = 0x8bc28ec4730b07df, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .zlint = .{
-            .url = "https://github.com/DonIsaac/zlint/archive/refs/tags/v0.9.1.tar.gz",
-            .hash = "zlint-0.9.1-6ZchDm4dDgD_fCff6A4HQiVO9JGZKycbHNatmXjzaVD0",
+            .url = "https://github.com/DonIsaac/zlint/archive/refs/tags/v0.10.0.tar.gz",
+            .hash = "zlint-0.10.0-6ZchDlqWEgAAMK9-TMtq6EdKdOMd-o9MQs8sQqWBmHoZ",
         },
     },
     .paths = .{"build.zig"},

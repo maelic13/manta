@@ -1,15 +1,23 @@
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$version = "0.16.0"
-$artifact = "x86_64-windows"
-$expectedHash = "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e"
+$version = "0.17.0"
 
 if ($env:RUNNER_OS -ne "Windows") {
     throw "Windows installer received RUNNER_OS='$env:RUNNER_OS'."
 }
-if ($env:RUNNER_ARCH -ne "X64") {
-    throw "Unsupported Windows runner architecture '$env:RUNNER_ARCH'."
+switch ($env:RUNNER_ARCH) {
+    "X64" {
+        $artifact = "x86_64-windows"
+        $expectedHash = "b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428"
+    }
+    "ARM64" {
+        $artifact = "aarch64-windows"
+        $expectedHash = "0a59d91fa1cb40cf068e9b0954434ce973500c7a2ea749f1e01af62cdab52d26"
+    }
+    default {
+        throw "Unsupported Windows runner architecture '$env:RUNNER_ARCH'."
+    }
 }
 
 $installDirectory = Join-Path $env:RUNNER_TEMP "zig-$version"

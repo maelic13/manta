@@ -11,11 +11,11 @@ pub const Color = enum(u1) {
     black,
 
     pub fn opposite(self: Color) Color {
-        return @enumFromInt(@intFromEnum(self) ^ 1);
+        return @fromBackingInt(@intCast(@backingInt(self) ^ 1));
     }
 
     pub fn index(self: Color) usize {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 };
 
@@ -29,7 +29,7 @@ pub const PieceType = enum(u3) {
     king = 6,
 
     pub fn index(self: PieceType) usize {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 
     pub fn isPiece(self: PieceType) bool {
@@ -57,27 +57,27 @@ pub const Piece = enum(u4) {
 
     pub fn make(side: Color, piece_type: PieceType) Piece {
         std.debug.assert(piece_type.isPiece());
-        const raw = (@as(u4, @intFromEnum(side)) << 3) | @as(u4, @intFromEnum(piece_type));
-        return @enumFromInt(raw);
+        const raw = (@as(u4, @backingInt(side)) << 3) | @as(u4, @backingInt(piece_type));
+        return @fromBackingInt(@intCast(raw));
     }
 
     pub fn isValid(self: Piece) bool {
-        const raw = @intFromEnum(self);
+        const raw = @backingInt(self);
         return raw == 0 or (raw >= 1 and raw <= 6) or (raw >= 9 and raw <= 14);
     }
 
     pub fn pieceType(self: Piece) PieceType {
         std.debug.assert(self != .none and self.isValid());
-        return @enumFromInt(@intFromEnum(self) & 0b111);
+        return @fromBackingInt(@intCast(@backingInt(self) & 0b111));
     }
 
     pub fn color(self: Piece) Color {
         std.debug.assert(self != .none and self.isValid());
-        return @enumFromInt(@intFromEnum(self) >> 3);
+        return @fromBackingInt(@intCast(@backingInt(self) >> 3));
     }
 
     pub fn index(self: Piece) usize {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 };
 
@@ -92,7 +92,7 @@ pub const File = enum(u3) {
     h,
 
     pub fn index(self: File) u3 {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 };
 
@@ -107,7 +107,7 @@ pub const Rank = enum(u3) {
     eight,
 
     pub fn index(self: Rank) u3 {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 };
 
@@ -179,24 +179,24 @@ pub const Square = enum(u7) {
     none,
 
     pub fn fromIndex(index_value: u6) Square {
-        return @enumFromInt(index_value);
+        return @fromBackingInt(@intCast(index_value));
     }
 
     pub fn index(self: Square) u6 {
         std.debug.assert(self != .none);
-        return @intCast(@intFromEnum(self));
+        return @intCast(@backingInt(self));
     }
 
     pub fn file(self: Square) File {
-        return @enumFromInt(self.index() & 7);
+        return @fromBackingInt(@intCast(self.index() & 7));
     }
 
     pub fn rank(self: Square) Rank {
-        return @enumFromInt(self.index() >> 3);
+        return @fromBackingInt(@intCast(self.index() >> 3));
     }
 
     pub fn make(file_value: File, rank_value: Rank) Square {
-        return @enumFromInt((@as(u6, rank_value.index()) << 3) | file_value.index());
+        return @fromBackingInt(@intCast((@as(u6, rank_value.index()) << 3) | file_value.index()));
     }
 
     pub fn bit(self: Square) Bitboard {
@@ -204,11 +204,11 @@ pub const Square = enum(u7) {
     }
 
     pub fn flipRank(self: Square) Square {
-        return @enumFromInt(self.index() ^ 56);
+        return @fromBackingInt(@intCast(self.index() ^ 56));
     }
 
     pub fn flipFile(self: Square) Square {
-        return @enumFromInt(self.index() ^ 7);
+        return @fromBackingInt(@intCast(self.index() ^ 7));
     }
 };
 
@@ -233,7 +233,7 @@ pub const CastlingRights = enum(u4) {
     _,
 
     pub fn raw(self: CastlingRights) u4 {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 
     pub fn contains(self: CastlingRights, right: CastlingRights) bool {
@@ -241,12 +241,12 @@ pub const CastlingRights = enum(u4) {
     }
 
     pub fn intersect(self: CastlingRights, mask: CastlingRights) CastlingRights {
-        return @enumFromInt(self.raw() & mask.raw());
+        return @fromBackingInt(@intCast(self.raw() & mask.raw()));
     }
 };
 
 pub fn relativeRank(color: Color, rank_value: Rank) Rank {
-    return if (color == .white) rank_value else @enumFromInt(rank_value.index() ^ 7);
+    return if (color == .white) rank_value else @fromBackingInt(@intCast(rank_value.index() ^ 7));
 }
 
 comptime {
@@ -278,6 +278,6 @@ test "piece encoding keeps color and type orthogonal" {
             try std.testing.expectEqual(piece_type, piece.pieceType());
         }
     }
-    try std.testing.expect(!(@as(Piece, @enumFromInt(7))).isValid());
-    try std.testing.expect(!(@as(Piece, @enumFromInt(8))).isValid());
+    try std.testing.expect(!(@as(Piece, @fromBackingInt(@intCast(7)))).isValid());
+    try std.testing.expect(!(@as(Piece, @fromBackingInt(@intCast(8)))).isValid());
 }

@@ -244,11 +244,15 @@ The supported source and release matrix is:
 | macOS x86-64 | Required | Native hosted macOS CI while available | Initial release target |
 | macOS ARM64 | Required | Native hosted macOS CI | Initial release target |
 | Linux ARM64 | Required | Native ARM64 runner or named target hardware | Publish only after native gate |
+| Windows ARM64 | Hosted CI validation | Native hosted `windows-11-arm` runner and local Snapdragon X development | Not a release target |
 
 Windows ARM64 is not currently supported. Zig 0.16.0's native compiler crashed
-on the hosted runner during independent project tests, so the target may return
-only after a later stable Zig toolchain passes the ordinary build, test and
-smoke gates without a target-specific bypass.
+on the hosted runner during independent project tests, because an LLVM bug
+broke most `aarch64-windows` binaries including the compiler itself. Zig 0.17.0
+works around that bug, and on a local Snapdragon X host it passes the native
+build and the Debug, ReleaseSafe and ReleaseFast suites with no target-specific
+handling. The hosted native matrix therefore validates it again; it may become
+a release target only after those hosted build, test and smoke gates pass.
 
 Hosted-runner facts verified on 2026-08-07: `ubuntu-24.04-arm` is available as
 a public preview, so stable native publication must account for that service
@@ -264,7 +268,7 @@ replacement exists.
 | `PORT-003` | `zig build` shall default to ReleaseFast, the host CPU and the best retained `auto` profile. `-Dportable` shall use only the platform baseline; `-Dnative` and `-Dportable` are mutually exclusive. Canonical artifacts shall name version, OS, curated ISA profile, native status when applicable and PGO status. Unimplemented profiles, premature PGO, cross-target overrides and misleading raw CPU overrides shall fail explicitly. Phase 10 may extend `auto` only through measured microarchitecture preferences and shall retain the portable fallback. | 1, 4, 10 | Build-policy, metadata and native smoke tests |
 | `PORT-004` | Linux packaging shall first prefer a self-contained Zig binary without a libc dependency where viable. GNU-linked and statically linked musl candidates shall be compared when C integration or deployment requires libc. | 1, 5, 10 | Dependency inspection and A/B |
 | `PORT-005` | musl is a compatibility/deployment choice, not a presumed performance winner. A musl asset may accompany the primary Linux artifact only after deterministic parity, WSL/native execution, dependency inspection and controlled performance comparison. | 5, 10 | Linux packaging gate |
-| `PORT-006` | The source/build contract is 64-bit-only: it shall reject 32-bit targets and compile and execute natively on Windows x86-64 plus Linux and macOS on x86-64 and ARM64. Hot in-memory code may rely on 64-bit pointers and `usize`; external formats remain fixed-width. A downloadable artifact requires target-native correctness, deterministic agreement and backend suitability. Windows ARM64 remains excluded until a stable Zig toolchain passes the ordinary native gates without special handling. | 1, 10 | Build-policy and native target matrix |
+| `PORT-006` | The source/build contract is 64-bit-only: it shall reject 32-bit targets and compile and execute natively on Windows x86-64 plus Linux and macOS on x86-64 and ARM64. Hot in-memory code may rely on 64-bit pointers and `usize`; external formats remain fixed-width. A downloadable artifact requires target-native correctness, deterministic agreement and backend suitability. Windows ARM64 is validated in the hosted native matrix but remains excluded from release until it passes the ordinary native gates there without special handling. | 1, 10 | Build-policy and native target matrix |
 | `PORT-007` | The portable runtime path shall reject an unsupported forced backend safely and shall always retain a baseline implementation. | 8, 10 | Feature-mask tests |
 
 ## 8. Quality and verification matrix
@@ -273,15 +277,17 @@ replacement exists.
 
 | ID | Requirement | Owner | Verification |
 |---|---|---:|---|
-| `QUAL-001` | Development, CI and releases shall use the latest official stable Zig. The accepted version for this revision is exactly `0.16.0`; development/nightly builds are forbidden. | 1 onward | Version command and official-release check |
-| `QUAL-002` | `build.zig.zon` shall declare `.minimum_zig_version = "0.16.0"`, while `build.zig` shall independently reject any compiler whose `builtin.zig_version_string` is not exactly `0.16.0`. The advisory package field alone is insufficient. | 1 | Build guard and negative-version test |
+| `QUAL-001` | Development, CI and releases shall use the latest official stable Zig. The accepted version for this revision is exactly `0.17.0`; development/nightly builds are forbidden. | 1 onward | Version command and official-release check |
+| `QUAL-002` | `build.zig.zon` shall declare `.minimum_zig_version = "0.17.0"`, while `build.zig` shall independently reject any compiler whose `builtin.zig_version_string` is not exactly `0.17.0`. The advisory package field alone is insufficient. | 1 | Build guard and negative-version test |
 | `QUAL-003` | CI shall print and compare `zig version` before invoking any project build step. Toolchain archives/actions shall be pinned and their provenance recorded. | 1 | Workflow inspection and CI log |
 | `QUAL-004` | At every numbered phase start and release, a newer official stable version blocks feature work until migration, release-note review and the affected correctness/performance baselines pass. | Every phase/release | Phase-start and release checklist |
 
-Zig 0.16.0 requires explicit `std.Io` plumbing, changes prior stream APIs,
-deprecates direct `@cImport` use in favour of build-system C translation, and
-provides test timeouts. Architecture and examples therefore use the 0.16.0
-APIs, not development documentation. Release performance uses the LLVM-backed
+Zig 0.16.0 introduced explicit `std.Io` plumbing and test timeouts. Zig 0.17.0
+removes `@cImport` and deprecates build-system C translation in favour of an
+external package, so Manta declares the small Fathom API it calls in Zig and
+checks those declarations against the compiled header. Manta uses no API that
+0.17.0 marks deprecated. Architecture and examples use the 0.17.0 APIs, not
+development documentation. Release performance uses the LLVM-backed
 `ReleaseFast` path; Debug output is never a speed reference.
 
 ### 8.2 Static and dynamic checks
@@ -290,7 +296,7 @@ APIs, not development documentation. Release performance uses the LLVM-backed
 |---|---|---|
 | `QUAL-005` | `zig fmt --check --ast-check .` | Every local gate and CI run |
 | `QUAL-006` | `zig build lint`; warnings, forbidden dependency edges, stale generated defaults, unversioned formats and unannotated unsafe operations are failures | Every local gate and CI run; includes format/AST, project policy and architecture-fitness checks |
-| `QUAL-007` | ZLint `0.9.1` | Phase 1 pins and evaluates it against Zig 0.16.0; it joins `lint` only after a reviewed zero-warning baseline and reproducible CI pass |
+| `QUAL-007` | ZLint `0.10.0` | Pinned in its isolated tool package. Suspended from `lint` since the Zig 0.17.0 migration because no ZLint release builds with Zig 0.17.0; it rejoins `lint` once a release does and reproduces a reviewed zero-warning baseline in CI |
 | `QUAL-008` | `zig build test -Doptimize=Debug` | Every implementation change; primary invariant/leak development gate |
 | `QUAL-009` | `zig build test -Doptimize=ReleaseSafe` | Every implementation change in CI |
 | `QUAL-010` | `zig build test -Doptimize=ReleaseFast` | Phase boundaries, release gates and any production-semantics or performance-sensitive change |

@@ -49,7 +49,7 @@ const Minimums = struct {
 };
 
 test "deterministic legal and null walks preserve every position fact" {
-    const extended = builtin.mode == .ReleaseFast;
+    const extended = builtin.mode == .fast;
     const target_positions: usize = if (extended) 200_000 else 16_000;
     const walk_plies: usize = if (extended) max_walk_plies else 64;
     const minimums = Minimums{
@@ -347,7 +347,7 @@ fn expectedRights(
             else => 0b1111,
         };
     }
-    return @enumFromInt(raw);
+    return @fromBackingInt(@intCast(raw));
 }
 
 /// Recomputes the recorded repetition fact from the raw chain: the nearest

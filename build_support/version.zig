@@ -12,6 +12,6 @@ test "the reported version is a release triple with no prerelease tag" {
     try std.testing.expect(parsed.build == null);
 
     var buffer: [64]u8 = undefined;
-    const rendered = try std.fmt.bufPrint(&buffer, "{d}.{d}.{d}", .{ parsed.major, parsed.minor, parsed.patch });
+    const rendered = try std.mem.print(&buffer, "{d}.{d}.{d}", .{ parsed.major, parsed.minor, parsed.patch });
     try std.testing.expectEqualStrings(current, rendered);
 }

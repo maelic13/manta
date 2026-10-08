@@ -98,6 +98,12 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   candidate, so 1.2.0 is cleared to tag. The one-thread depth-6 fingerprint is
   `355,879`. The K+B+N mate reported in the same issue is technique and
   stays open.
+- The toolchain is Zig 0.17.0 since 2026-10-08, by maintainer-approved
+  migration. Every deprecated API is replaced, the Fathom bindings are
+  hand-declared and checked against the compiled header, and the fingerprint
+  is unchanged at `355,879`. Speed under 0.17.0 is not yet measured on the
+  5950X, so a registered SPRT builds both arms with the same compiler. ZLint is
+  suspended from `lint` until a release supports Zig 0.17.0.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 

@@ -246,7 +246,7 @@ fn parseEntry(line: []const u8) !?Entry {
         };
     }
 
-    const colon = std.mem.indexOfScalar(u8, line, ':') orelse return null;
+    const colon = std.mem.findScalar(u8, line, ':') orelse return null;
     const move_text = std.mem.trim(u8, line[0..colon], " \t");
     if (move_text.len != 4 and move_text.len != 5) return null;
     const nodes_text = std.mem.trim(u8, line[colon + 1 ..], " \t");

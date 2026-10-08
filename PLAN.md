@@ -73,7 +73,7 @@ approval.
 
 ### Tooling and host policy
 
-- Use exactly Zig 0.16.0 until a separately approved stable-toolchain migration.
+- Use exactly Zig 0.17.0 until a separately approved stable-toolchain migration.
 - Use Manta's checked fastchess bridge for matches and its pinned local Weather
   Factory wrapper for SPSA. Colosseum is parked until explicitly re-enabled.
 - Development, implementation and local diagnostics occur on the current

@@ -1792,7 +1792,7 @@ fn negamaxNode(
                 for (continuation_contexts.items, 0..) |maybe_continuation, slot| {
                     const continuation = maybe_continuation orelse continue;
                     context.observer.continuationHistoryLookup(
-                        @enumFromInt(slot),
+                        @fromBackingInt(@intCast(slot)),
                         heuristics.continuationScore(value, continuation, chess_move) != 0,
                         continuation.from_check,
                         continuation.tactical,
@@ -2642,13 +2642,13 @@ fn continuationSet(
     if (comptime !features.search_context or !features.contextual_history or
         !features.continuation_history) return result;
     if (comptime features.continuation_distance_2)
-        result.items[@intFromEnum(ordering.ContinuationDistance.two)] =
+        result.items[@backingInt(ordering.ContinuationDistance.two)] =
             continuationAt(thread, ply, side, 2);
     if (comptime features.continuation_distance_4)
-        result.items[@intFromEnum(ordering.ContinuationDistance.four)] =
+        result.items[@backingInt(ordering.ContinuationDistance.four)] =
             continuationAt(thread, ply, side, 4);
     if (comptime features.continuation_distance_6)
-        result.items[@intFromEnum(ordering.ContinuationDistance.six)] =
+        result.items[@backingInt(ordering.ContinuationDistance.six)] =
             continuationAt(thread, ply, side, 6);
     return result;
 }
@@ -2772,7 +2772,7 @@ fn recordContextualQuietOutcome(
         if (!winner_pretrained)
             heuristics.recordContinuationSuccess(value, continuation, winner, depth, core_history);
         observer.continuationHistoryUpdate(
-            @enumFromInt(slot),
+            @fromBackingInt(@intCast(slot)),
             disposition,
             continuation_penalties,
             !winner_pretrained,
@@ -2951,7 +2951,7 @@ fn recordLmrContextFeedback(
             heuristics.recordContinuationSuccess(value, continuation, chess_move, depth, core_history)
         else
             heuristics.recordContinuationFailure(value, continuation, chess_move, depth, core_history);
-        observer.continuationHistoryLmrFeedback(@enumFromInt(slot), positive);
+        observer.continuationHistoryLmrFeedback(@fromBackingInt(@intCast(slot)), positive);
     }
 }
 
@@ -5474,19 +5474,19 @@ test "continuation distances stop at root and null boundaries" {
 
     const populated = continuationSet(.{}, &thread, 6, .white);
     for (populated.items) |item| try std.testing.expect(item != null);
-    try std.testing.expect(continuationSet(.{}, &thread, 1, .white).items[@intFromEnum(ordering.ContinuationDistance.two)] == null);
+    try std.testing.expect(continuationSet(.{}, &thread, 1, .white).items[@backingInt(ordering.ContinuationDistance.two)] == null);
     const disabled = continuationSet(.{ .continuation_history = false }, &thread, 6, .white);
     for (disabled.items) |item| try std.testing.expect(item == null);
     const no_four = continuationSet(.{ .continuation_distance_4 = false }, &thread, 6, .white);
-    try std.testing.expect(no_four.items[@intFromEnum(ordering.ContinuationDistance.two)] != null);
-    try std.testing.expect(no_four.items[@intFromEnum(ordering.ContinuationDistance.four)] == null);
-    try std.testing.expect(no_four.items[@intFromEnum(ordering.ContinuationDistance.six)] != null);
+    try std.testing.expect(no_four.items[@backingInt(ordering.ContinuationDistance.two)] != null);
+    try std.testing.expect(no_four.items[@backingInt(ordering.ContinuationDistance.four)] == null);
+    try std.testing.expect(no_four.items[@backingInt(ordering.ContinuationDistance.six)] != null);
 
     thread.ply_contexts[4] = types.PlyContext.afterNull(false);
     const broken = continuationSet(.{}, &thread, 6, .white);
-    try std.testing.expect(broken.items[@intFromEnum(ordering.ContinuationDistance.two)] != null);
-    try std.testing.expect(broken.items[@intFromEnum(ordering.ContinuationDistance.four)] == null);
-    try std.testing.expect(broken.items[@intFromEnum(ordering.ContinuationDistance.six)] == null);
+    try std.testing.expect(broken.items[@backingInt(ordering.ContinuationDistance.two)] != null);
+    try std.testing.expect(broken.items[@backingInt(ordering.ContinuationDistance.four)] == null);
+    try std.testing.expect(broken.items[@backingInt(ordering.ContinuationDistance.six)] == null);
 }
 
 test "ProbCut eligibility protects authoritative and zugzwang-sensitive nodes" {
@@ -5709,7 +5709,7 @@ test "LMR synchronization requires agreement and bounds every adjustment" {
     try std.testing.expectEqual(@as(u64, 1), observer.lmr_adjusted_deeper);
     try std.testing.expectEqual(
         @as(u64, 1),
-        observer.lmr_modifier_deepen[@intFromEnum(diagnostics.LmrModifier.singular_context)],
+        observer.lmr_modifier_deepen[@backingInt(diagnostics.LmrModifier.singular_context)],
     );
 
     observer.reset();

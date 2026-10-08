@@ -138,7 +138,7 @@ pub fn main(init: std.process.Init) !void {
     var status_counts: [3]usize = @splat(0);
     for (catalog.declarations[0..catalog.declaration_count]) |declaration| {
         for (0..declaration.value_count) |element| {
-            status_counts[@intFromEnum(statusFor(declaration.name, element))] += 1;
+            status_counts[@backingInt(statusFor(declaration.name, element))] += 1;
         }
     }
     std.debug.print(
@@ -149,9 +149,9 @@ pub fn main(init: std.process.Init) !void {
             schema,
             catalog.declaration_count,
             catalog.value_count,
-            status_counts[@intFromEnum(Status.free)],
-            status_counts[@intFromEnum(Status.fixed)],
-            status_counts[@intFromEnum(Status.excluded)],
+            status_counts[@backingInt(Status.free)],
+            status_counts[@backingInt(Status.fixed)],
+            status_counts[@backingInt(Status.excluded)],
         },
     );
 }
@@ -165,17 +165,17 @@ fn compileDataset(
     input_path: []const u8,
     output_prefix: []const u8,
 ) !void {
-    const samples_path = try std.fmt.allocPrint(init.gpa, "{s}.samples.bin", .{output_prefix});
+    const samples_path = try init.gpa.print("{s}.samples.bin", .{output_prefix});
     defer init.gpa.free(samples_path);
-    const events_path = try std.fmt.allocPrint(init.gpa, "{s}.events.bin", .{output_prefix});
+    const events_path = try init.gpa.print("{s}.events.bin", .{output_prefix});
     defer init.gpa.free(events_path);
-    const manifest_path = try std.fmt.allocPrint(init.gpa, "{s}.manifest", .{output_prefix});
+    const manifest_path = try init.gpa.print("{s}.manifest", .{output_prefix});
     defer init.gpa.free(manifest_path);
-    const samples_tmp = try std.fmt.allocPrint(init.gpa, "{s}.tmp", .{samples_path});
+    const samples_tmp = try init.gpa.print("{s}.tmp", .{samples_path});
     defer init.gpa.free(samples_tmp);
-    const events_tmp = try std.fmt.allocPrint(init.gpa, "{s}.tmp", .{events_path});
+    const events_tmp = try init.gpa.print("{s}.tmp", .{events_path});
     defer init.gpa.free(events_tmp);
-    const manifest_tmp = try std.fmt.allocPrint(init.gpa, "{s}.tmp", .{manifest_path});
+    const manifest_tmp = try init.gpa.print("{s}.tmp", .{manifest_path});
     defer init.gpa.free(manifest_tmp);
 
     const cwd = std.Io.Dir.cwd();
@@ -215,7 +215,7 @@ fn compileDataset(
         const raw_line = raw orelse break;
         const line = std.mem.trim(u8, raw_line, " \t\r");
         if (line.len == 0 or line[0] == '#') continue;
-        const separator = std.mem.lastIndexOfScalar(u8, line, ';') orelse {
+        const separator = std.mem.findScalarLast(u8, line, ';') orelse {
             rejected += 1;
             continue;
         };
@@ -278,7 +278,7 @@ fn compileDataset(
     if (samples == 0) return error.EmptyDataset;
     if (rejected * 100 > samples) return error.TooManyRejectedDatasetRows;
     var manifest_buffer: [1024]u8 = undefined;
-    const manifest = try std.fmt.bufPrint(
+    const manifest = try std.mem.print(
         &manifest_buffer,
         "schema\t{s}\ndataset\tmanta-hce-sparse-v1\nsamples\t{d}\nevents\t{d}\n" ++
             "coefficients\t{d}\nsample_record_bytes\t{d}\nevent_record_bytes\t{d}\nrejected\t{d}\n",
@@ -318,7 +318,7 @@ fn emitSample(
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
     var header_buffer: [192]u8 = undefined;
-    const header = try std.fmt.bufPrint(
+    const header = try std.mem.print(
         &header_buffer,
         "{s}\nproduction\t{d}\nlinear\t{d}\nfixed_residual\t{d}\n",
         .{ schema, sample.production_score, sample.linear_score, sample.fixed_residual },
@@ -327,7 +327,7 @@ fn emitSample(
     for (recorder.slice()) |entry| {
         if (entry.count == 0) continue;
         var buffer: [192]u8 = undefined;
-        const line = try std.fmt.bufPrint(
+        const line = try std.mem.print(
             &buffer,
             "{s}[{d}]\t{s}\t{s}\t{d}\n",
             .{ entry.group, entry.element, @tagName(entry.component), @tagName(entry.lane), entry.count },
@@ -344,7 +344,7 @@ fn emitVector(allocator: std.mem.Allocator, catalog: *const Catalog) ![]u8 {
     for (catalog.declarations[0..catalog.declaration_count]) |declaration| {
         for (0..declaration.value_count) |element| {
             var buffer: [160]u8 = undefined;
-            const line = try std.fmt.bufPrint(
+            const line = try std.mem.print(
                 &buffer,
                 "{s}[{d}]\t{d}\t{s}\t{s}\n",
                 .{
@@ -374,7 +374,7 @@ fn parseVector(data: []const u8, catalog: *const Catalog, vector: []i32) !void {
             const status_text = fields.next() orelse return error.InvalidVector;
             const unit_text = fields.next() orelse return error.InvalidVector;
             var expected_buffer: [128]u8 = undefined;
-            const expected_name = try std.fmt.bufPrint(&expected_buffer, "{s}[{d}]", .{ declaration.name, element });
+            const expected_name = try std.mem.print(&expected_buffer, "{s}[{d}]", .{ declaration.name, element });
             if (!std.mem.eql(u8, name, expected_name)) return error.ParameterOrderMismatch;
             if (!std.mem.eql(u8, status_text, @tagName(statusFor(declaration.name, element))))
                 return error.ParameterStatusMismatch;
@@ -396,12 +396,12 @@ fn parseVector(data: []const u8, catalog: *const Catalog, vector: []i32) !void {
 fn parseCatalog(source: []const u8) !Catalog {
     var result = Catalog.init();
     var cursor: usize = 0;
-    while (std.mem.indexOfPos(u8, source, cursor, "pub const ")) |start| {
+    while (std.mem.findPos(u8, source, cursor, "pub const ")) |start| {
         const name_start = start + "pub const ".len;
         var name_end = name_start;
         while (name_end < source.len and isName(source[name_end])) : (name_end += 1) {}
-        const equals = std.mem.indexOfPos(u8, source, name_end, "=") orelse return error.InvalidParameterSource;
-        const semicolon = std.mem.indexOfPos(u8, source, equals, ";") orelse return error.InvalidParameterSource;
+        const equals = std.mem.findPos(u8, source, name_end, "=") orelse return error.InvalidParameterSource;
+        const semicolon = std.mem.findPos(u8, source, equals, ";") orelse return error.InvalidParameterSource;
         if (result.declaration_count == result.declarations.len) return error.TooManyParameterGroups;
         const first_value = result.value_count;
         try scanValues(source, equals + 1, semicolon, &result);
@@ -420,11 +420,11 @@ fn parseCatalog(source: []const u8) !Catalog {
 fn scanValues(source: []const u8, start: usize, end: usize, catalog: *Catalog) !void {
     // Inferred array declarations begin with a typed literal such as
     // `[2][2]i16{...}`. Its dimensions describe shape and are not coefficients.
-    const brace = std.mem.indexOfPos(u8, source, start, "{");
+    const brace = std.mem.findPos(u8, source, start, "{");
     var cursor = if (brace != null and brace.? < end) brace.? + 1 else start;
     while (cursor < end) {
         if (cursor + 1 < end and source[cursor] == '/' and source[cursor + 1] == '/') {
-            cursor = std.mem.indexOfPos(u8, source, cursor, "\n") orelse end;
+            cursor = std.mem.findPos(u8, source, cursor, "\n") orelse end;
             continue;
         }
         const negative = source[cursor] == '-' and cursor + 1 < end and std.ascii.isDigit(source[cursor + 1]);
@@ -509,7 +509,7 @@ fn renderSource(allocator: std.mem.Allocator, source: []const u8, catalog: *cons
             try output.appendSlice(allocator, source[current.start..current.end]);
         } else {
             var buffer: [32]u8 = undefined;
-            const text = try std.fmt.bufPrint(&buffer, "{d}", .{replacement});
+            const text = try std.mem.print(&buffer, "{d}", .{replacement});
             try output.appendSlice(allocator, text);
         }
         cursor = current.end;
@@ -525,7 +525,7 @@ fn sparseDot(catalog: *const Catalog, recorder: *const manta.eval.fit.Recorder) 
     for (recorder.slice()) |entry| {
         if (statusFor(entry.group, entry.element) != .free) continue;
         const contribution = @as(i64, try catalog.current(entry.group, entry.element)) * entry.count;
-        const target = &totals[@intFromEnum(entry.component)];
+        const target = &totals[@backingInt(entry.component)];
         switch (entry.lane) {
             .middlegame => target.middlegame += contribution,
             .endgame => target.endgame += contribution,
@@ -573,13 +573,13 @@ fn sampleFromRecorder(
     _ = recorder.total orelse return error.MissingTotal;
     const dots = try sparseDot(catalog, recorder);
     var tapered: Tapered64 = .{};
-    for (dots[0..@intFromEnum(manta.eval.fit.Component.final)]) |item| {
+    for (dots[0..@backingInt(manta.eval.fit.Component.final)]) |item| {
         tapered.middlegame += item.middlegame;
         tapered.endgame += item.endgame;
     }
     const weighted = tapered.middlegame * phase_value + tapered.endgame * (24 - phase_value);
     const white_linear: i32 = @intCast(@divTrunc(weighted, 24));
-    const tempo = dots[@intFromEnum(manta.eval.fit.Component.final)].middlegame;
+    const tempo = dots[@backingInt(manta.eval.fit.Component.final)].middlegame;
     const linear: i32 = (if (value.side_to_move == .white) white_linear else -white_linear) + @as(i32, @intCast(tempo));
     return .{
         .linear_score = linear,
@@ -614,7 +614,7 @@ fn expectComponentDot(
     const label = @tagName(component);
     for (trace) |entry| {
         if (!std.mem.eql(u8, entry.label, label)) continue;
-        const dot = dots[@intFromEnum(component)];
+        const dot = dots[@backingInt(component)];
         try std.testing.expectEqual(@as(i64, entry.value.tapered.middlegame), dot.middlegame);
         try std.testing.expectEqual(@as(i64, entry.value.tapered.endgame), dot.endgame);
         return;

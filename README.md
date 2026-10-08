@@ -59,7 +59,7 @@ See [docs/UCI.md](docs/UCI.md) for the complete protocol contract.
 
 ## Build from source
 
-Manta requires Zig 0.16.0. From the repository root:
+Manta requires Zig 0.17.0. From the repository root:
 
 ```text
 zig build

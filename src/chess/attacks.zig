@@ -32,8 +32,8 @@ const bishop_table_size = totalTableSize(.bishop);
 const rook_blob = @embedFile("generated/rook_attacks.bin");
 const bishop_blob = @embedFile("generated/bishop_attacks.bin");
 const embedded_header_size = 16;
-const use_pext = builtin.cpu.arch == .x86_64 and
-    std.Target.x86.featureSetHas(builtin.cpu.features, .bmi2);
+const use_pext = builtin.target.cpu.arch == .x86_64 and
+    std.Target.x86.featureSetHas(builtin.target.cpu.features, .bmi2);
 const Lookup = if (use_pext) Pext else Magic;
 const rook_magic_table: [rook_table_size]Bitboard align(64) = @bitCast(
     @as(
@@ -64,7 +64,7 @@ const diagonal_masks = makeLineMasks(.diagonal);
 const anti_diagonal_masks = makeLineMasks(.anti_diagonal);
 
 pub fn rook(square: types.Square, occupied: Bitboard) Bitboard {
-    return if (builtin.cpu.arch == .aarch64)
+    return if (builtin.target.cpu.arch == .aarch64)
         hyperbola(square, occupied, file_masks[square.index()]) |
             hyperbola(square, occupied, rank_masks[square.index()])
     else
@@ -72,7 +72,7 @@ pub fn rook(square: types.Square, occupied: Bitboard) Bitboard {
 }
 
 pub fn bishop(square: types.Square, occupied: Bitboard) Bitboard {
-    return if (builtin.cpu.arch == .aarch64)
+    return if (builtin.target.cpu.arch == .aarch64)
         hyperbola(square, occupied, diagonal_masks[square.index()]) |
             hyperbola(square, occupied, anti_diagonal_masks[square.index()])
     else

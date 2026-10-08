@@ -1,7 +1,9 @@
 # Manta development
 
-Manta requires exactly Zig 0.16.0. Use ZLS 0.16.0 so editor diagnostics
-match the compiler; no editor-specific configuration is required.
+Manta requires exactly Zig 0.17.0. ZLS has no 0.17.0 release yet, and the
+0.17.0 release notes state that the separated build configurer stops ZLS 0.16.0
+from working with this compiler, so editor diagnostics are degraded until it
+ships. No editor-specific configuration is required.
 
 During an edit loop, run the bounded subset first:
 
@@ -142,13 +144,15 @@ test runner's temporary directory and disappear on success. Retained local
 failure evidence belongs under the gitignored `artifacts/<suite>/` tree and
 must be enabled explicitly; normal test runs leave the worktree untouched.
 
-The lint command builds the source-pinned ZLint 0.9.1 executable for the host
-and applies the reviewed rules in [`zlint.json`](../zlint.json). Its isolated
-tool package may fetch sources into ignored `tools/zlint/zig-pkg/`; ordinary
-build, check and test commands never resolve those dependencies. ZLint is a
-development tool, never a Manta runtime dependency. The repository avoids
-negated `.gitignore` entries because this ZLint release interprets them as
-lint exclusions.
+ZLint is suspended from the lint command. No ZLint release builds with Zig
+0.17.0: v0.10.0 and its dependencies still use build-system APIs that 0.17.0
+removed. Its isolated tool package stays pinned to v0.10.0 with the reviewed
+rules in [`zlint.json`](../zlint.json), so it can rejoin `lint` once a release
+supports Zig 0.17.0. The package may fetch sources into ignored
+`tools/zlint/zig-pkg/`; ordinary build, check and test commands never resolve
+those dependencies. ZLint is a development tool, never a Manta runtime
+dependency. The repository avoids negated `.gitignore` entries because ZLint
+interprets them as lint exclusions.
 
 The authoritative CI workflow runs identically for pull requests to `master`,
 pushes to `master` and manual dispatches. It checks five native host targets,
@@ -160,10 +164,11 @@ artifacts but does not publish them.
 
 Each native matrix job builds and smoke-tests its canonically named portable
 baseline through the same build entry point used locally. The supported native
-matrix is Windows x86-64 plus Linux and macOS on x86-64
-and ARM64. Windows ARM64 is excluded because Zig 0.16.0's native compiler
-crashed during ordinary project tests on the hosted runner. Reconsider it at a
-stable Zig upgrade, and restore it only when the normal build/test/smoke path
+matrix is Windows, Linux and macOS on x86-64 and ARM64. Windows ARM64 was
+excluded because Zig 0.16.0's native compiler crashed during ordinary project
+tests on the hosted runner. Zig 0.17.0 passes the normal build and test path
+natively on a local Windows ARM64 host, so the hosted matrix validates it
+again. It is not a release target until that hosted build/test/smoke path
 passes without target-specific handling.
 
 Protocol work must follow the normative [UCI behavioral contract](UCI.md) and

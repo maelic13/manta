@@ -94,7 +94,7 @@ pub fn artifactName(
     version: []const u8,
     os: std.Target.Os.Tag,
     configuration: Configuration,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
 ) (NameError || std.mem.Allocator.Error)![]u8 {
     if (!validVersion(version)) return error.InvalidVersion;
 
@@ -106,16 +106,15 @@ pub fn artifactName(
     };
     const native_suffix = if (configuration.mode == .native) "-native" else "";
     const optimize_suffix = switch (optimize) {
-        .ReleaseFast => "",
-        .Debug => "-debug",
-        .ReleaseSafe => "-release-safe",
-        .ReleaseSmall => "-release-small",
+        .fast => "",
+        .debug => "-debug",
+        .safe => "-release-safe",
+        .small => "-release-small",
     };
     const pgo_suffix = if (configuration.pgo) "-pgo" else "";
     const extension = if (os == .windows) ".exe" else "";
 
-    return std.fmt.allocPrint(
-        allocator,
+    return allocator.print(
         "manta-v{s}-{s}-{s}{s}{s}{s}{s}",
         .{
             version,
@@ -191,7 +190,7 @@ test "artifact names state portability and non-default optimization" {
         "1.0.0",
         .windows,
         .{ .mode = .portable, .profile = .x86_64, .pgo = false },
-        .ReleaseFast,
+        .fast,
     );
     defer std.testing.allocator.free(portable);
     try std.testing.expectEqualStrings("manta-v1.0.0-windows-x86-64.exe", portable);
@@ -201,7 +200,7 @@ test "artifact names state portability and non-default optimization" {
         "0.0.0-dev",
         .linux,
         .{ .mode = .native, .profile = .arm64, .pgo = false },
-        .ReleaseSafe,
+        .safe,
     );
     defer std.testing.allocator.free(native);
     try std.testing.expectEqualStrings(
@@ -214,7 +213,7 @@ test "artifact names state portability and non-default optimization" {
         "1.0.0",
         .windows,
         .{ .mode = .native, .profile = .pext, .pgo = true },
-        .ReleaseFast,
+        .fast,
     );
     defer std.testing.allocator.free(future_pgo);
     try std.testing.expectEqualStrings(
@@ -231,7 +230,7 @@ test "artifact versions reject path syntax" {
             "1.0/escape",
             .linux,
             .{ .mode = .portable, .profile = .x86_64, .pgo = false },
-            .ReleaseFast,
+            .fast,
         ),
     );
 }

@@ -90,6 +90,12 @@ break builds in a way no Zig-only change could.
   cross the C ABI are rejected before probing.
 - A compile-time assertion binds Manta's WDL enum to Fathom's constants, so a
   renumbered upstream fails the build instead of silently misreporting.
+- Amended for Zig 0.17.0, which removes `@cImport`: the adapter declares the
+  Fathom functions, constants and root-move layout it uses in Zig, including
+  the header's inline WDL entry guard. `src/engine/syzygy_abi.c` compiles
+  against the real `tbprobe.h` and exports those constants and layout facts,
+  and an adapter test requires exact agreement, so the C compiler stays the
+  independent oracle for the declarations.
 - Debug, ReleaseSafe and ReleaseFast suites, `zig fmt`, lint, the policy check
   and the portable build all pass. The frozen MAN-S19 depth-six fingerprint
   remains exactly `744,899`: this step adds no search behavior.
