@@ -204,7 +204,9 @@ Closed with deterministic bench and full correctness/safety/process gates. The
 2026-09-09 presentation alignment uses Rarog's `bench [depth] [repeats]`
 argument order, per-position fields and aggregate layout over the already
 identical forty-position corpus. Manta retains its depth-six default and exact
-`775,451` production fingerprint; only the diagnostic interface changed.
+`775,451` production fingerprint; only the diagnostic interface changed. (1.2.1
+later raised the default depth to 13, as amended in ADR-0021; fingerprints keep
+naming depth 6.)
 
 #### 4.4 — Experiment tooling
 
@@ -2999,8 +3001,11 @@ native output is unchanged. On the 5950X, ten interleaved one-thread `bench 11`
 rounds, every one at `14,659,883` nodes, measured native 1.2.0 under 0.16.0 at a
 median `1,832,943` NPS and native 1.2.1 under 0.17.0 at `2,222,204` (+21.2%),
 with no overlap between the arms; the portable `x86-64-v2` build ran at
-`2,160,631`, 2.8% below native. A behavior-identical rebuild that is only faster
-cannot lose strength, so no non-regression SPRT is registered. ZLint is suspended from `lint` until a release builds
+`2,160,631`, 2.8% below native. Identical trees at fixed depth do not make
+identical games on a clock, so the user-facing strength claim of the speed-up
+is gated by `MAN-C06`, a `gainer` SPRT of the native 1.2.1 head against the
+native 1.2.0 arm; the changelog states its measured Elo. Plain `bench` now
+defaults to depth 13 (ADR-0021 amendment); fingerprints stay `bench 6 1`. ZLint is suspended from `lint` until a release builds
 with Zig 0.17.0. Windows ARM64 joins the hosted CI matrix and the release
 workflow as a sixth portable asset; it passed the native build and all three
 suites on a local Snapdragon X host, and its hosted gate is the release pull

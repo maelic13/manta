@@ -1682,7 +1682,7 @@ test "ponder parsing requires the active option and a game clock" {
 
 test "bench parsing freezes defaults, semantic caps, and one-thread scope" {
     const defaults = parseBench("bench").spec;
-    try std.testing.expectEqual(engine.bench.default_depth, defaults.depth);
+    try std.testing.expectEqual(@as(u16, 13), defaults.depth);
     try std.testing.expectEqual(@as(u16, 1), defaults.repeats);
     try std.testing.expectEqual(@as(u16, 1), defaults.threads);
     try std.testing.expectEqual(@as(u16, 5), parseBench("bench 5 2").spec.depth);

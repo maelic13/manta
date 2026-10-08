@@ -123,20 +123,24 @@ Additional development commands and build contracts are documented in
 ## Benchmark
 
 Type `bench` into the running engine, the same way a chess interface sends it
-commands. It searches 40 fixed positions to depth 6, or to the depth you give,
+commands. It searches 40 fixed positions to depth 13, or to the depth you give,
 and can repeat the whole set up to 16 times:
 
 ```text
 bench
-bench 11
-bench 11 3
+bench 6
+bench 13 3
 ```
 
 Bench always uses one thread and its own 16 MiB hash, whatever `Threads` and
 `Hash` are set to. The summary at the end reports the nodes searched, the time
-taken and the speed in nodes per second. Speed depends on your computer, but
-the node count does not, so it shows whether your build behaves correctly. For
-Manta 1.2.1, plain `bench` searches `355,879` nodes on every supported system.
+taken and the speed in nodes per second.
+
+Speed depends on your computer, but the node count does not, so it shows
+whether your copy of Manta behaves correctly. The quick check is `bench 6`,
+which takes well under a second: Manta 1.2.1 searches `355,879` nodes on every
+supported system. A plain `bench` takes about half a minute on a fast desktop
+and gives a steadier speed reading.
 
 ## License
 

@@ -6,7 +6,10 @@ const eval = @import("../eval/root.zig");
 const search = @import("../search/root.zig");
 
 pub const version = "manta-search-bench-v1";
-pub const default_depth: u16 = 6;
+/// Plain `bench` searches this deep, long enough for a stable speed reading.
+pub const default_depth: u16 = 13;
+/// The depth every recorded node-count fingerprint refers to (`bench 6 1`).
+pub const fingerprint_depth: u16 = 6;
 pub const max_repeats: u16 = 16;
 pub const hash_bytes: usize = 16 * 1024 * 1024;
 pub const position_count = positions.len;

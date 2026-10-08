@@ -125,7 +125,7 @@ test "optimized safety and production modes preserve the accepted MAN-S36 finger
     // and the prospectively frozen candidate report; do not relabel MAN-S30.
     const report = bench.runWithFeatures(
         .{},
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -168,7 +168,7 @@ test "disabling the MAN-S36 core reconstructs the superseded MAN-S35 tree" {
             .settled_mate_stop = false,
             .pv_table_refusal = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -192,7 +192,7 @@ test "archived depth-authority cluster reproduces the MAN-S21 fingerprint" {
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = true },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -229,7 +229,7 @@ test "default-off candidate heads build and search" {
         var clock = IncrementingClock{};
         const report = runArchived(
             candidate[0],
-            .{ .depth = bench.default_depth },
+            .{ .depth = bench.fingerprint_depth },
             &clock,
             &control,
             &thread,
@@ -266,7 +266,7 @@ test "disabling MAN-S30 staging reconstructs the archived MAN-S29 fingerprint" {
             .settled_mate_stop = false,
             .pv_table_refusal = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -302,7 +302,7 @@ test "disabling MAN-S35 mate windows reconstructs the superseded MAN-S34 tree" {
             .settled_mate_stop = false,
             .pv_table_refusal = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -340,7 +340,7 @@ test "MAN-S33 singular exclusion horizon builds on the current production head" 
             .settled_mate_stop = false,
             .pv_table_refusal = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -378,7 +378,7 @@ test "MAN-R02 stability aspiration builds on the MAN-S29 picker it was qualified
             .settled_mate_stop = false,
             .pv_table_refusal = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -402,7 +402,7 @@ test "archived main-selectivity cluster reproduces the rejected MAN-S20 fingerpr
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = true },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -426,7 +426,7 @@ test "evaluation qsearch cluster switch restores the accepted MAN-S17 fingerprin
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -450,7 +450,7 @@ test "rejected MAN-S18 switch retains its qualified diagnostic fingerprint" {
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false, .lmr_synchronization = true },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -474,7 +474,7 @@ test "continuation-history switch restores the accepted MAN-S15 fingerprint" {
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false, .lmr_synchronization = false, .continuation_history = false },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -498,7 +498,7 @@ test "capture-history switch preserves the rejected MAN-S16 fingerprint" {
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false, .lmr_synchronization = false, .capture_history = true, .continuation_history = false },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -522,7 +522,7 @@ test "dynamic LMR switch restores the accepted MAN-S13 fingerprint" {
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false, .lmr_synchronization = false, .capture_history = false, .dynamic_lmr = false, .continuation_history = false },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -546,7 +546,7 @@ test "LMR reply-feedback switch reproduces the archived MAN-S14 candidate finger
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false, .lmr_synchronization = false, .capture_history = false, .dynamic_lmr = false, .continuation_history = false, .lmr_reply_feedback = true },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -570,7 +570,7 @@ test "contextual-history switch restores the accepted MAN-S12 fingerprint" {
     var clock = IncrementingClock{};
     const report = runArchived(
         .{ .depth_authority_sync = false, .main_selectivity_sync = false, .eval_qsearch_sync = false, .lmr_synchronization = false, .capture_history = false, .dynamic_lmr = false, .contextual_history = false },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -605,7 +605,7 @@ test "depth-authority family switch restores the accepted MAN-S07 fingerprint" {
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -639,7 +639,7 @@ test "ProbCut switch restores the accepted MAN-S11 fingerprint" {
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -675,7 +675,7 @@ test "shallow-selectivity family switch restores the accepted MAN-S10 fingerprin
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -710,7 +710,7 @@ test "parked razoring component retains its own qualified diagnostic fingerprint
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -748,7 +748,7 @@ test "search-context switch preserves the accepted MAN-S07 fingerprint" {
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -788,7 +788,7 @@ test "parked MAN-S08 switch retains its qualified diagnostic fingerprint" {
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -826,7 +826,7 @@ test "qsearch SEE switch restores the accepted MAN-S04 fingerprint" {
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
@@ -866,7 +866,7 @@ test "rejected MAN-S06 switches retain their qualified diagnostic fingerprint" {
             .probcut = false,
             .contextual_history = false,
         },
-        .{ .depth = bench.default_depth },
+        .{ .depth = bench.fingerprint_depth },
         &clock,
         &control,
         &thread,
