@@ -122,19 +122,21 @@ Additional development commands and build contracts are documented in
 
 ## Benchmark
 
-Run `bench` through the UCI input stream. An optional depth, thread count and
-hash size may be supplied:
+Type `bench` into the running engine, the same way a chess interface sends it
+commands. It searches 40 fixed positions to depth 6, or to the depth you give,
+and can repeat the whole set up to 16 times:
 
 ```text
 bench
-bench 13
-bench 13 1 64
+bench 11
+bench 11 3
 ```
 
-The final summary line reports the nodes searched, elapsed time and nodes per
-second. Throughput varies by hardware; the node count is the useful
-compatibility check, because a one-thread search is deterministic. For Manta
-1.2.1, `bench 6 1` searches `355,879` nodes on every supported platform.
+Bench always uses one thread and its own 16 MiB hash, whatever `Threads` and
+`Hash` are set to. The summary at the end reports the nodes searched, the time
+taken and the speed in nodes per second. Speed depends on your computer, but
+the node count does not, so it shows whether your build behaves correctly. For
+Manta 1.2.1, plain `bench` searches `355,879` nodes on every supported system.
 
 ## License
 

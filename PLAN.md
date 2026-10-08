@@ -2995,8 +2995,12 @@ on x86-64 the maintainer-chosen `x86-64-v2` floor rather than the SSE2-only
 baseline, because the strict baseline compiled no hardware POPCNT at all while
 excluding only pre-2008 Intel and pre-2011 AMD processors. A build-policy test
 pins both, the portable x86-64 build keeps the `355,879` fingerprint, and
-native output is unchanged. Speed under 0.17.0 relative to 0.16.0 is not yet
-measured on the 5950X. ZLint is suspended from `lint` until a release builds
+native output is unchanged. On the 5950X, ten interleaved one-thread `bench 11`
+rounds, every one at `14,659,883` nodes, measured native 1.2.0 under 0.16.0 at a
+median `1,832,943` NPS and native 1.2.1 under 0.17.0 at `2,222,204` (+21.2%),
+with no overlap between the arms; the portable `x86-64-v2` build ran at
+`2,160,631`, 2.8% below native. A behavior-identical rebuild that is only faster
+cannot lose strength, so no non-regression SPRT is registered. ZLint is suspended from `lint` until a release builds
 with Zig 0.17.0. Windows ARM64 joins the hosted CI matrix and the release
 workflow as a sixth portable asset; it passed the native build and all three
 suites on a local Snapdragon X host, and its hosted gate is the release pull

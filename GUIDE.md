@@ -103,15 +103,15 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 - Manta 1.2.1 is a patch release: the toolchain is Zig 0.17.0 since
   2026-10-08, by maintainer-approved migration. Every deprecated API is
   replaced, the Fathom bindings are hand-declared and checked against the
-  compiled header, and the fingerprint is unchanged at `355,879`. Speed under
-  0.17.0 is not yet measured on the 5950X, so a registered SPRT builds both
-  arms with the same compiler. ZLint is suspended from `lint` until a release
-  supports Zig 0.17.0. `-Dportable` now really selects a portable CPU,
-  `x86-64-v2` or the ARM64 baseline; every earlier portable artifact was built
-  for its CI runner's processor. Windows
-  ARM64 joins the CI matrix and becomes the sixth release asset; its first
-  hosted run is the `dev` to `master` pull request, which must pass before the
-  tag.
+  compiled header, and the fingerprint is unchanged at `355,879`. On the 5950X
+  the 0.17.0 native build is 21.2% faster than 1.2.0 under 0.16.0 at an
+  identical tree, so every registered SPRT must build both arms with the same
+  compiler. ZLint is suspended from `lint` until a release supports Zig 0.17.0.
+  `-Dportable` now really selects a portable CPU, `x86-64-v2` or the ARM64
+  baseline; every earlier portable artifact was built for its CI runner's
+  processor. Windows ARM64 joins the CI matrix and becomes the sixth release
+  asset; its first hosted run is the `dev` to `master` pull request, which must
+  pass before the tag.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
