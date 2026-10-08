@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const current = "1.2.0";
+pub const current = "1.2.1";
 
 test "the reported version is a release triple with no prerelease tag" {
     // Hard-coded component numbers went stale silently once -- and this file

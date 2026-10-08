@@ -6,11 +6,13 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 
 ## Current checkpoint
 
-- Manta 1.1.0 is the release baseline, released 2026-09-13: a complete UCI
-  engine with classical evaluation, deterministic one-thread search, Syzygy,
-  mature clock control, main-authoritative lazy SMP and the MAN-S36 coordinated
-  selective-search core, about `110` Elo over 1.0.0 at `3+0.03`.
-- Phases 0–6 and the Manta 1.0 and 1.1 releases are complete. Targeted
+- Manta 1.2.1 is the release baseline, released 2026-10-08: the 1.2.0 engine
+  rebuilt with Zig 0.17.0 and unchanged in play. Manta 1.1.0, released
+  2026-09-13, was a complete UCI engine with classical evaluation,
+  deterministic one-thread search, Syzygy, mature clock control,
+  main-authoritative lazy SMP and the MAN-S36 coordinated selective-search
+  core, about `110` Elo over 1.0.0 at `3+0.03`.
+- Phases 0–6 and the Manta 1.0, 1.1 and 1.2 releases are complete. Targeted
   pre-NNUE performance Phase 6.5 is paused at the 1.1.0 release; Phase 7 remains
   blocked until the whole Phase 6.5 candidate and evidence sequence is
   complete.
@@ -82,7 +84,7 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   every gate passed again on the final head. 6.5.11 to 6.5.14 and
   6.5.15.2 to 6.5.15.4 stay open for when development resumes, with expected
   gains recorded in PLAN.
-- Manta 1.2.0 is prepared on the release head. It carries the issue #4
+- Manta 1.2.0, released 2026-09-16, carries the issue #4
   repairs (a stored root verdict that drew a won game, forced moves spending the clock,
   mate-settled depth reporting, `go infinite` answering unasked, helper work
   missing from `nodes`/`nps`, Stockfish-shaped information lines and a clock
@@ -95,15 +97,16 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   measured reporting grounds. That made the release a minor one, `1.2.0`, and
   `MAN-C05` accepted H1 for the shipping head against released 1.1.0 after
   2,760 games at `+16.38 +/- 9.09` Elo, with no engine fault from the
-  candidate, so 1.2.0 is cleared to tag. The one-thread depth-6 fingerprint is
+  candidate, so 1.2.0 was cleared to tag. The one-thread depth-6 fingerprint is
   `355,879`. The K+B+N mate reported in the same issue is technique and
   stays open.
-- The toolchain is Zig 0.17.0 since 2026-10-08, by maintainer-approved
-  migration. Every deprecated API is replaced, the Fathom bindings are
+- Manta 1.2.1 is a patch release: the toolchain is Zig 0.17.0 since
+  2026-10-08, by maintainer-approved migration. Every deprecated API is replaced, the Fathom bindings are
   hand-declared and checked against the compiled header, and the fingerprint
   is unchanged at `355,879`. Speed under 0.17.0 is not yet measured on the
   5950X, so a registered SPRT builds both arms with the same compiler. ZLint is
-  suspended from `lint` until a release supports Zig 0.17.0.
+  suspended from `lint` until a release supports Zig 0.17.0. Windows ARM64 is
+  validated in hosted CI but is not a release asset.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 

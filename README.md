@@ -114,7 +114,7 @@ bench 13 1 64
 The final summary line reports the nodes searched, elapsed time and nodes per
 second. Throughput varies by hardware; the node count is the useful
 compatibility check, because a one-thread search is deterministic. For Manta
-1.2.0, `bench 6 1` searches `355,879` nodes on every supported platform.
+1.2.1, `bench 6 1` searches `355,879` nodes on every supported platform.
 
 ## License
 
