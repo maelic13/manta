@@ -244,15 +244,18 @@ The supported source and release matrix is:
 | macOS x86-64 | Required | Native hosted macOS CI while available | Initial release target |
 | macOS ARM64 | Required | Native hosted macOS CI | Initial release target |
 | Linux ARM64 | Required | Native ARM64 runner or named target hardware | Publish only after native gate |
-| Windows ARM64 | Hosted CI validation | Native hosted `windows-11-arm` runner and local Snapdragon X development | Not a release target |
+| Windows ARM64 | Required | Native hosted `windows-11-arm` runner and local Snapdragon X development | Release target from 1.2.1 |
 
-Windows ARM64 is not currently supported. Zig 0.16.0's native compiler crashed
+Windows ARM64 was excluded until 1.2.1. Zig 0.16.0's native compiler crashed
 on the hosted runner during independent project tests, because an LLVM bug
 broke most `aarch64-windows` binaries including the compiler itself. Zig 0.17.0
 works around that bug, and on a local Snapdragon X host it passes the native
 build and the Debug, ReleaseSafe and ReleaseFast suites with no target-specific
-handling. The hosted native matrix therefore validates it again; it may become
-a release target only after those hosted build, test and smoke gates pass.
+handling. It is therefore a release target, published only when the hosted
+native build, test and smoke gates pass on the release head, like every other
+target. Its runner's processor differs from the Snapdragon X machines that run
+the asset, which is one more reason a portable artifact must use the baseline
+CPU rather than the build host's.
 
 Hosted-runner facts verified on 2026-08-07: `ubuntu-24.04-arm` is available as
 a public preview, so stable native publication must account for that service
@@ -268,7 +271,7 @@ replacement exists.
 | `PORT-003` | `zig build` shall default to ReleaseFast, the host CPU and the best retained `auto` profile. `-Dportable` shall use only the platform baseline; `-Dnative` and `-Dportable` are mutually exclusive. Canonical artifacts shall name version, OS, curated ISA profile, native status when applicable and PGO status. Unimplemented profiles, premature PGO, cross-target overrides and misleading raw CPU overrides shall fail explicitly. Phase 10 may extend `auto` only through measured microarchitecture preferences and shall retain the portable fallback. | 1, 4, 10 | Build-policy, metadata and native smoke tests |
 | `PORT-004` | Linux packaging shall first prefer a self-contained Zig binary without a libc dependency where viable. GNU-linked and statically linked musl candidates shall be compared when C integration or deployment requires libc. | 1, 5, 10 | Dependency inspection and A/B |
 | `PORT-005` | musl is a compatibility/deployment choice, not a presumed performance winner. A musl asset may accompany the primary Linux artifact only after deterministic parity, WSL/native execution, dependency inspection and controlled performance comparison. | 5, 10 | Linux packaging gate |
-| `PORT-006` | The source/build contract is 64-bit-only: it shall reject 32-bit targets and compile and execute natively on Windows x86-64 plus Linux and macOS on x86-64 and ARM64. Hot in-memory code may rely on 64-bit pointers and `usize`; external formats remain fixed-width. A downloadable artifact requires target-native correctness, deterministic agreement and backend suitability. Windows ARM64 is validated in the hosted native matrix but remains excluded from release until it passes the ordinary native gates there without special handling. | 1, 10 | Build-policy and native target matrix |
+| `PORT-006` | The source/build contract is 64-bit-only: it shall reject 32-bit targets and compile and execute natively on Windows, Linux and macOS on x86-64 and ARM64. Hot in-memory code may rely on 64-bit pointers and `usize`; external formats remain fixed-width. A downloadable artifact requires target-native correctness, deterministic agreement and backend suitability. | 1, 10 | Build-policy and native target matrix |
 | `PORT-007` | The portable runtime path shall reject an unsupported forced backend safely and shall always retain a baseline implementation. | 8, 10 | Feature-mask tests |
 
 ## 8. Quality and verification matrix

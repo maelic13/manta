@@ -108,7 +108,9 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   arms with the same compiler. ZLint is suspended from `lint` until a release
   supports Zig 0.17.0. `-Dportable` now really selects the baseline CPU; every
   earlier portable artifact was built for its CI runner's processor. Windows
-  ARM64 is validated in hosted CI but is not a release asset.
+  ARM64 joins the CI matrix and becomes the sixth release asset; its first
+  hosted run is the `dev` to `master` pull request, which must pass before the
+  tag.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 

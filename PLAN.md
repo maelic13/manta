@@ -2994,8 +2994,10 @@ byte-identical. Portable now names the baseline CPU explicitly, a build-policy
 test pins that, and the portable x86-64 build keeps the `355,879` fingerprint
 while native output is unchanged. Speed under 0.17.0 relative to 0.16.0 is not yet
 measured on the 5950X. ZLint is suspended from `lint` until a release builds
-with Zig 0.17.0, and Windows ARM64 joins the hosted CI matrix without becoming
-a release asset.
+with Zig 0.17.0. Windows ARM64 joins the hosted CI matrix and the release
+workflow as a sixth portable asset; it passed the native build and all three
+suites on a local Snapdragon X host, and its hosted gate is the release pull
+request's CI.
 
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
@@ -3139,9 +3141,10 @@ SPRT and complete platform/release evidence only if the result will ship.
    version (`1.0.0` / `v1.0.0`, then `1.1.0` / `v1.1.0`).
 2. The worktree is reviewed for accidental/generated content and licensing.
 3. Format, policy, lint and required Debug/ReleaseSafe/ReleaseFast gates pass.
-4. Pull-request CI passes all five native targets and portable smoke tests.
+4. Pull-request CI passes every native target (six from 1.2.1, which adds
+   Windows ARM64) and portable smoke tests.
 5. The annotated tag points at the reviewed release commit.
-6. The published release workflow natively builds all five artifacts, verifies
+6. The published release workflow natively builds every artifact, verifies
    their UCI identities and shared depth-6 fingerprint, and attaches checksums.
 7. A clean download of at least one published artifact is launched in a UCI
    interface before announcing the release.

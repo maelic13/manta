@@ -26,11 +26,12 @@ Git tags. The engine reports the same version without the `v` prefix.
 5. Create the GitHub Release for that existing tag using the matching
    `CHANGELOG.md` section as its notes. Publishing it starts the release
    workflow.
-6. Confirm that all five binaries and `SHA256SUMS` are attached and that the
+6. Confirm that all six binaries and `SHA256SUMS` are attached and that the
    release workflow passed its native smoke tests and cross-platform bench
    agreement.
 
-The workflow builds portable ReleaseFast binaries natively on Windows x86-64,
-Linux x86-64, Linux ARM64, macOS x86-64 and macOS ARM64. It rejects a tag that
+The workflow builds portable ReleaseFast binaries natively on Windows, Linux
+and macOS, each on x86-64 and ARM64. Portable binaries target the baseline CPU
+of their architecture, never the runner's processor. It rejects a tag that
 does not match the package version. Tags, pushes and GitHub Releases remain
 maintainer-owned actions.

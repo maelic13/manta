@@ -8,6 +8,11 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ## [1.2.1] - 2026-10-08
 
+### Added
+
+- A portable Windows ARM64 release binary, for Windows on Snapdragon and other
+  ARM64 PCs.
+
 ### Changed
 
 - Manta now builds with Zig 0.17.0, which also builds and runs natively on

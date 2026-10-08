@@ -33,6 +33,9 @@ jobs:
           - runner: windows-2025
             label: windows-x86-64
             suffix: windows-x86-64.exe
+          - runner: windows-11-arm
+            label: windows-arm64
+            suffix: windows-arm64.exe
           - runner: macos-26-intel
             label: macos-x86-64
             suffix: macos-x86-64
@@ -111,7 +114,7 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           files=(release-output/bench-*.txt)
-          test "${#files[@]}" -eq 5
+          test "${#files[@]}" -eq 6
           reference=
           for file in "${files[@]}"; do
             value=$(<"$file")

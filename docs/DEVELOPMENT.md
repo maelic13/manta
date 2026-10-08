@@ -155,7 +155,7 @@ dependency. The repository avoids negated `.gitignore` entries because ZLint
 interprets them as lint exclusions.
 
 The authoritative CI workflow runs identically for pull requests to `master`,
-pushes to `master` and manual dispatches. It checks five native host targets,
+pushes to `master` and manual dispatches. It checks six native host targets,
 then reduces the quality and native results to `CI / gate`. CI installs the
 exact compiler from official platform archives, checks their pinned SHA-256
 values and caches only the verified toolchain through current major action
@@ -164,12 +164,11 @@ artifacts but does not publish them.
 
 Each native matrix job builds and smoke-tests its canonically named portable
 baseline through the same build entry point used locally. The supported native
-matrix is Windows, Linux and macOS on x86-64 and ARM64. Windows ARM64 was
-excluded because Zig 0.16.0's native compiler crashed during ordinary project
-tests on the hosted runner. Zig 0.17.0 passes the normal build and test path
-natively on a local Windows ARM64 host, so the hosted matrix validates it
-again. It is not a release target until that hosted build/test/smoke path
-passes without target-specific handling.
+matrix is Windows, Linux and macOS on x86-64 and ARM64, and the release
+workflow publishes the same six targets. Windows ARM64 was excluded until 1.2.1
+because Zig 0.16.0's native compiler crashed during ordinary project tests on
+the hosted runner; Zig 0.17.0 passes the normal build, test and smoke path
+without target-specific handling.
 
 Protocol work must follow the normative [UCI behavioral contract](UCI.md) and
 its [canonical transcript corpus](../tests/uci/README.md). Activate a staged
