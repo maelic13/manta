@@ -125,7 +125,7 @@ pub fn build(b: *std.Build) void {
         buildFatal("the rejected MAN-R01 consumer and Step-6.3 integrated policy are mutually exclusive", .{});
 
     const mode: artifact.Mode = if (portable) .portable else .native;
-    const target = b.resolveTargetQuery(artifact.targetQuery(mode));
+    const target = b.resolveTargetQuery(artifact.targetQuery(mode, b.graph.host.result.cpu.arch));
     const configuration = artifact.resolve(.{
         .native = native,
         .portable = portable,

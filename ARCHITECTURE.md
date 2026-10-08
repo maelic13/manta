@@ -1016,7 +1016,7 @@ native evidence.
 
 The build adapter owns one curated profile vocabulary rather than exposing raw
 compiler feature strings as product identities. `zig build` is ReleaseFast,
-host-native and `profile=auto`; `-Dportable` selects the platform baseline and
+host-native and `profile=auto`; `-Dportable` selects the portable floor (`x86-64-v2`, ARM64 baseline) and
 cannot be combined with `-Dnative`. Canonical files live under `zig-out/dist`,
 while `zig-out/bin/manta` remains the development alias. Reserved ISA profiles
 and PGO fail closed until their implementations and representative evidence

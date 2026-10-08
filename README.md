@@ -22,13 +22,33 @@ reproducible installation check.
 - [Latest release](https://github.com/maelic13/manta/releases/latest)
 - [All releases](https://github.com/maelic13/manta/releases)
 
-Releases contain portable builds only, with no separate PEXT, AVX2, AVX-512 or
-profile-guided variants. The fastest executable for a given machine is a
-native build from source, described under [Build from source](#build-from-source).
+Each release has one file per system. Pick the one that matches your computer:
+
+| Your computer | File ends with |
+|---|---|
+| Windows PC with an Intel or AMD processor | `windows-x86-64.exe` |
+| Windows PC with an ARM processor, such as Snapdragon | `windows-arm64.exe` |
+| Linux with an Intel or AMD processor | `linux-x86-64` |
+| Linux on ARM, such as a Raspberry Pi 4 or 5 with a 64-bit system | `linux-arm64` |
+| Mac with an Intel processor | `macos-x86-64` |
+| Mac with Apple silicon (M1 or later) | `macos-arm64` |
+
+On Windows, *Settings → System → About → System type* tells you whether you
+have an x64-based or an ARM-based processor.
+
+The Intel and AMD downloads need a processor from 2008 or later: Intel Core i3,
+i5 or i7 and newer, or AMD from the 2011 FX series onward (the `x86-64-v2`
+level). Every PC that runs current Windows 11 qualifies. On an older processor,
+such as a Core 2 or a Phenom II, the download stops immediately with an
+illegal-instruction error; [build Manta from source](#build-from-source)
+instead. The ARM downloads run on any 64-bit ARM processor.
+
+The downloads are built to run on as many computers as possible. A build from
+source targets your exact processor and is usually a little faster.
 
 ## Use Manta
 
-1. Download the binary for your operating system and processor.
+1. Download the file for your computer, as described above.
 2. On Linux or macOS, make it executable with `chmod +x <binary>`.
 3. Add the executable as a UCI engine in your chess interface.
 4. Configure its options in the interface and start an analysis or game.
@@ -68,8 +88,8 @@ zig build
 This creates a native `ReleaseFast` executable under `zig-out/bin` and a named
 artifact under `zig-out/dist`. It is the fastest build Manta offers: the
 compiler targets the exact processor it runs on, so the binary is typically
-faster than the portable release download and should be used on that machine
-only. For a portable binary suitable for distribution:
+faster than the release download, but it may not start on a different
+computer. To build the same kind of portable binary as a release download:
 
 ```text
 zig build -Dportable
@@ -80,7 +100,7 @@ Useful build options are:
 | Option | Meaning |
 |---|---|
 | `-Dnative` | Optimize for the build machine; this is the default |
-| `-Dportable` | Use the portable baseline for the current OS and architecture |
+| `-Dportable` | Build like the release downloads: `x86-64-v2` on Intel and AMD, any 64-bit ARM processor on ARM |
 | `-Dprofile=x86-64` or `-Dprofile=arm64` | Select the matching portable architecture profile |
 | `-Doptimize=Debug\|ReleaseSafe\|ReleaseFast\|ReleaseSmall` | Select the Zig optimization mode |
 | `-Dversion=X.Y.Z` | Override the embedded semantic version for a controlled build |

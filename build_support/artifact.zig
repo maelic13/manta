@@ -76,13 +76,19 @@ pub fn resolve(request: Request, arch: std.Target.Cpu.Arch) ResolveError!Configu
     return .{ .mode = mode, .profile = profile, .pgo = false };
 }
 
-/// The compiler target for a build mode. Portable must name the baseline CPU
-/// explicitly: an empty query lets Zig detect the build host's CPU, which would
-/// tie a published artifact to the machine that happened to build it.
-pub fn targetQuery(mode: Mode) std.Target.Query {
+/// The compiler target for a build mode on the host architecture. Portable must
+/// name its CPU explicitly: an empty query lets Zig detect the build host's CPU,
+/// which would tie a published artifact to the machine that happened to build
+/// it. On x86-64 the portable floor is x86-64-v2, whose hardware POPCNT every
+/// bitboard count relies on; it excludes only pre-2008 Intel and pre-2011 AMD
+/// processors. ARM64 uses the architecture baseline.
+pub fn targetQuery(mode: Mode, arch: std.Target.Cpu.Arch) std.Target.Query {
     return switch (mode) {
         .native => .{ .cpu_model = .native },
-        .portable => .{ .cpu_model = .baseline },
+        .portable => if (arch == .x86_64)
+            .{ .cpu_model = .{ .explicit = &std.Target.x86.cpu.x86_64_v2 } }
+        else
+            .{ .cpu_model = .baseline },
     };
 }
 
@@ -161,9 +167,17 @@ test "native is the default and portable is explicit" {
 test "portable artifacts never inherit the build host's CPU" {
     // A release binary built on a hosted runner must run on any CPU of its
     // architecture, so the portable query may not resolve to host detection.
-    try std.testing.expect(!targetQuery(.portable).isNativeCpu());
-    try std.testing.expect(targetQuery(.portable).cpu_model == .baseline);
-    try std.testing.expect(targetQuery(.native).isNativeCpu());
+    inline for (.{ .x86_64, .aarch64 }) |arch| {
+        try std.testing.expect(!targetQuery(.portable, arch).isNativeCpu());
+        try std.testing.expect(targetQuery(.native, arch).isNativeCpu());
+    }
+    try std.testing.expect(targetQuery(.portable, .aarch64).cpu_model == .baseline);
+
+    // The documented x86-64 floor: hardware POPCNT and SSE4.2, nothing newer.
+    const x86_model = targetQuery(.portable, .x86_64).cpu_model.explicit;
+    const x86 = std.Target.x86;
+    try std.testing.expect(x86.featureSetHasAll(x86_model.features, .{ .popcnt, .sse4_2 }));
+    try std.testing.expect(!x86.featureSetHasAny(x86_model.features, .{ .avx, .avx2, .bmi2 }));
 }
 
 test "build policy rejects every 32-bit architecture family" {

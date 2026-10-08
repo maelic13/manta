@@ -31,7 +31,7 @@ Git tags. The engine reports the same version without the `v` prefix.
    agreement.
 
 The workflow builds portable ReleaseFast binaries natively on Windows, Linux
-and macOS, each on x86-64 and ARM64. Portable binaries target the baseline CPU
-of their architecture, never the runner's processor. It rejects a tag that
+and macOS, each on x86-64 and ARM64. Portable binaries target `x86-64-v2` or the
+ARM64 baseline, never the runner's processor. It rejects a tag that
 does not match the package version. Tags, pushes and GitHub Releases remain
 maintainer-owned actions.

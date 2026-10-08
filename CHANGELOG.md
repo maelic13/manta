@@ -8,23 +8,29 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ## [1.2.1] - 2026-10-08
 
+This release plays exactly like 1.2.0. It adds a download for Windows on ARM
+and makes every download run on the processors it is meant for.
+
 ### Added
 
-- A portable Windows ARM64 release binary, for Windows on Snapdragon and other
-  ARM64 PCs.
+- A Windows ARM64 download (`windows-arm64.exe`) for Windows PCs with an ARM
+  processor, such as Snapdragon laptops. These PCs no longer need to run the
+  Intel/AMD download through Windows' slower emulation.
 
 ### Changed
 
-- Manta now builds with Zig 0.17.0, which also builds and runs natively on
-  Windows ARM64. Playing behavior is unchanged: the one-thread depth-6
-  fingerprint stays `355,879`.
+- Building from source now requires Zig 0.17.0.
+- The Intel and AMD downloads now state their minimum processor: Intel from
+  2008 (Core i3, i5, i7 and newer) or AMD from 2011 (FX series and newer), the
+  `x86-64-v2` level. On anything older, such as a Core 2 or a Phenom II, build
+  Manta from source. The ARM downloads run on any 64-bit ARM processor.
 
 ### Fixed
 
-- Release binaries now run on any 64-bit processor of their architecture.
-  Every earlier portable build was compiled for the processor of the machine
-  that built it, so a downloaded release could stop with an illegal-instruction
-  error on an older processor than the one the build server happened to use.
+- Downloads could fail to start on some computers. Earlier releases were
+  accidentally built for the processor of the server that compiled them, so on
+  a computer with an older or different processor they could stop at once with
+  an illegal-instruction error.
 
 ## [1.2.0] - 2026-09-16
 

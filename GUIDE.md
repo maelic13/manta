@@ -106,8 +106,9 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   compiled header, and the fingerprint is unchanged at `355,879`. Speed under
   0.17.0 is not yet measured on the 5950X, so a registered SPRT builds both
   arms with the same compiler. ZLint is suspended from `lint` until a release
-  supports Zig 0.17.0. `-Dportable` now really selects the baseline CPU; every
-  earlier portable artifact was built for its CI runner's processor. Windows
+  supports Zig 0.17.0. `-Dportable` now really selects a portable CPU,
+  `x86-64-v2` or the ARM64 baseline; every earlier portable artifact was built
+  for its CI runner's processor. Windows
   ARM64 joins the CI matrix and becomes the sixth release asset; its first
   hosted run is the `dev` to `master` pull request, which must pass before the
   tag.

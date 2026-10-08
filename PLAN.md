@@ -2990,9 +2990,12 @@ behavior-identical rebuild. The release audit found that `-Dportable` had
 never selected the baseline CPU required by `PORT-003`: an empty target query
 makes Zig detect the build host, so every portable artifact since 1.0.0 was
 built for its CI runner's processor, and native and portable builds were
-byte-identical. Portable now names the baseline CPU explicitly, a build-policy
-test pins that, and the portable x86-64 build keeps the `355,879` fingerprint
-while native output is unchanged. Speed under 0.17.0 relative to 0.16.0 is not yet
+byte-identical. Portable now names its CPU explicitly: the ARM64 baseline, and
+on x86-64 the maintainer-chosen `x86-64-v2` floor rather than the SSE2-only
+baseline, because the strict baseline compiled no hardware POPCNT at all while
+excluding only pre-2008 Intel and pre-2011 AMD processors. A build-policy test
+pins both, the portable x86-64 build keeps the `355,879` fingerprint, and
+native output is unchanged. Speed under 0.17.0 relative to 0.16.0 is not yet
 measured on the 5950X. ZLint is suspended from `lint` until a release builds
 with Zig 0.17.0. Windows ARM64 joins the hosted CI matrix and the release
 workflow as a sixth portable asset; it passed the native build and all three
