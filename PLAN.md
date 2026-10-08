@@ -7,9 +7,10 @@ measurement verdicts.
 
 ## Current state
 
-Manta 1.2.1, released 2026-10-08, is the release baseline: the 1.2.0 engine
-rebuilt with Zig 0.17.0 and unchanged in play. Phases 0–6 are
-closed, targeted pre-NNUE performance Phase 6.5 is paused at the 1.1.0 release with
+Manta 1.2.1, released 2026-10-08, is the release baseline: the 1.2.0 search
+rebuilt with Zig 0.17.0, identical at fixed depth and `+40.52 +/- 15.59` Elo
+stronger at `3+0.03` from speed alone (`MAN-C06`). Phases 0–6 are closed,
+targeted pre-NNUE performance Phase 6.5 is paused at the 1.1.0 release with
 6.5.11 to 6.5.14 open, and Phase 7 has not started. Phase 7 remains
 blocked until all of Phase 6.5, including every retained candidate and evidence
 closeout below, is complete. The production
@@ -2984,11 +2985,12 @@ prerelease or build metadata, and render back exactly as written.
 **Manta 1.2.1.** A patch release that carries the maintainer-approved
 migration to Zig 0.17.0: every API that 0.17.0 removes or deprecates is
 replaced, and the Fathom bindings are declared in Zig and checked against the
-compiled header because `@cImport` is gone. Playing behavior is identical: the
-fingerprint stays `355,879` on native and portable ARM64 and on x86-64, and
-the Debug, ReleaseSafe and ReleaseFast suites, lint, policy and both
-table generators pass with byte-identical output. No game gate applies to a
-behavior-identical rebuild. The release audit found that `-Dportable` had
+compiled header because `@cImport` is gone. Search behavior at fixed depth is
+identical: the fingerprint stays `355,879` on native and portable ARM64 and on
+x86-64, and the Debug, ReleaseSafe and ReleaseFast suites, lint, policy and
+both table generators pass with byte-identical output. Only speed differs,
+which a clock turns into different games, so the strength of the rebuild is
+gated in games below. The release audit found that `-Dportable` had
 never selected the baseline CPU required by `PORT-003`: an empty target query
 makes Zig detect the build host, so every portable artifact since 1.0.0 was
 built for its CI runner's processor, and native and portable builds were
@@ -3004,9 +3006,10 @@ with no overlap between the arms; the portable `x86-64-v2` build ran at
 `2,160,631`, 2.8% below native. Identical trees at fixed depth do not make
 identical games on a clock, so the user-facing strength claim of the speed-up
 is gated by `MAN-C06`, a `gainer` SPRT of the native 1.2.1 head against the
-native 1.2.0 arm; the changelog states its measured Elo. Plain `bench` now
-defaults to depth 13 (ADR-0021 amendment); fingerprints stay `bench 6 1`. ZLint is suspended from `lint` until a release builds
-with Zig 0.17.0. Windows ARM64 joins the hosted CI matrix and the release
+native 1.2.0 arm. It accepted H1 after 1,094 games at `+40.52 +/- 15.59` Elo
+with no anomaly, and the changelog states that gain. Plain `bench` now
+defaults to depth 13 (ADR-0021 amendment); fingerprints stay `bench 6 1`.
+ZLint is suspended from `lint` until a release builds with Zig 0.17.0. Windows ARM64 joins the hosted CI matrix and the release
 workflow as a sixth portable asset; it passed the native build and all three
 suites on a local Snapdragon X host, and its hosted gate is the release pull
 request's CI.

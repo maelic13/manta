@@ -6,8 +6,9 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 
 ## Current checkpoint
 
-- Manta 1.2.1 is the release baseline, released 2026-10-08: the 1.2.0 engine
-  rebuilt with Zig 0.17.0 and unchanged in play. Manta 1.1.0, released
+- Manta 1.2.1 is the release baseline, released 2026-10-08: the 1.2.0 search
+  rebuilt with Zig 0.17.0, unchanged at fixed depth and `+40.52 +/- 15.59` Elo
+  stronger at `3+0.03` from speed alone (`MAN-C06`). Manta 1.1.0, released
   2026-09-13, was a complete UCI engine with classical evaluation,
   deterministic one-thread search, Syzygy, mature clock control,
   main-authoritative lazy SMP and the MAN-S36 coordinated selective-search
@@ -106,13 +107,15 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   compiled header, and the fingerprint is unchanged at `355,879`. On the 5950X
   the 0.17.0 native build is 21.2% faster than 1.2.0 under 0.16.0 at an
   identical tree, so every registered SPRT must build both arms with the same
-  compiler; the one exception is `MAN-C06`, registered and pending, which sizes
-  that speed-up in games for the changelog before the tag. ZLint is suspended from `lint` until a release supports Zig 0.17.0.
+  compiler. The one exception, `MAN-C06`, sized that speed-up in games: H1
+  after 1,094 games at `+40.52 +/- 15.59` Elo, which the changelog states.
+  ZLint is suspended from `lint` until a release supports Zig 0.17.0.
   `-Dportable` now really selects a portable CPU, `x86-64-v2` or the ARM64
   baseline; every earlier portable artifact was built for its CI runner's
   processor. Windows ARM64 joins the CI matrix and becomes the sixth release
-  asset; its first hosted run is the `dev` to `master` pull request, which must
-  pass before the tag.
+  asset. Its first hosted run failed on a `quit` backlog defect that discarded
+  no queued jobs, fixed in `a55c62d`; 1.2.1 is cleared to tag once the
+  `dev` to `master` pull request's CI passes on every target.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 

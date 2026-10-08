@@ -8,9 +8,9 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ## [1.2.1] - 2026-10-08
 
-This release is the 1.2.0 engine built with a newer compiler that makes it
-search faster, and therefore play stronger. It adds a download for Windows on
-ARM and makes every download run on the processors it is meant for.
+This release is about 40 Elo stronger than 1.2.0: a newer compiler makes the
+same search run faster. It also adds a download for Windows on ARM and makes
+every download run on the processors it is meant for.
 
 ### Added
 
@@ -23,9 +23,8 @@ ARM and makes every download run on the processors it is meant for.
 - Manta is built with Zig 0.17.0, whose better code generation made it search
   about 20% more positions per second on our AMD Ryzen test machine. The
   search itself is unchanged, but in a timed game the extra speed lets Manta
-  look deeper in the same time, which measured +N Elo against 1.2.0 in
-  one-thread games at 3 seconds plus 0.03 seconds per move.
-  <!-- Replace +N with the MAN-C06 result before tagging. -->
+  look deeper in the same time. Against 1.2.0 that measured `+40.5 ± 15.6`
+  Elo over 1,094 one-thread games at 3 seconds plus 0.03 seconds per move.
   Building from source now requires Zig 0.17.0.
 - `bench` without a depth now searches to depth 13, which takes about half a
   minute and gives a steadier speed reading. `bench 6` remains the quick check
