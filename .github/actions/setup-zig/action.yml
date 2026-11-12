@@ -7,8 +7,8 @@ runs:
     - name: Cache Zig toolchain
       uses: actions/cache@v6
       with:
-        path: ${{ runner.temp }}/zig-0.17.0
-        key: zig-0.17.0-${{ runner.os }}-${{ runner.arch }}
+        path: ${{ runner.temp }}/zig-0.17.1
+        key: zig-0.17.1-${{ runner.os }}-${{ runner.arch }}
 
     - name: Install Zig on Windows
       if: runner.os == 'Windows'

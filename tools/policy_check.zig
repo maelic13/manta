@@ -294,7 +294,7 @@ const Checker = struct {
         const setup_contracts = [_][]const u8{
             "actions/cache@v6",
             "using: composite",
-            "zig-0.17.0-${{ runner.os }}-${{ runner.arch }}",
+            "zig-0.17.1-${{ runner.os }}-${{ runner.arch }}",
             "tools/ci/install-zig.ps1",
             "tools/ci/install-zig.sh",
             "bash \"${{ github.workspace }}/tools/ci/install-zig.sh\"",
@@ -314,13 +314,13 @@ const Checker = struct {
             fragment: []const u8,
         }{
             .{ .content = windows_installer, .fragment = "https://ziglang.org/download/$version/" },
-            .{ .content = windows_installer, .fragment = "b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428" },
-            .{ .content = windows_installer, .fragment = "0a59d91fa1cb40cf068e9b0954434ce973500c7a2ea749f1e01af62cdab52d26" },
+            .{ .content = windows_installer, .fragment = "b03f477a1943673e02aca0f570e8030dffd536ce1f45cbc4d3326ec31159562e" },
+            .{ .content = windows_installer, .fragment = "4789895bdb1e312a2ea73b2a7c0a0cc8d2ab62ba6976e834a7c54cf443377c15" },
             .{ .content = unix_installer, .fragment = "https://ziglang.org/download/$version/" },
-            .{ .content = unix_installer, .fragment = "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026" },
-            .{ .content = unix_installer, .fragment = "9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8" },
-            .{ .content = unix_installer, .fragment = "4f9a1c5269aa17ebda5e6d3c2b89d6cbf36f7d2b22a0306e9ab98f25f95529c6" },
-            .{ .content = unix_installer, .fragment = "b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a" },
+            .{ .content = unix_installer, .fragment = "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a" },
+            .{ .content = unix_installer, .fragment = "a1546d5646eb184437918d6635ca6b762a0e889eac09cef720ee7a1ed3fe7795" },
+            .{ .content = unix_installer, .fragment = "9af07b20319fbd0c92ee46ad23e81d6a782b1aaea2cfb8dcbff35f1d2c7ddbb7" },
+            .{ .content = unix_installer, .fragment = "75f1bc7a1e9852f17ec9a0c1895f767c4ec56d46bc8a834920eece1d0359dd8d" },
         };
         for (installer_contracts) |contract| {
             if (std.mem.find(u8, contract.content, contract.fragment) == null) {

@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$version = "0.17.0"
+$version = "0.17.1"
 
 if ($env:RUNNER_OS -ne "Windows") {
     throw "Windows installer received RUNNER_OS='$env:RUNNER_OS'."
@@ -9,11 +9,11 @@ if ($env:RUNNER_OS -ne "Windows") {
 switch ($env:RUNNER_ARCH) {
     "X64" {
         $artifact = "x86_64-windows"
-        $expectedHash = "b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428"
+        $expectedHash = "b03f477a1943673e02aca0f570e8030dffd536ce1f45cbc4d3326ec31159562e"
     }
     "ARM64" {
         $artifact = "aarch64-windows"
-        $expectedHash = "0a59d91fa1cb40cf068e9b0954434ce973500c7a2ea749f1e01af62cdab52d26"
+        $expectedHash = "4789895bdb1e312a2ea73b2a7c0a0cc8d2ab62ba6976e834a7c54cf443377c15"
     }
     default {
         throw "Unsupported Windows runner architecture '$env:RUNNER_ARCH'."

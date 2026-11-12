@@ -109,13 +109,15 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   identical tree, so every registered SPRT must build both arms with the same
   compiler. The one exception, `MAN-C06`, sized that speed-up in games: H1
   after 1,094 games at `+40.52 +/- 15.59` Elo, which the changelog states.
-  ZLint is suspended from `lint` until a release supports Zig 0.17.0.
+  ZLint is suspended from `lint` until a release supports Zig 0.17.1.
   `-Dportable` now really selects a portable CPU, `x86-64-v2` or the ARM64
   baseline; every earlier portable artifact was built for its CI runner's
   processor. Windows ARM64 joins the CI matrix and becomes the sixth release
   asset. Its first hosted run failed on a `quit` backlog defect that discarded
   no queued jobs, fixed in `a55c62d`; 1.2.1 is cleared to tag once the
-  `dev` to `master` pull request's CI passes on every target.
+  `dev` to `master` pull request's CI passes on every target. On 2026-11-12 the
+  pinned toolchain moved to Zig 0.17.1 with no source changes and an unchanged
+  `355,879` fingerprint.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 
