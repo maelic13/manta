@@ -6,6 +6,11 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Building from source now requires Zig 0.17.1, a bug-fix release of the
+  compiler. The engine's search is unchanged.
+
 ## [1.2.1] - 2026-10-08
 
 This release is about 40 Elo stronger than 1.2.0: a newer compiler makes the

@@ -1,9 +1,9 @@
 # Manta development
 
-Manta requires exactly Zig 0.17.1. ZLS has no 0.17.1 release yet, and the
-0.17.0 release notes state that the separated build configurer stops ZLS 0.16.0
-from working with this compiler, so editor diagnostics are degraded until it
-ships. No editor-specific configuration is required.
+Manta requires exactly Zig 0.17.1. For editor diagnostics use ZLS 0.17.x: ZLS
+releases follow Zig's minor version, not its patch version, and the 0.17.0
+release notes state that the separated build configurer stops ZLS 0.16.0 from
+working with this compiler. No editor-specific configuration is required.
 
 During an edit loop, run the bounded subset first:
 

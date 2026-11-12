@@ -115,9 +115,11 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   processor. Windows ARM64 joins the CI matrix and becomes the sixth release
   asset. Its first hosted run failed on a `quit` backlog defect that discarded
   no queued jobs, fixed in `a55c62d`; 1.2.1 is cleared to tag once the
-  `dev` to `master` pull request's CI passes on every target. On 2026-11-12 the
-  pinned toolchain moved to Zig 0.17.1 with no source changes and an unchanged
-  `355,879` fingerprint.
+  `dev` to `master` pull request's CI passes on every target.
+- The toolchain is Zig 0.17.1 since 2026-11-12, a bug-fix release adopted with
+  no source changes and an unchanged `355,879` fingerprint. Native speed is
+  unchanged within noise on the Snapdragon X development host; the 5950X was
+  not measured, so SPRT arms still share one compiler.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 

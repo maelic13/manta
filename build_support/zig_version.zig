@@ -20,6 +20,7 @@ test "the required stable compiler version is accepted" {
 
 test "other stable and development compiler versions are rejected" {
     const rejected = .{
+        "0.16.0",
         "0.17.0",
         "0.17.2",
         "0.18.0",

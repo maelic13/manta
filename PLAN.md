@@ -3030,10 +3030,18 @@ loaded, which is the designed controller and presenter bounds. The
 fingerprint stays `355,879` and the Debug, ReleaseSafe and ReleaseFast UCI
 suites pass. The fix runs only after `quit`, EOF or a fatal stream, which no
 game reaches before it ends, so `MAN-C06`'s `6466b4a` arm still measures the
-shipped engine's play. On 2026-11-12 the pinned toolchain moved to Zig 0.17.1
-with no engine or test source changes (`zig build lint`, `zig build check`,
-`zig build test-fast -Doptimize=Debug` and native `ReleaseFast` `zig build`
-with `bench 6 1` at `355,879` nodes all pass).
+shipped engine's play.
+
+**Zig 0.17.1.** On 2026-11-12 the pinned toolchain moved to Zig 0.17.1 with no
+engine or test source changes. Its release notes describe a bug-fix release
+for regressions and upgrade blockers, with no language or build-API change.
+`zig build lint`, `zig build check`, `zig build test -Doptimize=Debug` and
+native `ReleaseFast` `bench 6 1` at `355,879` nodes pass locally; the
+ReleaseSafe and ReleaseFast suites run in CI. For `QUAL-004`'s performance
+baseline, five interleaved native `bench 10 1` rounds on the Snapdragon X
+development host, every one at `3,076,878` nodes, measured 0.17.0 at a median
+`1,924,251` NPS and 0.17.1 at `1,919,449` (-0.25%), inside the run-to-run
+spread. The 5950X was not measured.
 
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
