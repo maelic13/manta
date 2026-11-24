@@ -154,9 +154,11 @@ those dependencies. ZLint is a development tool, never a Manta runtime
 dependency. The repository avoids negated `.gitignore` entries because ZLint
 interprets them as lint exclusions.
 
-The authoritative CI workflow runs identically for pull requests to `master`,
-pushes to `master` and manual dispatches. It checks six native host targets,
-then reduces the quality and native results to `CI / gate`. CI installs the
+The authoritative CI workflow runs identically for pull requests to `master`
+and manual dispatches; it does not re-run on pushes to `master`, because
+`master` receives only squash-merged pull requests that already passed CI. It
+checks six native host targets, then reduces the quality and native results to
+`CI / gate`. CI installs the
 exact compiler from official platform archives, checks their pinned SHA-256
 values and caches only the verified toolchain through current major action
 versions. Setup is bounded to six minutes. This pull-request workflow validates
@@ -175,14 +177,17 @@ its [canonical transcript corpus](../tests/uci/README.md). Activate a staged
 transcript only in its owning phase; do not weaken expected behavior to match an
 incomplete implementation.
 
-The separate `release.yml` workflow runs for a published semantic-version tag
-or by manual dispatch against an existing tag. It builds the six supported
-portable binaries natively, verifies UCI identity and cross-platform bench
-agreement, creates `SHA256SUMS` and uploads the assets to that GitHub Release.
-The exact maintainer procedure is in [`RELEASING.md`](RELEASING.md).
+The separate `release.yml` workflow rehearses read-only on pull requests to
+`master` and manual dispatches, and publishes on a `vX.Y.Z` tag push. It
+validates version, changelog summary/highlights and declared `bench 6`
+fingerprint through `tools/ci/release_check.py`, builds all six portable
+binaries natively, verifies UCI identity and cross-platform bench agreement,
+packages `.zip`/`.tar.gz` archives with licences, `README.md`, `CHANGELOG.md`
+and `SHA256SUMS`, and publishes the GitHub Release only after every check
+passes. The exact maintainer procedure is in [`RELEASING.md`](RELEASING.md).
 
 WSL2 is the normal local Linux x86-64 environment; native target execution
 remains required before a release artifact can be published. For any pull
-request, the sole publisher verifies the pull-request gate and post-merge
-`master` gate, then deletes the merged short-lived branch once the post-merge
-`master` gate and local worktree are clean.
+request, the sole publisher requires the pull-request CI gate before
+squash-merging, then deletes the merged short-lived branch once the merge and
+local worktree are clean.

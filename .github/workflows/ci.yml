@@ -3,8 +3,6 @@ name: CI
 on:
   pull_request:
     branches: [master]
-  push:
-    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -12,8 +10,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  # Preserve the backstop result for every release commit on master.
-  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+  # Newer commits to the same PR cancel superseded runs; manual dispatches complete.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quality:
@@ -36,6 +34,9 @@ jobs:
 
       - name: Format, AST, policy and lint
         run: zig build lint
+
+      - name: Test CI release scripts
+        run: python3 -m unittest discover -s tools/ci -p "test_*.py" -v
 
       - name: Compile all roots
         run: zig build check
