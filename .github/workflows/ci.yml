@@ -35,6 +35,9 @@ jobs:
       - name: Format, AST, policy and lint
         run: zig build lint
 
+      - name: Test CI release scripts
+        run: python3 -m unittest discover -s tools/ci -p "test_*.py" -v
+
       - name: Compile all roots
         run: zig build check
 
