@@ -3044,14 +3044,12 @@ the pinned compiler. On Windows x86-64 under Zig 0.17.1, `zig build lint`
 tests passed with 18 opt-in Syzygy/observation tests skipped and 27 UCI
 transcript cases passed) pass; both native `zig build` and portable
 `zig build dist -Dportable` keep `bench 6 1` unchanged at `355,879` nodes, and
-`tools/ci/release_smoke.py` passes on the portable `Manta 1.2.2` artifact. For
-`QUAL-004`'s performance baseline, the earlier `origin/zig-version-update`
-branch measured five interleaved native `bench 10 1` rounds on the Snapdragon X
-development host (every one at `3,076,878` nodes): 0.17.0 at a median
+`tools/ci/release_smoke.py` passes on the portable `Manta 1.2.2` artifact. For `QUAL-004`'s performance baseline, a measurement taken on 2026-11-12 on the
+Snapdragon X development host with identical engine source ran five interleaved
+native `bench 10 1` rounds (every one at `3,076,878` nodes): 0.17.0 at a median
 `1,924,251` NPS and 0.17.1 at `1,919,449` (`-0.25%`), inside the run-to-run
-spread; the 5950X was not measured. Neither branch changes engine source, so
-that baseline applies here. No playing-strength claim or SPRT is made for this
-compiler bug-fix release. `tools/sprt.ps1`'s compiler-equality guard refuses to
+spread; the 5950X was not measured. No playing-strength claim or SPRT is made
+for this compiler bug-fix release. `tools/sprt.ps1`'s compiler-equality guard refuses to
 pair arms built with different Zig versions, so the next registered SPRT must
 rebuild its baseline arm with Zig 0.17.1. Cleared to tag `v1.2.2` once
 pull-request CI passes on every supported target.

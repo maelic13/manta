@@ -97,6 +97,8 @@ plan explicitly requesting them and the maintainer approving the run.
   -- one feature or experiment, or one tooling, documentation or release change
   -- lives on its own short-lived branch from `master` and lands as **one
   squash commit** through a pull request: no merge commits and no rebase merges.
+  When starting approved work, the coding agent creates that short-lived branch
+  from `master` if it is not already on one.
 - On the branch, commit in small verified steps once each step or substep's
   gates pass and its documents are reconciled; GitHub retains those working
   commits under the PR (`refs/pull/<n>/head`) after the squash. Do not leave
@@ -105,8 +107,9 @@ plan explicitly requesting them and the maintainer approving the run.
   step or ticket; engine changes and tooling or documentation changes go in
   separate commits.
 - Before opening the PR, merge `master` into the branch if `master` moved, so
-  the PR shows only the branch's own change. After the squash merge, delete the
-  branch locally and on `origin`.
+  the PR shows only the branch's own change. After the maintainer confirms the
+  squash merge, the coding agent may delete the local branch; deleting the
+  remote branch on `origin` happens only when the maintainer explicitly asks.
 - **The squash message** -- the PR title and description, which is all that
   reaches `master` -- has a fixed shape:
   - Title: short and imperative, saying what changed (for example, `"Tighten
@@ -119,8 +122,8 @@ plan explicitly requesting them and the maintainer approving the run.
   - Empty lines separate the title, body, results and bench line.
 - No AI attribution anywhere: no `Co-Authored-By`, no `"Generated with"` line,
   in commits, PRs or files; the maintainer is the sole author of record.
-- Do not amend, push, open or merge a PR, or rewrite history unless the
-  maintainer explicitly asks.
+- Do not amend, push, delete a remote branch, open or merge a PR, or rewrite
+  history unless the maintainer explicitly asks.
 - **Open nontrivial reports with a one-line recommendation** -- what to do next
   and why, in one sentence, before evidence and options. Put runnable
   maintainer commands in their own fenced block and restate them rather than

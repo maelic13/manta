@@ -182,7 +182,7 @@ agreement, creates `SHA256SUMS` and uploads the assets to that GitHub Release.
 The exact maintainer procedure is in [`RELEASING.md`](RELEASING.md).
 
 WSL2 is the normal local Linux x86-64 environment; native target execution
-remains required before a release artifact can be published. The sole
-publisher verifies the pull-request gate and post-merge `master` gate, then
-deletes the merged short-lived branch once the release and local worktree are
-final and clean.
+remains required before a release artifact can be published. For any pull
+request, the sole publisher verifies the pull-request gate and post-merge
+`master` gate, then deletes the merged short-lived branch once the post-merge
+`master` gate and local worktree are clean.

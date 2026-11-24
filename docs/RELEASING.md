@@ -12,9 +12,10 @@ Git tags. The engine reports the same version without the `v` prefix.
 
 ## Release procedure
 
-1. Branch from `master`, set the version in `build_support/version.zig` and
-   `build.zig.zon`, and commit the release preparation on the branch.
-2. Move user-visible changes from `Unreleased` to a dated changelog section.
+1. Branch from `master` and set the version in `build_support/version.zig` and
+   `build.zig.zon`.
+2. Move user-visible changes from `Unreleased` to a dated changelog section,
+   then commit the release preparation on the branch.
 3. Run the complete local release gate and open a pull request to `master`
    using the structured squash format (short imperative title, 72-column
    summary, test/gate results, and `Bench: <nodes>`). Required CI must pass
