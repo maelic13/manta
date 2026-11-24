@@ -218,14 +218,13 @@ const Checker = struct {
         const required_fragments = [_][]const u8{
             "name: CI",
             "pull_request:",
-            "push:",
             "workflow_dispatch:",
             "contents: read",
             "persist-credentials: false",
             "actions/checkout@v7",
             "uses: ./.github/actions/setup-zig",
             "timeout-minutes: 6",
-            "cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}",
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
             "zig build lint",
             "zig build test -Doptimize=Debug",
             "zig build test -Doptimize=ReleaseSafe",
@@ -250,14 +249,15 @@ const Checker = struct {
             }
         }
 
-        if (std.mem.count(u8, workflow, "branches: [master]") != 2) {
-            self.fail("CI workflow must gate both pull requests and pushes to master", .{});
+        if (std.mem.count(u8, workflow, "branches: [master]") != 1) {
+            self.fail("CI workflow must gate pull requests targeting master", .{});
         }
         if (std.mem.count(u8, workflow, "timeout-minutes: 6") != 2) {
             self.fail("every Zig setup step must have the six-minute bound", .{});
         }
 
         const forbidden_fragments = [_][]const u8{
+            "\n  push:",
             "pull_request_target:",
             "continue-on-error:",
             "actions/upload-artifact",
