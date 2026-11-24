@@ -6,6 +6,17 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-11-24
+
+This is a maintenance patch release that updates the compiler toolchain to Zig
+0.17.1. The engine's search, evaluation and playing behavior are unchanged.
+
+### Changed
+
+- Manta is built with Zig 0.17.1, a bug-fix release of the Zig 0.17 toolchain.
+  The engine's search is unchanged. Building from source now requires Zig
+  0.17.1.
+
 ## [1.2.1] - 2026-10-08
 
 This release is about 40 Elo stronger than 1.2.0: a newer compiler makes the
@@ -149,7 +160,8 @@ every download run on the processors it is meant for.
 - Portable 64-bit release builds for Windows x86-64, Linux x86-64, Linux ARM64,
   macOS x86-64 and macOS ARM64.
 
-[Unreleased]: https://github.com/maelic13/manta/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/maelic13/manta/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/maelic13/manta/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/maelic13/manta/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/maelic13/manta/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/maelic13/manta/compare/v1.0.0...v1.1.0

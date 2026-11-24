@@ -7,9 +7,11 @@ measurement verdicts.
 
 ## Current state
 
-Manta 1.2.1, released 2026-10-08, is the release baseline: the 1.2.0 search
-rebuilt with Zig 0.17.0, identical at fixed depth and `+40.52 +/- 15.59` Elo
-stronger at `3+0.03` from speed alone (`MAN-C06`). Phases 0–6 are closed,
+Manta 1.2.2 is the prepared patch release migrating the toolchain to Zig
+0.17.1, keeping the Manta 1.2.1 search and behavior unchanged. Manta 1.2.1,
+released 2026-10-08, rebuilt the 1.2.0 search with Zig 0.17.0, identical at
+fixed depth and `+40.52 +/- 15.59` Elo stronger at `3+0.03` from speed alone
+(`MAN-C06`). Phases 0–6 are closed,
 targeted pre-NNUE performance Phase 6.5 is paused at the 1.1.0 release with
 6.5.11 to 6.5.14 open, and Phase 7 has not started. Phase 7 remains
 blocked until all of Phase 6.5, including every retained candidate and evidence
@@ -18,7 +20,7 @@ engine combines MAN-E19 classical evaluation, MAN-S29 search parameters,
 MAN-T05 integrated clock parameters, MAN-S30 live-history move ordering,
 MAN-S34 tactical-only non-check qsearch generation, MAN-S35 complete mate
 windows and the MAN-S36 coordinated selective-search core.
-One-thread depth-6 bench is `355,879` nodes. The release configuration supports portable 64-bit Windows x86-64,
+One-thread depth-6 bench is `355,879` nodes. The release configuration supports portable 64-bit Windows x86-64/ARM64,
 Linux x86-64/ARM64 and macOS x86-64/ARM64 artifacts.
 
 No coding agent may start a Phase-6.5 implementation step, Phase 7, a game
@@ -75,7 +77,7 @@ approval.
 
 ### Tooling and host policy
 
-- Use exactly Zig 0.17.0 until a separately approved stable-toolchain migration.
+- Use exactly Zig 0.17.1 until a separately approved stable-toolchain migration.
 - Use Manta's checked fastchess bridge for matches and its pinned local Weather
   Factory wrapper for SPSA. Colosseum is parked until explicitly re-enabled.
 - Development, implementation and local diagnostics occur on the current
@@ -3031,6 +3033,21 @@ fingerprint stays `355,879` and the Debug, ReleaseSafe and ReleaseFast UCI
 suites pass. The fix runs only after `quit`, EOF or a fatal stream, which no
 game reaches before it ends, so `MAN-C06`'s `6466b4a` arm still measures the
 shipped engine's play.
+
+**Manta 1.2.2.** A maintenance patch release migrating the pinned toolchain from
+Zig 0.17.0 to Zig 0.17.1 (2026-11-02 bug-fix release, with no language,
+build-API, or engine source changes). ZLS `0.17.x` is available for editor
+diagnostics; ZLint stays pinned to `v0.10.0` and suspended from `lint` until a
+release supports Zig 0.17.1. On Windows x86-64 under Zig 0.17.1, `zig build lint`
+(`policy check: PASS`), `zig build check`, and all three serial test gates
+(`zig build test` in `Debug`, `ReleaseSafe`, and `ReleaseFast`: `456/474`
+tests passed with 18 opt-in Syzygy/observation tests skipped and 27 UCI
+transcript cases passed) pass; both native `zig build` and portable
+`zig build dist -Dportable` keep `bench 6 1` unchanged at `355,879` nodes, and
+`tools/ci/release_smoke.py` passes on the portable `Manta 1.2.2` artifact. No
+playing-strength claim or SPRT is made for this compiler bug-fix release, and
+registered SPRT arms continue to require matching compiler versions. Cleared to
+tag `v1.2.2` once pull-request CI passes on every supported target.
 
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and

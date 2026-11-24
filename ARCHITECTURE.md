@@ -1174,5 +1174,5 @@ The Phase-0.3 exit verdict is recorded in `PLAN.md`. Later changes supersede an
 ADR rather than silently editing the historical decision.
 
 Authoritative language references for this architecture are the
-[Zig 0.17.0 documentation](https://ziglang.org/documentation/0.17.0/) and
+[Zig 0.17.1 documentation](https://ziglang.org/documentation/0.17.1/) and
 [release notes](https://ziglang.org/download/0.17.0/release-notes.html).

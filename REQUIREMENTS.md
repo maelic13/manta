@@ -280,8 +280,8 @@ replacement exists.
 
 | ID | Requirement | Owner | Verification |
 |---|---|---:|---|
-| `QUAL-001` | Development, CI and releases shall use the latest official stable Zig. The accepted version for this revision is exactly `0.17.0`; development/nightly builds are forbidden. | 1 onward | Version command and official-release check |
-| `QUAL-002` | `build.zig.zon` shall declare `.minimum_zig_version = "0.17.0"`, while `build.zig` shall independently reject any compiler whose `builtin.zig_version_string` is not exactly `0.17.0`. The advisory package field alone is insufficient. | 1 | Build guard and negative-version test |
+| `QUAL-001` | Development, CI and releases shall use the latest official stable Zig. The accepted version for this revision is exactly `0.17.1`; development/nightly builds are forbidden. | 1 onward | Version command and official-release check |
+| `QUAL-002` | `build.zig.zon` shall declare `.minimum_zig_version = "0.17.1"`, while `build.zig` shall independently reject any compiler whose `builtin.zig_version_string` is not exactly `0.17.1`. The advisory package field alone is insufficient. | 1 | Build guard and negative-version test |
 | `QUAL-003` | CI shall print and compare `zig version` before invoking any project build step. Toolchain archives/actions shall be pinned and their provenance recorded. | 1 | Workflow inspection and CI log |
 | `QUAL-004` | At every numbered phase start and release, a newer official stable version blocks feature work until migration, release-note review and the affected correctness/performance baselines pass. | Every phase/release | Phase-start and release checklist |
 
@@ -289,10 +289,10 @@ Zig 0.16.0 introduced explicit `std.Io` plumbing and test timeouts. Zig 0.17.0
 removes `@cImport` and deprecates build-system C translation in favour of an
 external package, so Manta declares the small Fathom API it calls in Zig and
 checks those declarations against the compiled header. Manta's source uses no
-API that 0.17.0 marks deprecated, but the documented and CI spellings
+API that 0.17.1 marks deprecated, but the documented and CI spellings
 `-Doptimize=Debug|ReleaseSafe|ReleaseFast|ReleaseSmall` parse only through an
 alias that Zig deprecates and removes after 0.18.0; the migration that leaves
-0.18.0 must switch them to `debug|safe|fast|small`. Architecture and examples use the 0.17.0 APIs, not
+0.18.0 must switch them to `debug|safe|fast|small`. Architecture and examples use the 0.17.1 APIs, not
 development documentation. Release performance uses the LLVM-backed
 `ReleaseFast` path; Debug output is never a speed reference.
 
@@ -302,7 +302,7 @@ development documentation. Release performance uses the LLVM-backed
 |---|---|---|
 | `QUAL-005` | `zig fmt --check --ast-check .` | Every local gate and CI run |
 | `QUAL-006` | `zig build lint`; warnings, forbidden dependency edges, stale generated defaults, unversioned formats and unannotated unsafe operations are failures | Every local gate and CI run; includes format/AST, project policy and architecture-fitness checks |
-| `QUAL-007` | ZLint `0.10.0` | Pinned in its isolated tool package. Suspended from `lint` since the Zig 0.17.0 migration because no ZLint release builds with Zig 0.17.0; it rejoins `lint` once a release does and reproduces a reviewed zero-warning baseline in CI |
+| `QUAL-007` | ZLint `0.10.0` | Pinned in its isolated tool package. Suspended from `lint` since the Zig 0.17.0 migration because no ZLint release builds with Zig 0.17.1; it rejoins `lint` once a release does and reproduces a reviewed zero-warning baseline in CI |
 | `QUAL-008` | `zig build test -Doptimize=Debug` | Every implementation change; primary invariant/leak development gate |
 | `QUAL-009` | `zig build test -Doptimize=ReleaseSafe` | Every implementation change in CI |
 | `QUAL-010` | `zig build test -Doptimize=ReleaseFast` | Phase boundaries, release gates and any production-semantics or performance-sensitive change |

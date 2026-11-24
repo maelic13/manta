@@ -79,7 +79,7 @@ See [docs/UCI.md](docs/UCI.md) for the complete protocol contract.
 
 ## Build from source
 
-Manta requires Zig 0.17.0. From the repository root:
+Manta requires Zig 0.17.1. From the repository root:
 
 ```text
 zig build
@@ -138,7 +138,7 @@ taken and the speed in nodes per second.
 
 Speed depends on your computer, but the node count does not, so it shows
 whether your copy of Manta behaves correctly. The quick check is `bench 6`,
-which takes well under a second: Manta 1.2.1 searches `355,879` nodes on every
+which takes well under a second: Manta 1.2.2 searches `355,879` nodes on every
 supported system. A plain `bench` takes about half a minute on a fast desktop
 and gives a steadier speed reading.
 
