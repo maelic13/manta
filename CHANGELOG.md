@@ -8,14 +8,13 @@ All notable user-visible changes to Manta are recorded here. The format follows
 
 ## [1.2.2] - 2026-11-24
 
-This is a maintenance patch release that updates the compiler toolchain to Zig
-0.17.1. The engine's search, evaluation and playing behavior are unchanged.
+This is a maintenance patch release built with Zig 0.17.1, a bug-fix release of
+the Zig 0.17 toolchain. The search is unchanged at fixed depth (`bench 6` stays
+`355,879` nodes), and no strength change is claimed.
 
 ### Changed
 
-- Manta is built with Zig 0.17.1, a bug-fix release of the Zig 0.17 toolchain.
-  The engine's search is unchanged. Building from source now requires Zig
-  0.17.1.
+- Built with Zig 0.17.1. Building from source now requires Zig 0.17.1.
 
 ## [1.2.1] - 2026-10-08
 

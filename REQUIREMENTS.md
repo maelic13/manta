@@ -302,7 +302,7 @@ development documentation. Release performance uses the LLVM-backed
 |---|---|---|
 | `QUAL-005` | `zig fmt --check --ast-check .` | Every local gate and CI run |
 | `QUAL-006` | `zig build lint`; warnings, forbidden dependency edges, stale generated defaults, unversioned formats and unannotated unsafe operations are failures | Every local gate and CI run; includes format/AST, project policy and architecture-fitness checks |
-| `QUAL-007` | ZLint `0.10.0` | Pinned in its isolated tool package. Suspended from `lint` since the Zig 0.17.0 migration because no ZLint release builds with Zig 0.17.1; it rejoins `lint` once a release does and reproduces a reviewed zero-warning baseline in CI |
+| `QUAL-007` | ZLint `0.10.0` | Pinned in its isolated tool package. Suspended from `lint` since the Zig 0.17.0 migration because no ZLint release builds with Zig 0.17.x; it rejoins `lint` once a release supports the pinned compiler and reproduces a reviewed zero-warning baseline in CI |
 | `QUAL-008` | `zig build test -Doptimize=Debug` | Every implementation change; primary invariant/leak development gate |
 | `QUAL-009` | `zig build test -Doptimize=ReleaseSafe` | Every implementation change in CI |
 | `QUAL-010` | `zig build test -Doptimize=ReleaseFast` | Phase boundaries, release gates and any production-semantics or performance-sensitive change |

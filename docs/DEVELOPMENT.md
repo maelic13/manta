@@ -145,10 +145,10 @@ failure evidence belongs under the gitignored `artifacts/<suite>/` tree and
 must be enabled explicitly; normal test runs leave the worktree untouched.
 
 ZLint is suspended from the lint command. No ZLint release builds with Zig
-0.17.1: v0.10.0 and its dependencies still use build-system APIs that 0.17.0
+0.17.x: v0.10.0 and its dependencies still use build-system APIs that 0.17.0
 removed. Its isolated tool package stays pinned to v0.10.0 with the reviewed
 rules in [`zlint.json`](../zlint.json), so it can rejoin `lint` once a release
-supports Zig 0.17.1. The package may fetch sources into ignored
+supports the pinned compiler. The package may fetch sources into ignored
 `tools/zlint/zig-pkg/`; ordinary build, check and test commands never resolve
 those dependencies. ZLint is a development tool, never a Manta runtime
 dependency. The repository avoids negated `.gitignore` entries because ZLint

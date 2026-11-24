@@ -6,8 +6,7 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 
 ## Current checkpoint
 
-- Manta 1.2.2 is the prepared patch release on Zig 0.17.1, preserving the
-  1.2.1 search, evaluation and `355,879` fingerprint unchanged. Manta 1.2.1,
+- Manta 1.2.2 is prepared on Zig 0.17.1 (details below); Manta 1.2.1,
   released 2026-10-08, rebuilt the 1.2.0 search with Zig 0.17.0, unchanged at
   fixed depth and `+40.52 +/- 15.59` Elo stronger at `3+0.03` from speed alone
   (`MAN-C06`). Manta 1.1.0, released
@@ -111,21 +110,23 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   identical tree, so every registered SPRT must build both arms with the same
   compiler. The one exception, `MAN-C06`, sized that speed-up in games: H1
   after 1,094 games at `+40.52 +/- 15.59` Elo, which the changelog states.
-  ZLint is suspended from `lint` until a release supports Zig 0.17.1.
+  ZLint is suspended from `lint` until a release supports Zig 0.17.0.
   `-Dportable` now really selects a portable CPU, `x86-64-v2` or the ARM64
   baseline; every earlier portable artifact was built for its CI runner's
   processor. Windows ARM64 joins the CI matrix and becomes the sixth release
   asset. Its first hosted run failed on a `quit` backlog defect that discarded
   no queued jobs, fixed in `a55c62d`; 1.2.1 is cleared to tag once the
   `dev` to `master` pull request's CI passes on every target.
-- Manta 1.2.2 is prepared as a maintenance patch release migrating the pinned
-  toolchain to Zig 0.17.1 (bug-fix release with no engine source or behavior
-  change, `355,879` fingerprint unchanged, ZLS `0.17.x` available, ZLint still
-  suspended). Local Windows x86-64 gates (`lint`, `check`, `test` in `Debug`/
+- Manta 1.2.2 is a prepared maintenance patch release migrating the pinned
+  toolchain to Zig 0.17.1 with no Manta source change needed and an unchanged
+  `355,879` depth-6 fingerprint (ZLS `0.17.x` available; ZLint still suspended
+  on `0.17.x`). Local Windows x86-64 gates (`lint`, `check`, `test` in `Debug`/
   `ReleaseSafe`/`ReleaseFast`, native `bench 6`, and portable `release_smoke.py`)
-  pass. No playing-strength claim or SPRT is needed; SPRT arms must continue to
-  share one compiler. Cleared to tag `v1.2.2` once the release pull request's
-  CI passes on all six targets.
+  pass. Native speed was unchanged within noise on the Snapdragon X host
+  (`-0.25%` on `bench 10 1`); the 5950X was not measured, no strength claim is
+  made, and `tools/sprt.ps1` requires the next registered SPRT to rebuild its
+  baseline arm with Zig 0.17.1. Cleared to tag `v1.2.2` once the release pull
+  request's CI passes on all six targets.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 

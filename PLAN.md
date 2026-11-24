@@ -3035,19 +3035,26 @@ game reaches before it ends, so `MAN-C06`'s `6466b4a` arm still measures the
 shipped engine's play.
 
 **Manta 1.2.2.** A maintenance patch release migrating the pinned toolchain from
-Zig 0.17.0 to Zig 0.17.1 (2026-11-02 bug-fix release, with no language,
-build-API, or engine source changes). ZLS `0.17.x` is available for editor
-diagnostics; ZLint stays pinned to `v0.10.0` and suspended from `lint` until a
-release supports Zig 0.17.1. On Windows x86-64 under Zig 0.17.1, `zig build lint`
+Zig 0.17.0 to Zig 0.17.1 (2026-11-02 bug-fix release); no Manta source change
+was needed for 0.17.1. ZLS `0.17.x` is available for editor diagnostics; ZLint
+stays pinned to `v0.10.0` and suspended from `lint` until a release supports
+the pinned compiler. On Windows x86-64 under Zig 0.17.1, `zig build lint`
 (`policy check: PASS`), `zig build check`, and all three serial test gates
 (`zig build test` in `Debug`, `ReleaseSafe`, and `ReleaseFast`: `456/474`
 tests passed with 18 opt-in Syzygy/observation tests skipped and 27 UCI
 transcript cases passed) pass; both native `zig build` and portable
 `zig build dist -Dportable` keep `bench 6 1` unchanged at `355,879` nodes, and
-`tools/ci/release_smoke.py` passes on the portable `Manta 1.2.2` artifact. No
-playing-strength claim or SPRT is made for this compiler bug-fix release, and
-registered SPRT arms continue to require matching compiler versions. Cleared to
-tag `v1.2.2` once pull-request CI passes on every supported target.
+`tools/ci/release_smoke.py` passes on the portable `Manta 1.2.2` artifact. For
+`QUAL-004`'s performance baseline, the earlier `origin/zig-version-update`
+branch measured five interleaved native `bench 10 1` rounds on the Snapdragon X
+development host (every one at `3,076,878` nodes): 0.17.0 at a median
+`1,924,251` NPS and 0.17.1 at `1,919,449` (`-0.25%`), inside the run-to-run
+spread; the 5950X was not measured. Neither branch changes engine source, so
+that baseline applies here. No playing-strength claim or SPRT is made for this
+compiler bug-fix release. `tools/sprt.ps1`'s compiler-equality guard refuses to
+pair arms built with different Zig versions, so the next registered SPRT must
+rebuild its baseline arm with Zig 0.17.1. Cleared to tag `v1.2.2` once
+pull-request CI passes on every supported target.
 
 **Superseded on 2026-09-12:** the former 6.5.11 forward-proof packages, 6.5.12
 evaluation reliability, 6.5.13 residual cost, 6.5.14 conditional fit and
