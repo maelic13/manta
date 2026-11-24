@@ -2,7 +2,7 @@
     .name = .manta_zlint,
     .version = "0.0.0",
     .fingerprint = 0x8bc28ec4730b07df, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.17.0",
+    .minimum_zig_version = "0.17.1",
     .dependencies = .{
         .zlint = .{
             .url = "https://github.com/DonIsaac/zlint/archive/refs/tags/v0.10.0.tar.gz",

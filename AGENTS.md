@@ -46,6 +46,13 @@ change, expected files/gate and whether approved work can finish without it.
 Do not bundle the proposal while waiting. Urgent correctness or data-loss risk
 may justify stopping immediately, never quietly expanding scope.
 
+If a non-blocking bug, chess error or promising improvement is noticed outside
+the current scope, finish the approved step first and report the finding
+separately at the end without implementing it. If the maintainer interrupts
+work with a correction, finish and cheaply qualify that correction, report it
+and return control; do not silently resume the interrupted objective unless
+asked.
+
 Work only on the step and ticket that `GUIDE.md` marks open and that the
 maintainer has approved. A prepared step is not a started step; a sub-ticket's
 approval does not cover the next one. Do not implement work from a later step
@@ -62,12 +69,18 @@ plan explicitly requesting them and the maintainer approving the run.
 - Read the current checkpoint and the owning sections; do not reread or emit
   whole historical documents when bounded `rg` results and relevant slices
   establish the contract.
-- Use cheap compile and focused invariant tests while editing. The
-  deterministic behavior gate for a search change is the native ReleaseFast
-  `bench 6 1` fingerprint in every affected arm. Full suites are not a routine
-  per-step gate; they run before a release or when the maintainer asks, and
-  each step's evidence records which gates actually ran. Documentation-only
-  edits get only their formatting and policy check.
+- Use cheap compile and focused invariant tests while editing. **Verify
+  mechanically, never by eyeballing, and never by assuming a tool did what its
+  name says.** Check exit status directly, never masked through a pipe, and
+  test behavior or constructs rather than words in a comment. The deterministic
+  behavior gate for a search change is the native ReleaseFast `bench 6 1`
+  fingerprint in every affected arm; exact `bench` identity is a necessary
+  fingerprint, not proof of behavioral identity (evaluation activation,
+  terminal logic, time handling and other path-dependent changes can alter play
+  while leaving `bench` equal). Full suites are not a routine per-step gate;
+  they run before a release or when the maintainer asks, and each step's
+  evidence records which gates actually ran. Documentation-only edits get only
+  their formatting and policy check.
 - Measure only the prospective quantities needed by the current decision.
   Freeze implementation first, then make the final measurement once.
 - Treat an exact fingerprint mismatch as a diagnostic: obtain and explain the
@@ -78,15 +91,44 @@ plan explicitly requesting them and the maintainer approving the run.
 - Do not create new plans, artifacts, experiment registrations or run
   configurations beyond what the maintainer approved for the turn.
 
-## Commits
+## Delivery, commits and reporting
 
-- Commit each completed step or approved ticket as one commit once its gates
-  pass and its documents are reconciled. Do not leave finished work uncommitted
-  waiting for permission, and do not ask whether to commit.
-- Use a short imperative subject line and no body, matching the surrounding
-  history. Never add `Co-Authored-By` or other tooling trailers; the maintainer
-  is the sole author of record.
-- Do not create branches, rewrite history, amend or push without being asked.
+- `master` is the trunk; nothing else lives long. Every coherent piece of work
+  -- one feature or experiment, or one tooling, documentation or release change
+  -- lives on its own short-lived branch from `master` and lands as **one
+  squash commit** through a pull request: no merge commits and no rebase merges.
+  When starting approved work, the coding agent creates that short-lived branch
+  from `master` if it is not already on one.
+- On the branch, commit in small verified steps once each step or substep's
+  gates pass and its documents are reconciled; GitHub retains those working
+  commits under the PR (`refs/pull/<n>/head`) after the squash. Do not leave
+  finished work uncommitted waiting for permission, and do not ask whether to
+  commit. Branch commit subjects are concise and imperative and may name the
+  step or ticket; engine changes and tooling or documentation changes go in
+  separate commits.
+- Before opening the PR, merge `master` into the branch if `master` moved, so
+  the PR shows only the branch's own change. After the maintainer confirms the
+  squash merge, the coding agent may delete the local branch; deleting the
+  remote branch on `origin` happens only when the maintainer explicitly asks.
+- **The squash message** -- the PR title and description, which is all that
+  reaches `master` -- has a fixed shape:
+  - Title: short and imperative, saying what changed (for example, `"Tighten
+    late-move reductions"`), with no test results and no phase, plan or ledger
+    references.
+  - Body: a few plain lines on what and why, wrapped at 72 columns.
+  - Results: one per line (for example, `"STC 3+0.03: +32.7 ± 8.9 Elo (2,450
+    games)"`, or `"No game test: documentation and tooling only."`).
+  - Bench line: `Bench: <nodes>`, the `bench 6 1` node count `master` will have.
+  - Empty lines separate the title, body, results and bench line.
+- No AI attribution anywhere: no `Co-Authored-By`, no `"Generated with"` line,
+  in commits, PRs or files; the maintainer is the sole author of record.
+- Do not amend, push, delete a remote branch, open or merge a PR, or rewrite
+  history unless the maintainer explicitly asks.
+- **Open nontrivial reports with a one-line recommendation** -- what to do next
+  and why, in one sentence, before evidence and options. Put runnable
+  maintainer commands in their own fenced block and restate them rather than
+  referring back. Keep end-step reports concise: outcome, essential
+  verification, commit, any separate non-blocking findings and next step.
 
 ## Product objective
 
@@ -155,6 +197,13 @@ switches and run one final production SPRT. A passing bundle licenses the
 bundle, not a claim that every component helped; use targeted,
 value-of-information ablations rather than an exhaustive matrix.
 
+Refusing to build a mechanism whose chess rationale, interactions or invariants
+do not come out clean, or refuting an unmeasured assumption in `PLAN.md` or
+`EXPERIMENTS.md`, is a deliverable of equal standing to a diff. Every refusal
+must itself be falsifiable: state the exact invariant or defect and the
+cheapest check that would settle it. Never soften a negative result or
+manufacture a disagreement.
+
 ## Hosts, harnesses and shared tooling
 
 The designated game-testing, tuning and final cross-engine comparison host is
@@ -165,7 +214,21 @@ pair/game cap, qualified retained pair rate, expected and worst-case wall time,
 storage estimate, checkpoint/resume path and stop rule for the maintainer to
 run. Require the returned manifest, log, PGN and checkpoint before recording a
 verdict. Do not overlap it with data generation or other timed work on that
-machine.
+machine. Measure only on an idle host (check CPU load and running engines,
+harnesses or builds first), and never measure strength or NPS on a diagnostic
+or tune build. Prove a guard or harness wire live before trusting a null from
+it: a known-bad input must make it fail, and an absurd option value must move
+the numbers.
+
+A Zig minor or LLVM major upgrade is a speed change even at an identical
+fingerprint and owes a controlled speed read before moving the pin; compiler
+patch releases owe no games. No compiler step, a patch included, may fall
+between an SPRT's arms unless explicitly declared.
+
+Fit each gate to the change rather than copying the last template: size caps to
+the expected drift or exposure, and record SPRT boundary estimates as
+first-crossing estimates rather than unbiased effect sizes. Never extend or
+counterfactually re-score a stopped SPRT.
 
 The Rarog/Basilisk-derived fastchess SPRT harness, its 5950X placement, book,
 time control and anomaly checks are battle-tested and trusted. Do not require a
@@ -247,16 +310,18 @@ value merely because it is the current output. Exact values are appropriate
 only for a documented protocol/format contract, a deliberately frozen
 conformance snapshot, or a diagnostic fingerprint with an update procedure.
 
-Never update an expected value just to make a failure disappear. Determine
+Never update an expected value just to make a failure disappear, and never
+relax a correctness test in the commit whose change made it fail. Determine
 whether the implementation, the expectation or the underlying chess premise
-is wrong, and record the reason for an intentional change.
+is wrong; if a precondition was wrong, fix it in its own commit with justifying
+evidence.
 
 Passing tests is necessary, not sufficient. Ask whether the tested property is
 meaningful for legal chess and for the goal of producing a stronger engine.
 
 ## Zig and architecture requirements
 
-- Use Zig 0.17.0 until the latest-stable migration rule changes it; never use
+- Use Zig 0.17.1 until the latest-stable migration rule changes it; never use
   nightly syntax or compatibility shims.
 - Follow the inward dependency graph in `ARCHITECTURE.md`.
 - Use explicit allocators/ownership, precise types, optionals, error unions and
@@ -268,6 +333,9 @@ meaningful for legal chess and for the goal of producing a stronger engine.
 - Keep unsafe/unchecked operations local, documented by an invariant and
   covered by safety builds plus focused tests.
 - The scalar implementation is authoritative; optimized backends are exact.
+- Comments in engine code briefly explain the chess or engineering invariant or
+  problem, without narrating roadmap step numbers or earlier versions as the
+  explanation.
 - Preserve unrelated user work and keep public documentation concise.
 
 ## Evidence and completion

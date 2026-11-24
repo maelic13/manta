@@ -6,9 +6,10 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
 
 ## Current checkpoint
 
-- Manta 1.2.1 is the release baseline, released 2026-10-08: the 1.2.0 search
-  rebuilt with Zig 0.17.0, unchanged at fixed depth and `+40.52 +/- 15.59` Elo
-  stronger at `3+0.03` from speed alone (`MAN-C06`). Manta 1.1.0, released
+- Manta 1.2.2 is prepared on Zig 0.17.1 (details below); Manta 1.2.1,
+  released 2026-10-08, rebuilt the 1.2.0 search with Zig 0.17.0, unchanged at
+  fixed depth and `+40.52 +/- 15.59` Elo stronger at `3+0.03` from speed alone
+  (`MAN-C06`). Manta 1.1.0, released
   2026-09-13, was a complete UCI engine with classical evaluation,
   deterministic one-thread search, Syzygy, mature clock control,
   main-authoritative lazy SMP and the MAN-S36 coordinated selective-search
@@ -116,6 +117,16 @@ rules in `PLAN.md`, and game/tuning evidence in `EXPERIMENTS.md`.
   asset. Its first hosted run failed on a `quit` backlog defect that discarded
   no queued jobs, fixed in `a55c62d`; 1.2.1 is cleared to tag once the
   `dev` to `master` pull request's CI passes on every target.
+- Manta 1.2.2 is a prepared maintenance patch release migrating the pinned
+  toolchain to Zig 0.17.1 with no Manta source change needed and an unchanged
+  `355,879` depth-6 fingerprint (ZLS `0.17.x` available; ZLint still suspended
+  on `0.17.x`). Local Windows x86-64 gates (`lint`, `check`, `test` in `Debug`/
+  `ReleaseSafe`/`ReleaseFast`, native `bench 6`, and portable `release_smoke.py`)
+  pass. Native speed was unchanged within noise on the Snapdragon X host
+  (`-0.25%` on `bench 10 1`); the 5950X was not measured, no strength claim is
+  made, and `tools/sprt.ps1` requires the next registered SPRT to rebuild its
+  baseline arm with Zig 0.17.1. Cleared to tag `v1.2.2` once the release pull
+  request's CI passes on all six targets.
 - No Phase-6.5 implementation step, Phase-7 implementation, games, tuning or
   data generation begins without separate approval.
 

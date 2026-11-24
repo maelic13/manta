@@ -761,7 +761,7 @@ pub fn build(b: *std.Build) void {
     const lint_step = b.step("lint", "Run formatting, policy and Zig lint checks");
     lint_step.dependOn(fmt_step);
     lint_step.dependOn(policy_step);
-    // ZLint is suspended from lint: no ZLint release builds with Zig 0.17.0.
+    // ZLint is suspended from lint: no ZLint release builds with Zig 0.17.1.
     // Its isolated package in tools/zlint stays pinned for re-enabling.
 
     const magic_module = b.createModule(.{

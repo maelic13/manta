@@ -12,11 +12,16 @@ Git tags. The engine reports the same version without the `v` prefix.
 
 ## Release procedure
 
-1. Set the version in `build_support/version.zig` and `build.zig.zon`.
-2. Move user-visible changes from `Unreleased` to a dated changelog section.
-3. Run the complete local release gate and open the `dev` to `master` pull
-   request. Required CI must pass before squash-merging it.
-4. On the clean release commit, create and push an annotated tag:
+1. Branch from `master` and set the version in `build_support/version.zig` and
+   `build.zig.zon`.
+2. Move user-visible changes from `Unreleased` to a dated changelog section,
+   then commit the release preparation on the branch.
+3. Run the complete local release gate and open a pull request to `master`
+   using the structured squash format (short imperative title, 72-column
+   summary, test/gate results, and `Bench: <nodes>`). Required CI must pass
+   before squash-merging it; delete the branch locally and on `origin` after
+   the merge.
+4. On the clean merged `master` commit, create and push an annotated tag:
 
    ```text
    git tag -a v1.1.0 -m "Manta 1.1.0"

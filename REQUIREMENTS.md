@@ -280,8 +280,8 @@ replacement exists.
 
 | ID | Requirement | Owner | Verification |
 |---|---|---:|---|
-| `QUAL-001` | Development, CI and releases shall use the latest official stable Zig. The accepted version for this revision is exactly `0.17.0`; development/nightly builds are forbidden. | 1 onward | Version command and official-release check |
-| `QUAL-002` | `build.zig.zon` shall declare `.minimum_zig_version = "0.17.0"`, while `build.zig` shall independently reject any compiler whose `builtin.zig_version_string` is not exactly `0.17.0`. The advisory package field alone is insufficient. | 1 | Build guard and negative-version test |
+| `QUAL-001` | Development, CI and releases shall use the latest official stable Zig. The accepted version for this revision is exactly `0.17.1`; development/nightly builds are forbidden. | 1 onward | Version command and official-release check |
+| `QUAL-002` | `build.zig.zon` shall declare `.minimum_zig_version = "0.17.1"`, while `build.zig` shall independently reject any compiler whose `builtin.zig_version_string` is not exactly `0.17.1`. The advisory package field alone is insufficient. | 1 | Build guard and negative-version test |
 | `QUAL-003` | CI shall print and compare `zig version` before invoking any project build step. Toolchain archives/actions shall be pinned and their provenance recorded. | 1 | Workflow inspection and CI log |
 | `QUAL-004` | At every numbered phase start and release, a newer official stable version blocks feature work until migration, release-note review and the affected correctness/performance baselines pass. | Every phase/release | Phase-start and release checklist |
 
@@ -289,10 +289,10 @@ Zig 0.16.0 introduced explicit `std.Io` plumbing and test timeouts. Zig 0.17.0
 removes `@cImport` and deprecates build-system C translation in favour of an
 external package, so Manta declares the small Fathom API it calls in Zig and
 checks those declarations against the compiled header. Manta's source uses no
-API that 0.17.0 marks deprecated, but the documented and CI spellings
+API that 0.17.1 marks deprecated, but the documented and CI spellings
 `-Doptimize=Debug|ReleaseSafe|ReleaseFast|ReleaseSmall` parse only through an
 alias that Zig deprecates and removes after 0.18.0; the migration that leaves
-0.18.0 must switch them to `debug|safe|fast|small`. Architecture and examples use the 0.17.0 APIs, not
+0.18.0 must switch them to `debug|safe|fast|small`. Architecture and examples use the 0.17.1 APIs, not
 development documentation. Release performance uses the LLVM-backed
 `ReleaseFast` path; Debug output is never a speed reference.
 
@@ -302,7 +302,7 @@ development documentation. Release performance uses the LLVM-backed
 |---|---|---|
 | `QUAL-005` | `zig fmt --check --ast-check .` | Every local gate and CI run |
 | `QUAL-006` | `zig build lint`; warnings, forbidden dependency edges, stale generated defaults, unversioned formats and unannotated unsafe operations are failures | Every local gate and CI run; includes format/AST, project policy and architecture-fitness checks |
-| `QUAL-007` | ZLint `0.10.0` | Pinned in its isolated tool package. Suspended from `lint` since the Zig 0.17.0 migration because no ZLint release builds with Zig 0.17.0; it rejoins `lint` once a release does and reproduces a reviewed zero-warning baseline in CI |
+| `QUAL-007` | ZLint `0.10.0` | Pinned in its isolated tool package. Suspended from `lint` since the Zig 0.17.0 migration because no ZLint release builds with Zig 0.17.x; it rejoins `lint` once a release supports the pinned compiler and reproduces a reviewed zero-warning baseline in CI |
 | `QUAL-008` | `zig build test -Doptimize=Debug` | Every implementation change; primary invariant/leak development gate |
 | `QUAL-009` | `zig build test -Doptimize=ReleaseSafe` | Every implementation change in CI |
 | `QUAL-010` | `zig build test -Doptimize=ReleaseFast` | Phase boundaries, release gates and any production-semantics or performance-sensitive change |
@@ -335,9 +335,9 @@ linter.
 
 | ID | Requirement | Owner | Verification |
 |---|---|---:|---|
-| `REL-001` | Development shall occur on `dev`. `master` shall receive exactly one Phase-0 foundation squash commit establishing the license and accepted contracts on the default branch, and thereafter one squash commit per release through a pull request. After the release commit and all gates are clean, `dev` shall be reset to that finalized `master` state. | Repository setup | Branch audit |
+| `REL-001` | `master` is the trunk. Every coherent piece of work (feature, experiment, tooling, documentation or release) shall live on its own short-lived branch from `master` and land as one squash commit through a pull request (no merge commits or rebase merges) with a structured squash message (short imperative title, 72-column summary, test/gate results and `Bench: <nodes>`). After the squash merge and post-merge gates are clean, the branch shall be deleted locally and on `origin`. | Repository setup | Branch audit |
 | `REL-002` | One authoritative CI workflow shall run identically for pull requests targeting `master`, pushes to `master`, and manual dispatch from any branch. | 1 | Trigger tests |
-| `REL-003` | The sole publisher shall require one stable aggregate check named `CI / gate` before accepting the release pull request, verify the post-merge `master` run and a clean worktree, and only then reset `dev`. This is a maintainer-enforced release procedure rather than a repository branch-protection rule; matrix job names may evolve without weakening the aggregate result. | 1 | Release checklist review |
+| `REL-003` | The sole publisher shall require one stable aggregate check named `CI / gate` before accepting a pull request, verify the post-merge `master` run and a clean worktree, and delete the merged branch. This is a maintainer-enforced merge procedure rather than a repository branch-protection rule; matrix job names may evolve without weakening the aggregate result. | 1 | Release checklist review |
 | `REL-004` | CI shall include docs/policy/traceability, exact-toolchain, format/AST/lint, Debug, ReleaseSafe, ReleaseFast and target-build jobs. UCI/perft/bench/backend jobs become mandatory when implemented. | 1 onward | Workflow inspection |
 | `REL-005` | A release workflow shall operate only on the exact tagged `master` commit, create a draft release, natively smoke-test every upload, compare fingerprints, generate hashes/manifests and publish only after all eligible assets pass. | 10 | Dry-run release |
 | `REL-006` | User-facing release notes shall be extracted from the matching `CHANGELOG.md` version section. Automatically generated pull-request summaries are supplemental only. | 10 | Release-note check |

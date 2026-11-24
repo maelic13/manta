@@ -1,9 +1,9 @@
 # Manta development
 
-Manta requires exactly Zig 0.17.0. ZLS has no 0.17.0 release yet, and the
-0.17.0 release notes state that the separated build configurer stops ZLS 0.16.0
-from working with this compiler, so editor diagnostics are degraded until it
-ships. No editor-specific configuration is required.
+Manta requires exactly Zig 0.17.1. For editor diagnostics use ZLS 0.17.x: ZLS
+releases follow Zig's minor version, not its patch version, and the separated
+build configurer introduced in Zig 0.17.0 stops ZLS 0.16.0 from working with
+this compiler. No editor-specific configuration is required.
 
 During an edit loop, run the bounded subset first:
 
@@ -91,7 +91,7 @@ This defaults to `ReleaseFast`, host-native code generation and
 `-Dprofile=auto`. It keeps the ordinary development executable in
 `zig-out/bin` and also writes a truthful, versioned filename under
 `zig-out/dist`, for example
-`manta-v1.2.1-windows-x86-64-native.exe`.
+`manta-v1.2.2-windows-x86-64-native.exe`.
 
 Build the portable baseline for the current platform with:
 
@@ -145,10 +145,10 @@ failure evidence belongs under the gitignored `artifacts/<suite>/` tree and
 must be enabled explicitly; normal test runs leave the worktree untouched.
 
 ZLint is suspended from the lint command. No ZLint release builds with Zig
-0.17.0: v0.10.0 and its dependencies still use build-system APIs that 0.17.0
+0.17.x: v0.10.0 and its dependencies still use build-system APIs that 0.17.0
 removed. Its isolated tool package stays pinned to v0.10.0 with the reviewed
 rules in [`zlint.json`](../zlint.json), so it can rejoin `lint` once a release
-supports Zig 0.17.0. The package may fetch sources into ignored
+supports the pinned compiler. The package may fetch sources into ignored
 `tools/zlint/zig-pkg/`; ordinary build, check and test commands never resolve
 those dependencies. ZLint is a development tool, never a Manta runtime
 dependency. The repository avoids negated `.gitignore` entries because ZLint
@@ -176,12 +176,13 @@ transcript only in its owning phase; do not weaken expected behavior to match an
 incomplete implementation.
 
 The separate `release.yml` workflow runs for a published semantic-version tag
-or by manual dispatch against an existing tag. It builds the five supported
+or by manual dispatch against an existing tag. It builds the six supported
 portable binaries natively, verifies UCI identity and cross-platform bench
 agreement, creates `SHA256SUMS` and uploads the assets to that GitHub Release.
 The exact maintainer procedure is in [`RELEASING.md`](RELEASING.md).
 
 WSL2 is the normal local Linux x86-64 environment; native target execution
-remains required before a release artifact can be published. The sole
-publisher verifies the release pull-request gate and post-merge `master` gate,
-then resets `dev` only after the release and local worktree are final and clean.
+remains required before a release artifact can be published. For any pull
+request, the sole publisher verifies the pull-request gate and post-merge
+`master` gate, then deletes the merged short-lived branch once the post-merge
+`master` gate and local worktree are clean.
