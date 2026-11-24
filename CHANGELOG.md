@@ -12,9 +12,20 @@ This is a maintenance patch release built with Zig 0.17.1, a bug-fix release of
 the Zig 0.17 toolchain. The search is unchanged at fixed depth (`bench 6` stays
 `355,879` nodes), and no strength change is claimed.
 
+### Highlights
+
+- **Zig 0.17.1 toolchain.** Built with the Zig 0.17.1 bug-fix release; building
+  from source now requires Zig 0.17.1.
+- **Packaged downloads.** Every release download is now an archive (`.zip` on
+  Windows, `.tar.gz` on Linux and macOS) containing the binary, licences,
+  README and changelog.
+
 ### Changed
 
 - Built with Zig 0.17.1. Building from source now requires Zig 0.17.1.
+- Release downloads are packaged as archives (`.zip` on Windows, `.tar.gz` on
+  Linux and macOS) bundling the binary, `LICENSE.txt`, `LICENSE-Fathom.txt`,
+  `README.md` and `CHANGELOG.md`.
 
 ## [1.2.1] - 2026-10-08
 

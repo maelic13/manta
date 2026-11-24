@@ -22,16 +22,18 @@ reproducible installation check.
 - [Latest release](https://github.com/maelic13/manta/releases/latest)
 - [All releases](https://github.com/maelic13/manta/releases)
 
-Each release has one file per system. Pick the one that matches your computer:
+Each release provides ready-to-run archives (`.zip` on Windows, `.tar.gz` on
+Linux and macOS) containing the executable, its licences, this README and the
+changelog. Pick the one that matches your computer:
 
-| Your computer | File ends with |
+| Your computer | Archive ends with |
 |---|---|
-| Windows PC with an Intel or AMD processor | `windows-x86-64.exe` |
-| Windows PC with an ARM processor, such as Snapdragon | `windows-arm64.exe` |
-| Linux with an Intel or AMD processor | `linux-x86-64` |
-| Linux on ARM, such as a Raspberry Pi 4 or 5 with a 64-bit system | `linux-arm64` |
-| Mac with an Intel processor | `macos-x86-64` |
-| Mac with Apple silicon (M1 or later) | `macos-arm64` |
+| Windows PC with an Intel or AMD processor | `windows-x86-64.zip` |
+| Windows PC with an ARM processor, such as Snapdragon | `windows-arm64.zip` |
+| Linux with an Intel or AMD processor | `linux-x86-64.tar.gz` |
+| Linux on ARM, such as a Raspberry Pi 4 or 5 with a 64-bit system | `linux-arm64.tar.gz` |
+| Mac with an Intel processor | `macos-x86-64.tar.gz` |
+| Mac with Apple silicon (M1 or later) | `macos-arm64.tar.gz` |
 
 On Windows, *Settings → System → About → System type* tells you whether you
 have an x64-based or an ARM-based processor.
@@ -48,8 +50,9 @@ source targets your exact processor and is usually a little faster.
 
 ## Use Manta
 
-1. Download the file for your computer, as described above.
-2. On Linux or macOS, make it executable with `chmod +x <binary>`.
+1. Download and extract the archive for your computer, as described above.
+2. On Linux or macOS, the extracted executable is already marked executable (if
+   needed, run `chmod +x <binary>`).
 3. Add the executable as a UCI engine in your chess interface.
 4. Configure its options in the interface and start an analysis or game.
 

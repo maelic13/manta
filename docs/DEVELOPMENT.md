@@ -177,11 +177,14 @@ its [canonical transcript corpus](../tests/uci/README.md). Activate a staged
 transcript only in its owning phase; do not weaken expected behavior to match an
 incomplete implementation.
 
-The separate `release.yml` workflow runs for a published semantic-version tag
-or by manual dispatch against an existing tag. It builds the six supported
-portable binaries natively, verifies UCI identity and cross-platform bench
-agreement, creates `SHA256SUMS` and uploads the assets to that GitHub Release.
-The exact maintainer procedure is in [`RELEASING.md`](RELEASING.md).
+The separate `release.yml` workflow rehearses read-only on pull requests to
+`master` and manual dispatches, and publishes on a `vX.Y.Z` tag push. It
+validates version, changelog summary/highlights and declared `bench 6`
+fingerprint through `tools/ci/release_check.py`, builds all six portable
+binaries natively, verifies UCI identity and cross-platform bench agreement,
+packages `.zip`/`.tar.gz` archives with licences, `README.md`, `CHANGELOG.md`
+and `SHA256SUMS`, and publishes the GitHub Release only after every check
+passes. The exact maintainer procedure is in [`RELEASING.md`](RELEASING.md).
 
 WSL2 is the normal local Linux x86-64 environment; native target execution
 remains required before a release artifact can be published. For any pull
